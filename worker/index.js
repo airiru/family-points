@@ -149,6 +149,11 @@ const actions = {
     s.members = s.members.filter(x => x.id !== b.id);
     s.records = s.records.filter(r => r.memberId !== b.id);
   },
+  'member/hide': (s, b) => {
+    const m = s.members.find(x => x.id === b.id);
+    if (!m) throw new Error('成员不存在');
+    m.hidden = !!b.hidden;
+  },
   'member/reset': (s, b) => {
     const m = s.members.find(x => x.id === b.id);
     if (!m) throw new Error('成员不存在');

@@ -137,6 +137,7 @@ export function memberStreak(id) {
 // ---------- 业务操作 ----------
 export function addMember(name, username, password, role) { return call('member/add', { name, username, password, role }); }
 export function setMemberLogin(id, username, password, role) { return call('member/setLogin', { id, username, password, role }); }
+export function setMemberHidden(m, hidden) { return call('member/hide', { id: m.id, hidden }); }
 export function delMember(m) { if (confirm(`删除成员「${m.name}」及其全部记录？`)) return call('member/del', { id: m.id }); }
 export function resetScore(m) {
   if (confirm(`将「${m.name}」的积分清零？`)) return call('member/reset', { id: m.id }).then(() => closeModal());

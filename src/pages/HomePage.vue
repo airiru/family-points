@@ -15,7 +15,7 @@ function onRedeem(it) {
 <template>
   <div v-if="!loaded" class="card"><div class="empty">加载中…</div></div>
   <template v-else>
-    <div class="card" v-for="(m, i) in ranked()" :key="m.id">
+    <div class="card" v-for="(m, i) in ranked().filter(m => !m.hidden)" :key="m.id">
       <div class="row">
         <div style="font-size:18px;width:26px;text-align:center">{{ ['🥇', '🥈', '🥉'][i] || (i + 1) }}</div>
         <div class="grow clickable" @click="showMember(m)">
@@ -25,7 +25,7 @@ function onRedeem(it) {
         <div class="score">{{ m.score }} 分</div>
       </div>
     </div>
-    <div v-if="!state.members.length" class="card"><div class="empty">还没有成员，请到「后台设置」添加</div></div>
+    <div v-if="!state.members.some(m => !m.hidden)" class="card"><div class="empty">还没有成员，请到「后台设置」添加</div></div>
 
     <!-- 我的兑换：当前账号绑定的成员用自己积分兑换 -->
     <div class="card" v-if="myMember">

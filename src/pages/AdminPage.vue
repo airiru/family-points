@@ -3,7 +3,7 @@
 import { ref } from 'vue';
 import {
   state, loaded, ranked, memberRecords, sortedRecords, call,
-  addMember, delMember, resetScore, showMember, setMemberLogin,
+  addMember, delMember, resetScore, showMember, setMemberLogin, setMemberHidden,
   addRule, delRule, applyScore, applyCustomScore,
   addItem, delItem, redeemModal, fmt, memberStreak, user, toast,
 } from '../store.js';
@@ -97,6 +97,7 @@ const recordFilter = ref('');
           </div>
           <div class="score">{{ m.score }} 分</div>
           <button class="btn ghost" @click="pickedMemberId = m.id; tab = 'score'">记一笔</button>
+          <button class="btn ghost" @click="setMemberHidden(m, !m.hidden)">{{ m.hidden ? '显示' : '隐藏' }}</button>
           <button class="btn ghost" @click="doSetLogin(m)">登录</button>
           <button class="btn ghost" @click="resetScore(m)">清零</button>
           <button class="btn del" @click="delMember(m)">删</button>
