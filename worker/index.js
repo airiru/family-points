@@ -1,12 +1,11 @@
 /**
- * 家庭积分榜 — ESA Pages 边缘函数（数据接口）
+ * 家庭积分榜 — Cloudflare Worker（数据接口）
  *
- * 由 esa.jsonc 的 entry 指定。Vue 前端由 Vite 构建到 dist/ 并由 Pages 托管，
+ * 部署配置见 wrangler.jsonc。Vue 前端由 Vite 构建到 dist/ 并由 Workers Static Assets 托管，
  * 本函数只处理 /api/* 数据请求（未命中静态资源的请求才会进入这里）。
- * 数据保存在 ESA 边缘 KV 中（存储空间名称需与 KV_NAMESPACE 一致）。
+ * 数据保存在 Cloudflare KV 中（binding 名为 KV，见 wrangler.jsonc 的 kv_namespaces）。
  */
 
-const KV_NAMESPACE = 'jifen'; // 控制台创建的 KV 存储空间名称
 const STATE_KEY = 'state';
 const MAX_RECORDS = 500; // 历史记录上限，超出后丢弃最旧的
 const TOKEN_DAYS = 30; // 登录有效期（天）
@@ -36,8 +35,8 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 async function getState(kv) {
   const raw = await kv.get(STATE_KEY);
   try {
-    const s = JSON.parse(raw);
-    return { members: [], rules: [], items: [], records: [], ...s };
+    const s = raw ? JSON.parse(raw) : null;
+    return { ...emptyState(), ...(s && typeof s === 'object' ? s : {}) };
   } catch { return emptyState(); }
 }
 
@@ -230,15 +229,15 @@ const actions = {
 };
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
 
     if (!url.pathname.startsWith('/api/')) {
-      // 正常情况下静态资源由 Pages 托管，这里兜底
+      // 正常情况下静态资源由 Workers Static Assets 托管，这里兜底
       return new Response('Not Found', { status: 404 });
     }
 
-    const kv = new EdgeKV({ namespace: KV_NAMESPACE });
+    const kv = env.KV;
     const path = url.pathname.slice(5); // 去掉 /api/
 
     try {

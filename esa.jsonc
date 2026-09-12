@@ -1,9 +1,0 @@
-{
-  "name": "family-points",
-  "entry": "./worker/index.js",
-  "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "assets": {
-    "directory": "./dist"
-  }
-}

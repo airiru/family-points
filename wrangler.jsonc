@@ -1,0 +1,17 @@
+{
+  // Cloudflare Workers 部署配置（https://developers.cloudflare.com/workers/wrangler/configuration/）
+  "name": "family-points",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    // Vite 构建产物；未命中静态资源的请求（即 /api/*）进入 worker/index.js
+    "directory": "./dist"
+  },
+  "kv_namespaces": [
+    {
+      // 执行 `npx wrangler kv namespace create KV` 后，把返回的 id 填到这里
+      "binding": "KV",
+      "id": "family"
+    }
+  ]
+}

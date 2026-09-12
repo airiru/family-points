@@ -9,6 +9,7 @@ globalThis.EdgeKV = class {
   async put(k, v) { EdgeKV.shared[k] = v; }
 };
 const worker = (await import('./worker/index.js')).default;
+const env = { KV: new EdgeKV() };
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 
@@ -21,7 +22,7 @@ http.createServer(async (req, res) => {
       method: req.method,
       headers: req.headers,
       body: chunks.length ? Buffer.concat(chunks) : undefined,
-    }));
+    }), env);
     res.writeHead(r.status, { 'content-type': r.headers.get('content-type') });
     res.end(await r.text());
     return;
