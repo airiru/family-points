@@ -1,22 +1,49 @@
 <script setup>
-// 后台设置页：成员管理、计分规则、记一笔、兑换商城、全部记录
+// 后台设置页：成员管理（成员即账号）、计分规则、记一笔、兑换商城、全部记录
 import { ref } from 'vue';
 import {
   state, loaded, ranked, memberRecords, sortedRecords, call,
-  addMember, delMember, resetScore, showMember,
+  addMember, delMember, resetScore, showMember, setMemberLogin,
   addRule, delRule, applyScore, applyCustomScore,
-  addItem, delItem, redeemModal, fmt, memberStreak,
-  accounts, user, addAccount, delAccount, setAccountRole, setAccountPass, toast, bindAccount,
+  addItem, delItem, redeemModal, fmt, memberStreak, user, toast,
 } from '../store.js';
 
 const tab = ref('members');
-const TABS = [['members', '成员'], ['rules', '计分规则'], ['score', '记一笔'], ['items', '兑换商城'], ['records', '记录'], ['accounts', '账号']];
+const TABS = [['members', '成员'], ['rules', '计分规则'], ['score', '记一笔'], ['items', '兑换商城'], ['records', '记录']];
 
 const newMemberName = ref('');
 function doAddMember() {
   const v = newMemberName.value.trim();
   if (!v) return;
   addMember(v).then(() => (newMemberName.value = ''));
+}
+
+// ---------- 成员登录设置（账号即成员）----------
+const loginEdit = ref(null); // { id, name, username, password, role, hadLogin }
+function doSetLogin(m) {
+  loginEdit.value = {
+    id: m.id, name: m.name,
+    username: m.username || '', password: '',
+    role: m.role === 'admin' ? 'admin' : 'member',
+    hadLogin: !!m.username,
+  };
+}
+function doSaveLogin() {
+  const f = loginEdit.value;
+  const username = f.username.trim();
+  if (!username) {
+    if (!f.hadLogin) return;
+    if (!confirm(`清除「${f.name}」的登录？TA 将无法再登录。`)) return;
+  } else if (!f.hadLogin || username !== f.username) {
+    if (f.password.length < 4) return toast('密码至少 4 位');
+  }
+  setMemberLogin(f.id, username, f.password, f.role)
+    .then(() => { toast('登录设置已保存 ✓'); loginEdit.value = null; })
+    .catch(e => toast(e.message));
+}
+function loginDesc(m) {
+  if (!m.username) return '未设置登录';
+  return `登录：${m.username} · ${m.role === 'admin' ? '管理员' : '普通成员'}`;
 }
 
 const newRule = ref({ name: '', points: '', streakEvery: '', streakBonus: '' });
@@ -51,41 +78,6 @@ function doAddItem() {
 }
 
 const recordFilter = ref('');
-
-// ---------- 账号管理 ----------
-const newAccount = ref({ username: '', password: '', role: 'viewer' });
-function doAddAccount() {
-  const u = newAccount.value.username.trim();
-  if (!u || !newAccount.value.password) return toast('请填写用户名和密码');
-  addAccount(u, newAccount.value.password, newAccount.value.role)
-    .then(() => { toast('账号已添加 ✓'); newAccount.value = { username: '', password: '', role: 'viewer' }; })
-    .catch(e => { if (e.message !== 'cancel') toast(e.message); });
-}
-function doDelAccount(a) { delAccount(a.username).catch(e => { if (e.message !== 'cancel') toast(e.message); }); }
-function doToggleRole(a) {
-  setAccountRole(a.username, a.role === 'admin' ? 'viewer' : 'admin').catch(e => toast(e.message));
-}
-function doResetPass(a) {
-  const p = prompt(`为「${a.username}」设置新密码（至少 4 位）`);
-  if (p === null) return;
-  if (p.length < 4) return toast('密码至少 4 位');
-  setAccountPass(a.username, p).then(() => toast('密码已修改 ✓')).catch(e => toast(e.message));
-}
-// 绑定成员：绑定后该账号可在主页自助兑换该成员的积分
-function doBind(a, e) {
-  const memberId = e.target.value;
-  const m = state.members.find(x => x.id === memberId);
-  bindAccount(a.username, memberId).then(() => {
-    toast(m ? `已绑定「${m.name}」，该账号可在主页自助兑换` : '已解绑');
-  }).catch(err => { toast(err.message); e.target.value = a.memberId ?? ''; });
-}
-function memberBindable(a) {
-  // 一个成员只能被一个账号绑定（已绑给其他账号的不再出现在选项里）
-  return state.members.filter(m => !accounts.value.some(x => x.memberId === m.id && x.username !== a.username));
-}
-function boundName(memberId) {
-  return state.members.find(m => m.id === memberId)?.name ?? '(已删除)';
-}
 </script>
 
 <template>
@@ -95,19 +87,24 @@ function boundName(memberId) {
       <button v-for="[k, label] in TABS" :key="k" :class="{ on: tab === k }" @click="tab = k">{{ label }}</button>
     </div>
 
-    <!-- 成员管理 -->
+    <!-- 成员管理（账号即成员） -->
     <template v-if="tab === 'members'">
       <div class="card" v-for="m in ranked()" :key="m.id">
         <div class="row">
-          <div class="grow clickable" @click="showMember(m)"><div class="name">{{ m.name }} ›</div><div class="sub">{{ memberRecords(m.id).length }} 条记录<template v-if="memberStreak(m.id) > 0"> · 🔥 连续 {{ memberStreak(m.id) }} 天</template></div></div>
+          <div class="grow clickable" @click="showMember(m)">
+            <div class="name">{{ m.name }} ›<span v-if="m.username === user?.username" class="sub" style="display:inline">（当前登录）</span></div>
+            <div class="sub">{{ memberRecords(m.id).length }} 条记录<template v-if="memberStreak(m.id) > 0"> · 🔥 连续 {{ memberStreak(m.id) }} 天</template> · {{ loginDesc(m) }}</div>
+          </div>
           <div class="score">{{ m.score }} 分</div>
           <button class="btn ghost" @click="pickedMemberId = m.id; tab = 'score'">记一笔</button>
+          <button class="btn ghost" @click="doSetLogin(m)">登录</button>
           <button class="btn ghost" @click="resetScore(m)">清零</button>
           <button class="btn del" @click="delMember(m)">删</button>
         </div>
       </div>
       <div v-if="!state.members.length" class="card"><div class="empty">还没有成员，先添加一个吧</div></div>
       <div class="card">
+        <div class="desc">账号就是成员：给成员设置登录后，TA 可以用用户名密码登录，查看自己的积分并用积分自助兑换物品。设为管理员的成员还能进入后台修改数据。不需要登录的成员可以不设置。</div>
         <div class="form">
           <input v-model="newMemberName" placeholder="成员名字" style="flex:1" @keydown.enter="doAddMember">
           <button class="btn" @click="doAddMember">添加成员</button>
@@ -204,35 +201,24 @@ function boundName(memberId) {
         <div v-if="!sortedRecords().length" class="empty">暂无记录</div>
       </div>
     </template>
-    <!-- 账号管理 -->
-    <template v-if="tab === 'accounts'">
-      <div class="card">
-        <div class="desc">管理员可进入后台并修改数据；查看者只能看主页的积分榜。绑定成员后，该账号可在主页用自己的积分自助兑换物品（一个成员只能绑定一个账号）。删除账号或改低角色前，请确保至少保留一个管理员。</div>
-        <div class="row" v-for="a in accounts" :key="a.username">
-          <div class="grow">
-            <div class="name">{{ a.username }} <span v-if="a.username === user?.username" class="sub" style="display:inline">（当前登录）</span></div>
-            <div class="sub">{{ a.role === 'admin' ? '管理员' : '查看者' }}</div>
+    <!-- 成员登录设置表单 -->
+    <div class="modal-bg" :class="{ show: loginEdit }" @click.self="loginEdit = null">
+      <div class="modal" v-if="loginEdit">
+        <h3>「{{ loginEdit.name }}」的登录设置</h3>
+        <div class="form" style="flex-direction:column;align-items:stretch">
+          <input v-model="loginEdit.username" placeholder="用户名（限 1-20 位字母、数字、_、-）">
+          <input v-model="loginEdit.password" type="password" :placeholder="loginEdit.hadLogin ? '新密码（留空则不修改）' : '密码（至少 4 位）'">
+          <select v-model="loginEdit.role">
+            <option value="member">普通成员（只能看积分和自己兑换）</option>
+            <option value="admin">管理员（可进后台修改）</option>
+          </select>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn" style="flex:1" @click="doSaveLogin">保存</button>
+            <button v-if="loginEdit.hadLogin" class="btn del" style="flex:1" @click="loginEdit.username = ''; doSaveLogin()">清除登录</button>
+            <button class="btn ghost" style="flex:1" @click="loginEdit = null">取消</button>
           </div>
-          <select :value="a.memberId ?? ''" @change="doBind(a, $event)" title="绑定成员（自助兑换）">
-            <option value="">不绑定</option>
-            <option v-for="m in memberBindable(a)" :key="m.id" :value="m.id">{{ m.name }}</option>
-            <option v-if="a.memberId && !memberBindable(a).some(m => m.id === a.memberId)" :value="a.memberId">{{ boundName(a.memberId) }}</option>
-          </select>
-          <button class="btn ghost" @click="doToggleRole(a)">{{ a.role === 'admin' ? '改为查看者' : '改为管理员' }}</button>
-          <button class="btn ghost" @click="doResetPass(a)">改密码</button>
-          <button class="btn del" @click="doDelAccount(a)">删</button>
-        </div>
-        <div v-if="!accounts.length" class="empty">暂无账号</div>
-        <div class="form">
-          <input v-model="newAccount.username" placeholder="用户名" style="flex:1;min-width:100px" @keydown.enter="doAddAccount">
-          <input v-model="newAccount.password" type="password" placeholder="密码" style="flex:1;min-width:100px" @keydown.enter="doAddAccount">
-          <select v-model="newAccount.role">
-            <option value="viewer">查看者</option>
-            <option value="admin">管理员</option>
-          </select>
-          <button class="btn" @click="doAddAccount">添加账号</button>
         </div>
       </div>
-    </template>
+    </div>
   </template>
 </template>

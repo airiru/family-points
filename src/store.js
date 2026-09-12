@@ -9,11 +9,10 @@ const authHeaders = () => {
   const t = localStorage.getItem(TOKEN_KEY);
   return t ? { 'x-auth': t } : {};
 };
-export const needLogin = ref(false); // 服务端启用了账号且当前无有效登录凭证
-export const needSetup = ref(false); // 首次使用，需要创建管理员账号
-export const accounts = ref([]); // 管理员可见的账号列表 [{ username, role, memberId }]
-export const myMemberId = ref(''); // 当前登录账号绑定的成员（可自助兑换）
-export const user = ref(null); // { username, role: 'admin' | 'viewer' }
+export const needLogin = ref(false); // 已初始化但当前无有效登录凭证
+export const needSetup = ref(false); // 首次使用，需要创建管理员
+export const myMemberId = ref(''); // 当前登录成员的 id（用于主页自助兑换）
+export const user = ref(null); // { username, role: 'admin' | 'member' }
 export const isAdmin = computed(() => !needLogin.value && (!user.value || user.value.role === 'admin'));
 
 // token 形如 username.exp.hmac，角色以登录响应为准；这里从 token 解析出用户名和过期时间
@@ -67,8 +66,7 @@ async function refresh() {
   if (!j.ok) { toast(j.error || '加载失败'); throw new Error(j.error); }
   Object.assign(state, j.state);
   // 以后端返回的角色为准（避免本地缓存的旧角色与最新配置不一致）
-  user.value = { username: j.username ?? user.value?.username ?? '', role: j.role ?? 'viewer' };
-  accounts.value = j.accounts ?? [];
+  user.value = { username: j.username ?? user.value?.username ?? '', role: j.role ?? 'member' };
   myMemberId.value = j.myMemberId ?? '';
   loaded.value = true;
 }
@@ -137,7 +135,8 @@ export function memberStreak(id) {
 }
 
 // ---------- 业务操作 ----------
-export function addMember(name) { return call('member/add', { name }); }
+export function addMember(name, username, password, role) { return call('member/add', { name, username, password, role }); }
+export function setMemberLogin(id, username, password, role) { return call('member/setLogin', { id, username, password, role }); }
 export function delMember(m) { if (confirm(`删除成员「${m.name}」及其全部记录？`)) return call('member/del', { id: m.id }); }
 export function resetScore(m) {
   if (confirm(`将「${m.name}」的积分清零？`)) return call('member/reset', { id: m.id }).then(() => closeModal());
@@ -184,30 +183,3 @@ window.__doRedeemSelf = itemId => {
   const it = state.items.find(x => x.id === itemId);
   if (it && confirm(`确定用 ${it.cost} 积分兑换「${it.name}」？`)) redeemSelf(itemId);
 };
-
-// ---------- 账号管理（仅管理员）----------
-export function addAccount(username, password, role) {
-  return call('account/add', { username, password, role }).then(() => refreshAccounts());
-}
-export function delAccount(username) {
-  if (!confirm(`删除账号「${username}」？`)) return Promise.reject(new Error('cancel'));
-  return call('account/del', { username }).then(() => refreshAccounts());
-}
-export function setAccountRole(username, role) {
-  return call('account/role', { username, role }).then(() => refreshAccounts());
-}
-export function setAccountPass(username, password) {
-  return call('account/pass', { username, password });
-}
-export function bindAccount(username, memberId) {
-  return call('account/bind', { username, memberId }).then(() => refreshAccounts());
-}
-async function refreshAccounts() {
-  // 复用 state 请求带回最新账号列表
-  const r = await fetch('/api/state', { headers: authHeaders() });
-  if (r.ok) {
-    const j = await r.json();
-    accounts.value = j.accounts ?? [];
-    Object.assign(state, j.state);
-  }
-}

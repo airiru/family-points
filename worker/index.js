@@ -29,7 +29,7 @@ function streak(state, memberId, ruleName) {
 
 // ---------- 数据与操作 ----------
 
-const emptyState = () => ({ members: [], rules: [], items: [], records: [], accounts: [], secret: '' });
+const emptyState = () => ({ members: [], rules: [], items: [], records: [], secret: '' });
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 async function getState(kv) {
@@ -49,8 +49,8 @@ const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8' } });
 
 // ---------- 登录鉴权 ----------
-// 账号保存在 KV 的 state.accounts 里（密码加盐哈希），在后台设置页「账号」标签中管理。
-// 首次使用（还没有任何账号）时，打开网页会先要求创建管理员账号，签名密钥也随之自动生成。
+// 账号即成员：成员可自带登录凭证（username + 加盐密码哈希，存于成员对象），
+// 在后台「成员」中设置。首次使用时打开网页会引导创建管理员（也是一名成员）。
 
 const te = s => new TextEncoder().encode(s);
 
@@ -65,43 +65,88 @@ async function hashPassword(password, salt) {
   return btoa(String.fromCharCode(...new Uint8Array(d)));
 }
 
-// token 形如 "username.exp.hmac(username.exp)"，无状态；角色以 KV 中账号的当前配置为准
+// token 形如 "username.exp.hmac(username.exp)"，无状态；角色以成员的当前配置为准
 async function makeToken(username, secret) {
   const exp = Date.now() + TOKEN_DAYS * 86400e3;
   return `${username}.${exp}.${await hmac(secret, `${username}.${exp}`)}`;
 }
 
-// 返回 { username, role } 或 null
+// 返回 { username, memberId, role } 或 null
 async function verifyToken(token, state) {
   if (!token || !state.secret) return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [username, exp, sig] = parts;
   if (Number(exp) < Date.now()) return null;
-  const acc = state.accounts.find(a => a.username === username);
-  if (!acc) return null;
+  const m = state.members.find(x => x.username === username);
+  if (!m) return null;
   if ((await hmac(state.secret, `${username}.${exp}`)) !== sig) return null;
-  return { username, role: acc.role === 'admin' ? 'admin' : 'viewer' };
+  return { username, memberId: m.id, role: m.role === 'admin' ? 'admin' : 'member' };
 }
 
-// 返回当前请求的用户信息；未初始化（无账号）时返回 null，由前端引导创建管理员
-async function currentUser(request, state) {
-  if (!state.accounts.length) return null;
+// 返回当前请求的用户信息；尚未初始化（没有任何可登录成员）时返回 null，由前端引导创建管理员
+function currentUser(request, state) {
+  if (!state.members.some(m => m.username)) return null;
   return verifyToken(request.headers.get('x-auth'), state);
 }
 
-const publicState = s => ({ members: s.members, rules: s.rules, items: s.items, records: s.records });
+// 对外输出的成员信息：去掉密码哈希等敏感字段
+const publicMember = ({ salt, passHash, ...pub }) => pub;
+const publicState = s => ({ members: s.members.map(publicMember), rules: s.rules, items: s.items, records: s.records });
 
-// 每个操作：接收 (state, body) => 同步修改 state
+const validUsername = u => /^[a-zA-Z0-9_-]{1,20}$/.test(u);
+
+// 设置成员登录凭证
+async function applyLogin(m, username, password, role) {
+  if (!username) { // 清除登录
+    delete m.username; delete m.salt; delete m.passHash;
+    m.role = 'member';
+    return;
+  }
+  if (!validUsername(username)) throw new Error('用户名限 1-20 位字母、数字、_ 或 -');
+  m.username = username;
+  m.role = role === 'admin' ? 'admin' : 'member';
+  if (password) {
+    if (password.length < 4) throw new Error('密码至少 4 位');
+    m.salt = uid() + uid();
+    m.passHash = await hashPassword(password, m.salt);
+  } else if (!m.passHash) {
+    throw new Error('请设置密码（至少 4 位）');
+  }
+}
+
+// 每个操作：接收 (state, body, user) => 同步/异步修改 state
 const actions = {
-  'member/add': (s, b) => {
+  'member/add': async (s, b) => {
     const name = (b.name || '').trim();
     if (!name) throw new Error('请输入成员名字');
     if (s.members.some(m => m.name === name)) throw new Error('该成员已存在');
-    s.members.push({ id: uid(), name, score: 0 });
+    const m = { id: uid(), name, score: 0, role: 'member' };
+    if (b.username) {
+      if (s.members.some(x => x.username === b.username)) throw new Error('该用户名已被使用');
+      await applyLogin(m, b.username, b.password, b.role);
+    }
+    s.members.push(m);
   },
-  'member/del': (s, b) => {
-    s.members = s.members.filter(m => m.id !== b.id);
+  'member/setLogin': async (s, b, user) => {
+    const m = s.members.find(x => x.id === b.id);
+    if (!m) throw new Error('成员不存在');
+    const username = (b.username || '').trim();
+    if (username && username !== m.username && s.members.some(x => x.username === username)) throw new Error('该用户名已被使用');
+    await applyLogin(m, username, b.password, b.role ?? m.role);
+    if (user && user.memberId === m.id && m.role !== 'admin') {
+      const admins = s.members.filter(x => x.role === 'admin' && x.username);
+      if (!admins.length) throw new Error('至少保留一个管理员');
+    }
+  },
+  'member/del': (s, b, user) => {
+    const m = s.members.find(x => x.id === b.id);
+    if (!m) throw new Error('成员不存在');
+    if (user && m.username === user.username) throw new Error('不能删除当前登录的成员');
+    if (m.role === 'admin' && m.username && s.members.filter(x => x.role === 'admin' && x.username).length === 1) {
+      throw new Error('至少保留一个管理员');
+    }
+    s.members = s.members.filter(x => x.id !== b.id);
     s.records = s.records.filter(r => r.memberId !== b.id);
   },
   'member/reset': (s, b) => {
@@ -167,64 +212,15 @@ const actions = {
     m.score -= it.cost;
     s.records.push({ time: Date.now(), memberId: m.id, name: m.name, title: `兑换「${it.name}」`, points: -it.cost });
   },
-  // 自助兑换：登录账号使用自己绑定的成员的积分兑换
+  // 自助兑换：登录成员使用自己的积分兑换
   'item/redeemSelf': (s, b, user) => {
-    const acc = s.accounts.find(a => a.username === user.username);
-    const m = acc && s.members.find(x => x.id === acc.memberId);
-    if (!m) throw new Error('当前账号未绑定成员，请联系管理员在「账号」中绑定');
+    const m = s.members.find(x => x.id === user.memberId);
+    if (!m) throw new Error('当前登录成员不存在');
     const it = s.items.find(x => x.id === b.itemId);
     if (!it) throw new Error('物品不存在');
     if (m.score < it.cost) throw new Error(`你的积分不够（需要 ${it.cost}，当前 ${m.score}）`);
     m.score -= it.cost;
     s.records.push({ time: Date.now(), memberId: m.id, name: m.name, title: `兑换「${it.name}」`, points: -it.cost });
-  },
-  // ---------- 账号管理（仅管理员）----------
-  'account/add': async (s, b) => {
-    const username = (b.username || '').trim();
-    const password = b.password || '';
-    if (!username || !/^[a-zA-Z0-9_-]{1,20}$/.test(username)) throw new Error('用户名限 1-20 位字母、数字、_ 或 -');
-    if (password.length < 4) throw new Error('密码至少 4 位');
-    if (s.accounts.some(a => a.username === username)) throw new Error('该用户名已存在');
-    const salt = uid() + uid();
-    const acc = { username, salt, passHash: await hashPassword(password, salt), role: b.role === 'admin' ? 'admin' : 'viewer' };
-    if (b.memberId) {
-      if (!s.members.some(m => m.id === b.memberId)) throw new Error('绑定的成员不存在');
-      if (s.accounts.some(a => a.memberId === b.memberId)) throw new Error('该成员已绑定其他账号');
-      acc.memberId = b.memberId;
-    }
-    s.accounts.push(acc);
-  },
-  'account/bind': (s, b, user) => {
-    const acc = s.accounts.find(a => a.username === b.username);
-    if (!acc) throw new Error('账号不存在');
-    if (!b.memberId) { delete acc.memberId; return; }
-    if (!s.members.some(m => m.id === b.memberId)) throw new Error('绑定的成员不存在');
-    if (s.accounts.some(a => a.memberId === b.memberId && a.username !== acc.username)) throw new Error('该成员已绑定其他账号');
-    acc.memberId = b.memberId;
-  },
-  'account/del': (s, b, user) => {
-    const acc = s.accounts.find(a => a.username === b.username);
-    if (!acc) throw new Error('账号不存在');
-    if (acc.username === user.username) throw new Error('不能删除自己的账号');
-    const admins = s.accounts.filter(a => a.role === 'admin');
-    if (acc.role === 'admin' && admins.length === 1) throw new Error('至少保留一个管理员账号');
-    s.accounts = s.accounts.filter(a => a.username !== b.username);
-  },
-  'account/role': (s, b, user) => {
-    const acc = s.accounts.find(a => a.username === b.username);
-    if (!acc) throw new Error('账号不存在');
-    const role = b.role === 'admin' ? 'admin' : 'viewer';
-    if (acc.role === 'admin' && role !== 'admin' && s.accounts.filter(a => a.role === 'admin').length === 1) {
-      throw new Error('至少保留一个管理员账号');
-    }
-    acc.role = role;
-  },
-  'account/pass': async (s, b) => {
-    const acc = s.accounts.find(a => a.username === b.username);
-    if (!acc) throw new Error('账号不存在');
-    if (!b.password || b.password.length < 4) throw new Error('密码至少 4 位');
-    acc.salt = uid() + uid();
-    acc.passHash = await hashPassword(b.password, acc.salt);
   },
 };
 
@@ -241,17 +237,20 @@ export default {
     const path = url.pathname.slice(5); // 去掉 /api/
 
     try {
-      // 未初始化（还没有任何账号）：允许创建第一个管理员账号
+      // 未初始化（还没有任何可登录成员）：允许创建第一个管理员（同时是一名成员）
       if (request.method === 'POST' && path === 'setup') {
         const state = await getState(kv);
-        if (state.accounts.length) return json({ ok: false, error: '已初始化，请直接登录' }, 403);
+        if (state.members.some(m => m.username)) return json({ ok: false, error: '已初始化，请直接登录' }, 403);
         const body = await request.json().catch(() => ({}));
         const username = (body.username || '').trim();
-        if (!username || !/^[a-zA-Z0-9_-]{1,20}$/.test(username)) return json({ ok: false, error: '用户名限 1-20 位字母、数字、_ 或 -' }, 400);
+        if (!validUsername(username)) return json({ ok: false, error: '用户名限 1-20 位字母、数字、_ 或 -' }, 400);
         if (!body.password || body.password.length < 4) return json({ ok: false, error: '密码至少 4 位' }, 400);
         if (!state.secret) state.secret = uid() + uid() + uid();
         const salt = uid() + uid();
-        state.accounts.push({ username, salt, passHash: await hashPassword(body.password, salt), role: 'admin' });
+        state.members.push({
+          id: uid(), name: username, score: 0, role: 'admin',
+          username, salt, passHash: await hashPassword(body.password, salt),
+        });
         await saveState(kv, state);
         return json({ ok: true, token: await makeToken(username, state.secret), role: 'admin', username, state: publicState(state) });
       }
@@ -259,14 +258,14 @@ export default {
       // 登录接口不需要鉴权
       if (request.method === 'POST' && path === 'login') {
         const state = await getState(kv);
-        if (!state.accounts.length) return json({ ok: false, error: '请先完成初始化' }, 401);
+        if (!state.members.some(m => m.username)) return json({ ok: false, error: '请先完成初始化' }, 401);
         const body = await request.json().catch(() => ({}));
-        const acc = state.accounts.find(a => a.username === body.username);
-        const passHash = acc ? await hashPassword(body.password || '', acc.salt) : '';
-        if (!acc || passHash !== acc.passHash) return json({ ok: false, error: '用户名或密码错误' }, 401);
+        const m = state.members.find(x => x.username === body.username);
+        const passHash = m ? await hashPassword(body.password || '', m.salt) : '';
+        if (!m || passHash !== m.passHash) return json({ ok: false, error: '用户名或密码错误' }, 401);
         return json({
-          ok: true, token: await makeToken(acc.username, state.secret),
-          role: acc.role === 'admin' ? 'admin' : 'viewer', username: acc.username, state: publicState(state),
+          ok: true, token: await makeToken(m.username, state.secret),
+          role: m.role === 'admin' ? 'admin' : 'member', username: m.username, state: publicState(state),
         });
       }
 
@@ -275,23 +274,18 @@ export default {
       // 其余接口需要登录（未初始化时前端会引导创建管理员）
       const user = await currentUser(request, state);
       if (!user) {
-        return json({ ok: false, needSetup: !state.accounts.length, error: state.accounts.length ? '未登录' : '请先完成初始化' }, 401);
+        return json({ ok: false, needSetup: !state.members.some(m => m.username), error: state.members.some(m => m.username) ? '未登录' : '请先完成初始化' }, 401);
       }
 
       if (request.method === 'GET' && path === 'state') {
-        const acc = state.accounts.find(a => a.username === user.username);
         return json({
-          ok: true, role: user.role, username: user.username,
-          myMemberId: acc?.memberId ?? '',
+          ok: true, role: user.role, username: user.username, myMemberId: user.memberId,
           needSetup: false,
           state: publicState(state),
-          accounts: user.role === 'admin'
-            ? state.accounts.map(a => ({ username: a.username, role: a.role, memberId: a.memberId ?? '' }))
-            : undefined,
         });
       }
       if (request.method === 'POST') {
-        // 查看者仅允许自助兑换
+        // 普通成员仅允许自助兑换
         if (user.role !== 'admin' && path !== 'item/redeemSelf') {
           return json({ ok: false, error: '没有修改权限，请使用管理员账号' }, 403);
         }
