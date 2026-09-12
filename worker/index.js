@@ -220,18 +220,19 @@ const actions = {
     // 该规则累计打卡每满 every 次自动加该档 bonus 分（每个里程碑只奖励一次）
     if (r.streaks?.length || r.streak) {
       const tiers = r.streaks?.length ? r.streaks : [r.streak]; // 兼容旧的单档字段
-      const count = streakCount(s, m.id, r.name, streakResetAt(m, r.name));
+      const from = streakResetAt(m, r.name); // 本轮清零时间：区分“清零前”与“清零后”的同一里程碑
+      const count = streakCount(s, m.id, r.name, from);
       for (const tier of tiers) {
         if (count > 0 && count % tier.every === 0) {
           const alreadyAwarded = s.records.some(x =>
             x.memberId === m.id && x.streakAward && x.streakAward.every === tier.every
-            && x.streakAward.n === count);
+            && x.streakAward.n === count && (x.streakAward.from ?? 0) === from);
           if (!alreadyAwarded) {
             m.score += tier.bonus;
             s.records.push({
               time: Date.now(), memberId: m.id, name: m.name,
               title: `连续 ${count} 次「${r.name}」，奖励`, points: tier.bonus,
-              streakAward: { every: tier.every, n: count },
+              streakAward: { every: tier.every, n: count, from },
             });
           }
         }
