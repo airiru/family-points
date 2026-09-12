@@ -5,7 +5,7 @@ import {
   state, loaded, ranked, memberRecords, sortedRecords, call,
   addMember, delMember, resetScore, showMember, setMemberLogin, setMemberHidden,
   addRule, delRule, editRule, applyScore, applyCustomScore,
-  addItem, delItem, redeemModal, fmt, memberStreak, user, toast,
+  addItem, delItem, editItem, redeemModal, fmt, memberStreak, user, toast,
 } from '../store.js';
 
 const tab = ref('members');
@@ -104,6 +104,18 @@ function doAddItem() {
   const n = newItem.value.name.trim(); const c = parseInt(newItem.value.cost, 10);
   if (!n || isNaN(c) || c <= 0) return;
   addItem(n, c).then(() => (newItem.value = { name: '', cost: '' }));
+}
+
+// ---------- 编辑兑换物品 ----------
+const itemEdit = ref(null); // { id, name, cost }
+function doEditItem(it) {
+  itemEdit.value = { id: it.id, name: it.name, cost: String(it.cost) };
+}
+function doSaveItem() {
+  const f = itemEdit.value;
+  const n = f.name.trim(); const c = parseInt(f.cost, 10);
+  if (!n || isNaN(c) || c <= 0) return toast('请填写物品名称和正数积分');
+  editItem(f.id, n, c).then(() => { toast('物品已保存 ✓'); itemEdit.value = null; }).catch(e => toast(e.message));
 }
 
 const recordFilter = ref('');
@@ -246,6 +258,7 @@ function doSaveScoreInput() {
         <div class="desc">自定义可兑换的物品和所需积分，成员用积分兑换。</div>
         <div class="row" v-for="it in state.items" :key="it.id">
           <div class="grow"><div class="name">🎁 {{ it.name }}</div><div class="sub">需要 {{ it.cost }} 积分</div></div>
+          <button class="btn ghost" @click="doEditItem(it)">编辑</button>
           <button class="btn ghost" @click="redeemModal(it.id)">兑换</button>
           <button class="btn del" @click="delItem(it.id)">删</button>
         </div>
@@ -346,6 +359,20 @@ function doSaveScoreInput() {
             <button class="btn" style="flex:1" @click="doSaveLogin">保存</button>
             <button v-if="loginEdit.hadLogin" class="btn del" style="flex:1" @click="loginEdit.username = ''; doSaveLogin()">清除登录</button>
             <button class="btn ghost" style="flex:1" @click="loginEdit = null">取消</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 编辑兑换物品 -->
+    <div class="modal-bg" :class="{ show: itemEdit }" @click.self="itemEdit = null">
+      <div class="modal" v-if="itemEdit">
+        <h3>编辑物品</h3>
+        <div class="form" style="flex-direction:column;align-items:stretch">
+          <input v-model="itemEdit.name" placeholder="物品名称" @keydown.enter="doSaveItem">
+          <input v-model="itemEdit.cost" type="number" placeholder="所需积分（正数）" @keydown.enter="doSaveItem">
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn" style="flex:1" @click="doSaveItem">保存</button>
+            <button class="btn ghost" style="flex:1" @click="itemEdit = null">取消</button>
           </div>
         </div>
       </div>

@@ -160,6 +160,7 @@ export function applyCustomScore(member, title, points) {
     .then(() => toast(`${member.name} ${points > 0 ? '加' : '减'} ${Math.abs(points)} 分 ✓`));
 }
 export function addItem(name, cost) { return call('item/add', { name, cost }); }
+export function editItem(id, name, cost) { return call('item/edit', { id, name, cost }); }
 export function delItem(id) { if (confirm('删除该物品？')) return call('item/del', { id }); }
 export function redeemModal(itemId) {
   const it = state.items.find(x => x.id === itemId);

@@ -289,6 +289,15 @@ const actions = {
     if (!name || isNaN(cost) || cost <= 0) throw new Error('请填写物品名称和正数积分');
     s.items.push({ id: uid(), name, cost });
   },
+  'item/edit': (s, b) => {
+    const it = s.items.find(x => x.id === b.id);
+    if (!it) throw new Error('物品不存在');
+    const name = (b.name || '').trim();
+    const cost = parseInt(b.cost, 10);
+    if (!name || isNaN(cost) || cost <= 0) throw new Error('请填写物品名称和正数积分');
+    it.name = name;
+    it.cost = cost;
+  },
   'item/del': (s, b) => { s.items = s.items.filter(i => i.id !== b.id); },
   'item/redeem': (s, b) => {
     const m = s.members.find(x => x.id === b.memberId);
