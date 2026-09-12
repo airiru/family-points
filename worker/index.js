@@ -188,9 +188,12 @@ const actions = {
   },
   'rule/add': (s, b) => {
     const name = (b.name || '').trim();
+    if (!name) throw new Error('请填写规则名称');
+    const rule = { id: uid(), name };
+    // 分值留空 = 灵活规则：记一笔时再填分值
     const points = parseInt(b.points, 10);
-    if (!name || isNaN(points)) throw new Error('请填写规则名称和分值');
-    const rule = { id: uid(), name, points };
+    if (b.points !== '' && b.points !== null && b.points !== undefined && !isNaN(points)) rule.points = points;
+    else rule.flex = true;
     const streaks = parseStreaks(b);
     if (streaks.length) rule.streaks = streaks;
     s.rules.push(rule);
@@ -199,10 +202,11 @@ const actions = {
     const r = s.rules.find(x => x.id === b.id);
     if (!r) throw new Error('规则不存在');
     const name = (b.name || '').trim();
-    const points = parseInt(b.points, 10);
-    if (!name || isNaN(points)) throw new Error('请填写规则名称和分值');
+    if (!name) throw new Error('请填写规则名称');
     r.name = name;
-    r.points = points;
+    const points = parseInt(b.points, 10);
+    if (b.points !== '' && b.points !== null && b.points !== undefined && !isNaN(points)) { r.points = points; delete r.flex; }
+    else { delete r.points; r.flex = true; }
     const streaks = parseStreaks(b);
     if (streaks.length) r.streaks = streaks;
     else delete r.streaks;
@@ -212,10 +216,16 @@ const actions = {
     const m = s.members.find(x => x.id === b.memberId);
     const r = s.rules.find(x => x.id === b.ruleId);
     if (!m || !r) throw new Error('成员或规则不存在');
-    m.score += r.points;
-    s.records.push({ time: Date.now(), memberId: m.id, name: m.name, title: r.name, points: r.points });
-    // 负分规则视为“违反”，相关的连续计数清零
-    if (r.points < 0) resetStreaksOnViolation(s, m, r.name);
+    // 灵活规则：分值由记一笔时传入
+    let pts = r.points;
+    if (r.flex || pts === undefined) {
+      pts = parseInt(b.points, 10);
+      if (isNaN(pts) || pts === 0) throw new Error('请填写这次的分值（不能为 0）');
+    }
+    m.score += pts;
+    s.records.push({ time: Date.now(), memberId: m.id, name: m.name, title: r.name, points: pts });
+    // 负分视为“违反”，相关的连续计数清零（灵活规则按本次填的分值判断）
+    if (pts < 0) resetStreaksOnViolation(s, m, r.name);
     // 连续打卡奖励：规则可配置多档 streaks: [{every, bonus}]，各档独立计算——
     // 该规则累计打卡每满 every 次自动加该档 bonus 分（每个里程碑只奖励一次）
     if (r.streaks?.length || r.streak) {

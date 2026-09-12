@@ -149,11 +149,12 @@ export function addRule(name, points, streaks) {
 export function editRule(id, name, points, streaks) {
   return call('rule/edit', { id, name, points, streaks });
 }
-export function delRule(id) { if (confirm('删除该计分规则？')) return call('rule/del', { id }); }
-export function applyScore(member, rule) {
-  return call('score/add', { memberId: member.id, ruleId: rule.id })
-    .then(() => toast(`${member.name} ${rule.points >= 0 ? '加' : '减'} ${Math.abs(rule.points)} 分 ✓`));
+// 灵活规则记一笔：points 由本次填写
+export function applyScore(member, rule, points) {
+  return call('score/add', { memberId: member.id, ruleId: rule.id, points })
+    .then(() => toast(`${member.name} ${points > 0 ? '加' : '减'} ${Math.abs(points)} 分 ✓`));
 }
+export function delRule(id) { if (confirm('删除该计分规则？')) return call('rule/del', { id }); }
 export function applyCustomScore(member, title, points) {
   return call('score/custom', { memberId: member.id, title, points })
     .then(() => toast(`${member.name} ${points > 0 ? '加' : '减'} ${Math.abs(points)} 分 ✓`));

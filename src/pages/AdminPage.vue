@@ -46,50 +46,51 @@ function loginDesc(m) {
   return `登录：${m.username} · ${m.role === 'admin' ? '管理员' : '普通成员'}`;
 }
 
-// 连续奖励档位：每档 { every: 每N次, bonus: 奖M分 }，可加多档
-const emptyStreak = () => ({ every: '', bonus: '' });
 const newRule = ref({ name: '', points: '', streaks: [] });
 const ruleEdit = ref(null); // { id, name, points, streaks: [...] }
 
+// 连续奖励档位：每档 { every: 每N次, bonus: 奖M分 }，可加多档
+const emptyStreak = () => ({ every: '', bonus: '' });
 function tiersOf(f) {
   return f.streaks
     .map(t => ({ every: parseInt(t.every, 10), bonus: parseInt(t.bonus, 10) }))
-    .filter(t => t.every > 0 && t.bonus !== 0 && !isNaN(t.every) && !isNaN(t.bonus));
+    .filter(t => t.every > 0 && t.bonus !== 0 && !isNaN(t.every) && !isNaN(t.bonus))
+    .sort((a, b2) => a.every - b2.every);
 }
 function streakText(r) {
   const tiers = r.streaks?.length ? r.streaks : (r.streak ? [r.streak] : []);
   return tiers.map(t => `连续 ${t.every} 次 +${t.bonus} 分`).join(' · ');
 }
 function doAddRule() {
-  const n = newRule.value.name.trim(); const p = parseInt(newRule.value.points, 10);
-  if (!n || isNaN(p)) return;
-  addRule(n, p, tiersOf(newRule.value))
+  const n = newRule.value.name.trim();
+  if (!n) return;
+  addRule(n, newRule.value.points, tiersOf(newRule.value))
     .then(() => (newRule.value = { name: '', points: '', streaks: [] }));
 }
 function doEditRule(r) {
   const tiers = r.streaks?.length ? r.streaks : (r.streak ? [r.streak] : []);
   ruleEdit.value = {
-    id: r.id, name: r.name, points: String(r.points),
+    id: r.id, name: r.name, points: r.points !== undefined ? String(r.points) : '',
     streaks: tiers.map(t => ({ every: String(t.every), bonus: String(t.bonus) })),
   };
 }
 function doSaveRule() {
   const f = ruleEdit.value;
-  const n = f.name.trim(); const p = parseInt(f.points, 10);
-  if (!n || isNaN(p)) return toast('请填写规则名称和分值');
-  editRule(f.id, n, p, tiersOf(f))
+  const n = f.name.trim();
+  if (!n) return toast('请填写规则名称');
+  editRule(f.id, n, f.points, tiersOf(f))
     .then(() => { toast('规则已保存 ✓'); ruleEdit.value = null; })
     .catch(e => toast(e.message));
+}
+// 规则显示的分值文案
+function rulePointsText(r) {
+  if (r.flex) return '灵活';
+  return (r.points >= 0 ? '+' : '') + r.points + ' 分';
 }
 
 const pickedMemberId = ref('');
 const pickedMember = () => state.members.find(m => m.id === pickedMemberId.value);
 const customScore = ref({ title: '', points: '' });
-function doApplyScore(rule) {
-  const m = pickedMember();
-  if (!m) return;
-  applyScore(m, rule);
-}
 function doApplyCustom() {
   const m = pickedMember();
   if (!m) return;
@@ -106,6 +107,21 @@ function doAddItem() {
 }
 
 const recordFilter = ref('');
+
+// ---------- 记一笔 ----------
+const scoreInput = ref(null); // 灵活规则记一笔：{ member, rule, points }
+function doApplyScore(rule) {
+  const m = pickedMember();
+  if (!m) return;
+  if (rule.flex) { scoreInput.value = { member: m, rule, points: '' }; return; }
+  applyScore(m, rule, rule.points);
+}
+function doSaveScoreInput() {
+  const f = scoreInput.value;
+  const p = parseInt(f.points, 10);
+  if (isNaN(p) || p === 0) return toast('请填写不为 0 的分值');
+  applyScore(f.member, f.rule, p).then(() => (scoreInput.value = null));
+}
 </script>
 
 <template>
@@ -147,7 +163,7 @@ const recordFilter = ref('');
         <div class="desc">计分规则可自定义，正数为加分，负数为减分。可给规则附加"连续打卡奖励"：该规则每累计打卡 N 次自动额外奖 M 分（如：按时睡觉 +1，每满 7 次再奖 2 分），按点加分次数连续计数。若成员被名称相关的减分规则扣分（如"不按时睡觉"扣分），对应连续次数自动清零重新计。</div>
         <div class="row" v-for="r in state.rules" :key="r.id">
           <div class="grow"><div class="name">{{ r.name }}</div><div class="sub" v-if="streakText(r)">🔥 {{ streakText(r) }}</div></div>
-          <div class="pts" :class="r.points >= 0 ? 'plus' : 'minus'">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</div>
+          <div class="pts" :class="!r.flex && r.points >= 0 ? 'plus' : 'minus'">{{ rulePointsText(r) }}</div>
           <button class="btn ghost" @click="doEditRule(r)">编辑</button>
           <button class="btn del" @click="delRule(r.id)">删</button>
         </div>
@@ -156,6 +172,7 @@ const recordFilter = ref('');
           <input v-model="newRule.name" placeholder="规则名称，如：按时睡觉" style="flex:1;min-width:120px" @keydown.enter="doAddRule">
           <input v-model="newRule.points" class="n" type="number" placeholder="±分值" @keydown.enter="doAddRule">
         </div>
+        <div class="sub" style="margin-top:6px">±分值留空则为"灵活规则"：规则只定项目，记一笔时再填这次的分值。</div>
         <div class="form" style="margin-top:8px;align-items:center" v-for="(t, i) in newRule.streaks" :key="i">
           <span class="sub" style="white-space:nowrap">连续</span>
           <input v-model="t.every" class="n" type="number" placeholder="N次">
@@ -185,7 +202,8 @@ const recordFilter = ref('');
             <div class="form" style="margin-bottom:8px"></div>
             <button class="rule-btn" v-for="r in state.rules" :key="r.id" @click="doApplyScore(r)">
               <b>{{ r.name }}</b>
-              <span class="pts" :class="r.points >= 0 ? 'plus' : 'minus'" style="float:right">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</span>
+              <span class="pts" :class="!r.flex && r.points >= 0 ? 'plus' : 'minus'" style="float:right">{{ rulePointsText(r) }}</span>
+              <div class="sub" v-if="streakText(r)">🔥 {{ streakText(r) }}</div>
             </button>
           </template>
           <div v-else class="empty">还没有计分规则，可用下方自定义记一笔</div>
@@ -236,13 +254,26 @@ const recordFilter = ref('');
         <div v-if="!sortedRecords().length" class="empty">暂无记录</div>
       </div>
     </template>
+    <!-- 灵活规则记一笔：填写本次分值 -->
+    <div class="modal-bg" :class="{ show: scoreInput }" @click.self="scoreInput = null">
+      <div class="modal" v-if="scoreInput">
+        <h3>「{{ scoreInput.rule.name }}」— {{ scoreInput.member.name }}</h3>
+        <div class="form" style="flex-direction:column;align-items:stretch">
+          <input v-model="scoreInput.points" type="number" placeholder="这次的分值（正数加分、负数减分）" @keydown.enter="doSaveScoreInput">
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn" style="flex:1" @click="doSaveScoreInput">确定</button>
+            <button class="btn ghost" style="flex:1" @click="scoreInput = null">取消</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- 编辑规则表单 -->
     <div class="modal-bg" :class="{ show: ruleEdit }" @click.self="ruleEdit = null">
       <div class="modal" v-if="ruleEdit">
         <h3>编辑规则</h3>
         <div class="form" style="flex-direction:column;align-items:stretch">
           <input v-model="ruleEdit.name" placeholder="规则名称" @keydown.enter="doSaveRule">
-          <input v-model="ruleEdit.points" type="number" placeholder="±分值（正数加分、负数减分）" @keydown.enter="doSaveRule">
+          <input v-model="ruleEdit.points" type="number" placeholder="±分值（留空为灵活规则，记一笔时再填）" @keydown.enter="doSaveRule">
           <div class="sub" style="margin:4px 0 0">连续打卡奖励档位（选填，可加多档，各档独立计算）：</div>
           <div style="display:flex;gap:8px;align-items:center" v-for="(t, i) in ruleEdit.streaks" :key="i">
             <span class="sub" style="white-space:nowrap">连续</span>
