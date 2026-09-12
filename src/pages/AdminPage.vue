@@ -4,7 +4,7 @@ import { ref } from 'vue';
 import {
   state, loaded, ranked, memberRecords, sortedRecords, call,
   addMember, delMember, resetScore, showMember, setMemberLogin, setMemberHidden,
-  addRule, delRule, applyScore, applyCustomScore,
+  addRule, delRule, editRule, applyScore, applyCustomScore,
   addItem, delItem, redeemModal, fmt, memberStreak, user, toast,
 } from '../store.js';
 
@@ -46,12 +46,40 @@ function loginDesc(m) {
   return `登录：${m.username} · ${m.role === 'admin' ? '管理员' : '普通成员'}`;
 }
 
-const newRule = ref({ name: '', points: '', streakEvery: '', streakBonus: '' });
+// 连续奖励档位：每档 { every: '每N天', bonus: '奖M分' }，可加多档
+const emptyStreak = () => ({ every: '', bonus: '' });
+const newRule = ref({ name: '', points: '', streaks: [] });
+const ruleEdit = ref(null); // { id, name, points, streaks: [...] }
+
+function tiersOf(f) {
+  return f.streaks
+    .map(t => ({ every: parseInt(t.every, 10), bonus: parseInt(t.bonus, 10) }))
+    .filter(t => t.every > 0 && t.bonus !== 0 && !isNaN(t.every) && !isNaN(t.bonus));
+}
+function streakText(r) {
+  const tiers = r.streaks?.length ? r.streaks : (r.streak ? [r.streak] : []);
+  return tiers.map(t => `连续 ${t.every} 天 +${t.bonus} 分`).join(' · ');
+}
 function doAddRule() {
   const n = newRule.value.name.trim(); const p = parseInt(newRule.value.points, 10);
   if (!n || isNaN(p)) return;
-  addRule(n, p, newRule.value.streakEvery, newRule.value.streakBonus)
-    .then(() => (newRule.value = { name: '', points: '', streakEvery: '', streakBonus: '' }));
+  addRule(n, p, tiersOf(newRule.value))
+    .then(() => (newRule.value = { name: '', points: '', streaks: [] }));
+}
+function doEditRule(r) {
+  const tiers = r.streaks?.length ? r.streaks : (r.streak ? [r.streak] : []);
+  ruleEdit.value = {
+    id: r.id, name: r.name, points: String(r.points),
+    streaks: tiers.map(t => ({ every: String(t.every), bonus: String(t.bonus) })),
+  };
+}
+function doSaveRule() {
+  const f = ruleEdit.value;
+  const n = f.name.trim(); const p = parseInt(f.points, 10);
+  if (!n || isNaN(p)) return toast('请填写规则名称和分值');
+  editRule(f.id, n, p, tiersOf(f))
+    .then(() => { toast('规则已保存 ✓'); ruleEdit.value = null; })
+    .catch(e => toast(e.message));
 }
 
 const pickedMemberId = ref('');
@@ -118,8 +146,9 @@ const recordFilter = ref('');
       <div class="card">
         <div class="desc">计分规则可自定义，正数为加分，负数为减分。可给规则附加"连续打卡奖励"：该规则每连续打卡 N 天自动额外奖 M 分（如：按时睡觉 +1，每连续 7 天再奖 2 分），中断后重新计数，一天内多次打卡不重复计天。</div>
         <div class="row" v-for="r in state.rules" :key="r.id">
-          <div class="grow"><div class="name">{{ r.name }}</div><div class="sub" v-if="r.streak">🔥 连续打卡：每 {{ r.streak.every }} 天奖 {{ r.streak.bonus }} 分</div></div>
+          <div class="grow"><div class="name">{{ r.name }}</div><div class="sub" v-if="streakText(r)">🔥 {{ streakText(r) }}</div></div>
           <div class="pts" :class="r.points >= 0 ? 'plus' : 'minus'">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</div>
+          <button class="btn ghost" @click="doEditRule(r)">编辑</button>
           <button class="btn del" @click="delRule(r.id)">删</button>
         </div>
         <div v-if="!state.rules.length" class="empty">还没有规则</div>
@@ -127,11 +156,16 @@ const recordFilter = ref('');
           <input v-model="newRule.name" placeholder="规则名称，如：按时睡觉" style="flex:1;min-width:120px" @keydown.enter="doAddRule">
           <input v-model="newRule.points" class="n" type="number" placeholder="±分值" @keydown.enter="doAddRule">
         </div>
-        <div class="form" style="margin-top:8px">
-          <input v-model="newRule.streakEvery" class="n" type="number" placeholder="每N天" title="可选：连续打卡奖励周期">
-          <input v-model="newRule.streakBonus" class="n" type="number" placeholder="奖M分" title="可选：连续打卡奖励分值">
-          <span class="sub" style="align-self:center">← 选填：连续打卡奖励</span>
-          <button class="btn" @click="doAddRule">添加规则</button>
+        <div class="form" style="margin-top:8px;align-items:center" v-for="(t, i) in newRule.streaks" :key="i">
+          <span class="sub" style="white-space:nowrap">连续</span>
+          <input v-model="t.every" class="n" type="number" placeholder="N天">
+          <span class="sub" style="white-space:nowrap">天奖</span>
+          <input v-model="t.bonus" class="n" type="number" placeholder="M分">
+          <button class="btn del" @click="newRule.streaks.splice(i, 1)">删</button>
+        </div>
+        <div style="margin-top:8px">
+          <button class="btn ghost" @click="newRule.streaks.push(emptyStreak())">+ 添加连续打卡奖励档位（选填）</button>
+          <button class="btn" style="margin-left:8px" @click="doAddRule">添加规则</button>
         </div>
       </div>
     </template>
@@ -202,6 +236,29 @@ const recordFilter = ref('');
         <div v-if="!sortedRecords().length" class="empty">暂无记录</div>
       </div>
     </template>
+    <!-- 编辑规则表单 -->
+    <div class="modal-bg" :class="{ show: ruleEdit }" @click.self="ruleEdit = null">
+      <div class="modal" v-if="ruleEdit">
+        <h3>编辑规则</h3>
+        <div class="form" style="flex-direction:column;align-items:stretch">
+          <input v-model="ruleEdit.name" placeholder="规则名称" @keydown.enter="doSaveRule">
+          <input v-model="ruleEdit.points" type="number" placeholder="±分值（正数加分、负数减分）" @keydown.enter="doSaveRule">
+          <div class="sub" style="margin:4px 0 0">连续打卡奖励档位（选填，可加多档，各档独立计算）：</div>
+          <div style="display:flex;gap:8px;align-items:center" v-for="(t, i) in ruleEdit.streaks" :key="i">
+            <span class="sub" style="white-space:nowrap">连续</span>
+            <input v-model="t.every" type="number" placeholder="N天" style="flex:1">
+            <span class="sub" style="white-space:nowrap">天奖</span>
+            <input v-model="t.bonus" type="number" placeholder="M分" style="flex:1">
+            <button class="btn del" @click="ruleEdit.streaks.splice(i, 1)">删</button>
+          </div>
+          <button class="btn ghost" @click="ruleEdit.streaks.push(emptyStreak())">+ 添加档位</button>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn" style="flex:1" @click="doSaveRule">保存</button>
+            <button class="btn ghost" style="flex:1" @click="ruleEdit = null">取消</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <!-- 成员登录设置表单 -->
     <div class="modal-bg" :class="{ show: loginEdit }" @click.self="loginEdit = null">
       <div class="modal" v-if="loginEdit">

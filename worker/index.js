@@ -96,6 +96,20 @@ const publicState = s => ({ members: s.members.map(publicMember), rules: s.rules
 
 const validUsername = u => /^[a-zA-Z0-9_-]{1,20}$/.test(u);
 
+// 解析连续奖励档位：接受 streaks: [{every, bonus}, ...]，或旧的单档 streakEvery/streakBonus
+function parseStreaks(b) {
+  let list = Array.isArray(b.streaks) ? b.streaks : [];
+  if (!list.length && parseInt(b.streakEvery, 10) > 0 && parseInt(b.streakBonus, 10) > 0) {
+    list = [{ every: b.streakEvery, bonus: b.streakBonus }];
+  }
+  const tiers = list
+    .map(t => ({ every: parseInt(t.every, 10), bonus: parseInt(t.bonus, 10) }))
+    .filter(t => t.every > 0 && t.bonus !== 0 && !isNaN(t.every) && !isNaN(t.bonus))
+    .sort((a, b2) => a.every - b2.every);
+  // 去重：同一周期只保留一档
+  return tiers.filter((t, i) => i === 0 || t.every !== tiers[i - 1].every);
+}
+
 // 设置成员登录凭证
 async function applyLogin(m, username, password, role) {
   if (!username) { // 清除登录
@@ -164,11 +178,21 @@ const actions = {
     const points = parseInt(b.points, 10);
     if (!name || isNaN(points)) throw new Error('请填写规则名称和分值');
     const rule = { id: uid(), name, points };
-    // 可选连续打卡奖励：每 every 天奖 bonus 分（两项都填正整数才生效）
-    const every = parseInt(b.streakEvery, 10);
-    const bonus = parseInt(b.streakBonus, 10);
-    if (every > 0 && bonus > 0) rule.streak = { every, bonus };
+    const streaks = parseStreaks(b);
+    if (streaks.length) rule.streaks = streaks;
     s.rules.push(rule);
+  },
+  'rule/edit': (s, b) => {
+    const r = s.rules.find(x => x.id === b.id);
+    if (!r) throw new Error('规则不存在');
+    const name = (b.name || '').trim();
+    const points = parseInt(b.points, 10);
+    if (!name || isNaN(points)) throw new Error('请填写规则名称和分值');
+    r.name = name;
+    r.points = points;
+    const streaks = parseStreaks(b);
+    if (streaks.length) r.streaks = streaks;
+    else delete r.streaks;
   },
   'rule/del': (s, b) => { s.rules = s.rules.filter(r => r.id !== b.id); },
   'score/add': (s, b) => {
@@ -177,20 +201,25 @@ const actions = {
     if (!m || !r) throw new Error('成员或规则不存在');
     m.score += r.points;
     s.records.push({ time: Date.now(), memberId: m.id, name: m.name, title: r.name, points: r.points });
-    // 连续打卡奖励：该规则配置了 streak 时，每达到 every 的整数倍天数自动加 bonus 分
-    //（每轮每个里程碑只奖励一次）
-    if (r.streak) {
+    // 连续打卡奖励：规则可配置多档 streaks: [{every, bonus}]，各档独立计算——
+    // 连续天数达到 every 的整数倍时自动加该档 bonus 分（每轮每个档位的每个里程碑只奖励一次）
+    if (r.streaks?.length || r.streak) {
+      const tiers = r.streaks?.length ? r.streaks : [r.streak]; // 兼容旧的单档字段
       const st = streak(s, m.id, r.name);
-      const milestone = st.n > 0 && st.n % r.streak.every === 0;
-      const alreadyAwarded = s.records.some(x =>
-        x.memberId === m.id && x.streakAward && x.streakAward.n === st.n && x.streakAward.from === st.from);
-      if (milestone && !alreadyAwarded) {
-        m.score += r.streak.bonus;
-        s.records.push({
-          time: Date.now(), memberId: m.id, name: m.name,
-          title: `连续 ${st.n} 天「${r.name}」，奖励`, points: r.streak.bonus,
-          streakAward: { n: st.n, from: st.from },
-        });
+      for (const tier of tiers) {
+        if (st.n > 0 && st.n % tier.every === 0) {
+          const alreadyAwarded = s.records.some(x =>
+            x.memberId === m.id && x.streakAward && x.streakAward.every === tier.every
+            && x.streakAward.n === st.n && x.streakAward.from === st.from);
+          if (!alreadyAwarded) {
+            m.score += tier.bonus;
+            s.records.push({
+              time: Date.now(), memberId: m.id, name: m.name,
+              title: `连续 ${st.n} 天「${r.name}」，奖励`, points: tier.bonus,
+              streakAward: { every: tier.every, n: st.n, from: st.from },
+            });
+          }
+        }
       }
     }
   },

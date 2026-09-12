@@ -118,7 +118,7 @@ export const ranked = () => [...state.members].sort((a, b) => b.score - a.score)
 const TZ_OFFSET = 8 * 3600e3;
 const dayKey = t => new Date(t + TZ_OFFSET).toISOString().slice(0, 10);
 export function memberStreak(id) {
-  const streakRules = state.rules.filter(r => r.streak);
+  const streakRules = state.rules.filter(r => (r.streaks?.length || r.streak));
   if (!streakRules.length) return 0;
   let best = 0;
   for (const r of streakRules) {
@@ -149,8 +149,11 @@ export function showMember(m) {
       + (recs.length > 50 ? `<div class="empty">仅显示最近 50 条，共 ${recs.length} 条</div>` : '')
     : '<div class="empty">暂无记录</div>');
 }
-export function addRule(name, points, streakEvery, streakBonus) {
-  return call('rule/add', { name, points, streakEvery, streakBonus });
+export function addRule(name, points, streaks) {
+  return call('rule/add', { name, points, streaks });
+}
+export function editRule(id, name, points, streaks) {
+  return call('rule/edit', { id, name, points, streaks });
 }
 export function delRule(id) { if (confirm('删除该计分规则？')) return call('rule/del', { id }); }
 export function applyScore(member, rule) {
