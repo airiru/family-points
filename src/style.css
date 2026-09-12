@@ -63,3 +63,5 @@ input.n { width: 80px; }
 }
 /* 窄屏下标签页过多时可横向滑动 */
 .tabs { overflow-x: auto; }
+/* 记录分页条 */
+.pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 10px; }

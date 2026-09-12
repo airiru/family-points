@@ -119,6 +119,16 @@ function doSaveItem() {
 }
 
 const recordFilter = ref('');
+// ---------- 记录分页 ----------
+const PAGE_SIZE = 15;
+const recordPage = ref(1);
+const filteredRecordList = () => sortedRecords().filter(r => !recordFilter.value || r.memberId === recordFilter.value);
+const recordTotalPages = () => Math.max(1, Math.ceil(filteredRecordList().length / PAGE_SIZE));
+function gotoRecordPage(p) { recordPage.value = Math.min(Math.max(1, p), recordTotalPages()); }
+function pageRecords() {
+  const list = filteredRecordList();
+  return list.slice((recordPage.value - 1) * PAGE_SIZE, recordPage.value * PAGE_SIZE);
+}
 
 // ---------- 记一笔 ----------
 const scoreInput = ref(null); // 灵活规则记一笔：{ member, rule, points }
@@ -253,18 +263,23 @@ function doSaveScoreInput() {
     <!-- 全部记录 -->
     <template v-if="tab === 'records'">
       <div class="card">
-        <select v-model="recordFilter" style="width:100%;margin-bottom:10px">
+        <select v-model="recordFilter" style="width:100%;margin-bottom:10px" @change="recordPage = 1">
           <option value="">全部成员</option>
           <option v-for="m in state.members" :key="m.id" :value="m.id">{{ m.name }}</option>
         </select>
-        <div class="row" v-for="r in sortedRecords().filter(r => !recordFilter || r.memberId === recordFilter)" :key="r.id || (r.time + r.memberId)">
+        <div class="row" v-for="r in pageRecords()" :key="r.id || (r.time + r.memberId)">
           <div class="grow">
             <div class="name" style="font-size:14px;font-weight:500">{{ r.name }} · {{ r.title }}</div>
             <div class="time">{{ fmt(r.time) }}</div>
           </div>
           <div class="pts" :class="r.points >= 0 ? 'plus' : 'minus'">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</div>
         </div>
-        <div v-if="!sortedRecords().length" class="empty">暂无记录</div>
+        <div v-if="!filteredRecordList().length" class="empty">暂无记录</div>
+        <div class="pager" v-if="recordTotalPages() > 1">
+          <button class="btn ghost" :disabled="recordPage <= 1" @click="gotoRecordPage(recordPage - 1)">上一页</button>
+          <span class="sub">{{ recordPage }} / {{ recordTotalPages() }}</span>
+          <button class="btn ghost" :disabled="recordPage >= recordTotalPages()" @click="gotoRecordPage(recordPage + 1)">下一页</button>
+        </div>
       </div>
     </template>
     <!-- 灵活规则记一笔：填写本次分值 -->

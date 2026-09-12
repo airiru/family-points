@@ -4,12 +4,17 @@ import { ref, computed } from 'vue';
 import { state, loaded, ranked, memberRecords, sortedRecords, showMember, fmt, memberStreak, user, myMemberId, redeemSelf, esc } from '../store.js';
 
 const visibleMembers = computed(() => state.members.filter(m => !m.hidden));
+const PAGE_SIZE = 15;
+const page = ref(1);
 const recent = computed(() => {
   const ids = new Set(visibleMembers.value.map(m => m.id));
-  return sortedRecords().filter(r => ids.has(r.memberId)).slice(0, 20);
+  return sortedRecords().filter(r => ids.has(r.memberId));
 });
 const detailId = ref(''); // 记录区按成员筛选
 const filteredRecent = computed(() => recent.value.filter(r => !detailId.value || r.memberId === detailId.value));
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredRecent.value.length / PAGE_SIZE)));
+const pageRecords = computed(() => filteredRecent.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE));
+function gotoPage(p) { page.value = Math.min(Math.max(1, p), totalPages.value); }
 const myMember = computed(() => state.members.find(m => m.id === myMemberId.value));
 function onRedeem(it) {
   if (confirm(`确定用 ${it.cost} 积分兑换「${it.name}」？`)) redeemSelf(it.id);
@@ -46,11 +51,11 @@ function onRedeem(it) {
 
     <div class="card">
       <div class="desc">最近记录</div>
-      <select v-model="detailId" style="width:100%;margin-bottom:10px">
+      <select v-model="detailId" style="width:100%;margin-bottom:10px" @change="page = 1">
         <option value="">全部成员</option>
         <option v-for="m in visibleMembers" :key="m.id" :value="m.id">{{ m.name }}</option>
       </select>
-      <div class="row" v-for="r in filteredRecent" :key="r.time + r.memberId">
+      <div class="row" v-for="r in pageRecords" :key="r.id || (r.time + r.memberId)">
         <div class="grow">
           <div class="name" style="font-size:14px;font-weight:500">{{ r.name }} · {{ r.title }}</div>
           <div class="time">{{ fmt(r.time) }}</div>
@@ -58,6 +63,11 @@ function onRedeem(it) {
         <div class="pts" :class="r.points >= 0 ? 'plus' : 'minus'">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</div>
       </div>
       <div v-if="!filteredRecent.length" class="empty">暂无记录</div>
+      <div class="pager" v-if="totalPages > 1">
+        <button class="btn ghost" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
+        <span class="sub">{{ page }} / {{ totalPages }}</span>
+        <button class="btn ghost" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
+      </div>
     </div>
   </template>
 </template>
