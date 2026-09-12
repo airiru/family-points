@@ -3,7 +3,11 @@
 import { ref, computed } from 'vue';
 import { state, loaded, ranked, memberRecords, sortedRecords, showMember, fmt, memberStreak, user, myMemberId, redeemSelf, esc } from '../store.js';
 
-const recent = computed(() => sortedRecords().slice(0, 20));
+const visibleMembers = computed(() => state.members.filter(m => !m.hidden));
+const recent = computed(() => {
+  const ids = new Set(visibleMembers.value.map(m => m.id));
+  return sortedRecords().filter(r => ids.has(r.memberId)).slice(0, 20);
+});
 const detailId = ref(''); // 记录区按成员筛选
 const filteredRecent = computed(() => recent.value.filter(r => !detailId.value || r.memberId === detailId.value));
 const myMember = computed(() => state.members.find(m => m.id === myMemberId.value));
@@ -44,7 +48,7 @@ function onRedeem(it) {
       <div class="desc">最近记录</div>
       <select v-model="detailId" style="width:100%;margin-bottom:10px">
         <option value="">全部成员</option>
-        <option v-for="m in state.members" :key="m.id" :value="m.id">{{ m.name }}</option>
+        <option v-for="m in visibleMembers" :key="m.id" :value="m.id">{{ m.name }}</option>
       </select>
       <div class="row" v-for="r in filteredRecent" :key="r.time + r.memberId">
         <div class="grow">
