@@ -1,0 +1,8 @@
+# Cloudflare Pages 部署配置（Git 连接的 Pages 项目会读取此文件获取构建产物目录和绑定）
+name = "family-points-47v"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-02-04"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "d6963179250941a596f76d5eba51a74e"

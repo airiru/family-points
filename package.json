@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "deploy": "npm run build && wrangler deploy"
+    "build": "vite build && node scripts/postbuild.mjs",
+    "deploy": "npm run build && wrangler pages deploy"
   },
   "dependencies": {
     "vue": "^3.5.0"
