@@ -106,6 +106,8 @@ export function call(path, body, done) {
 }
 
 export const fmt = t => new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+// 补记的记录额外显示实际添加时间（事项时间与添加时间相差超过 12 小时视为补记）
+export const addedText = r => (r.addedAt && r.addedAt - r.time > 12 * 3600e3) ? `补记于 ${fmt(r.addedAt)}` : '';
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function memberRecords(id) {
@@ -139,7 +141,7 @@ export function resetScore(m) {
 export function showMember(m) {
   const recs = memberRecords(m.id);
   openModal(`${m.name} · 当前 ${m.score} 分`, recs.length
-    ? recs.slice(0, 50).map(r => `<div class="row"><div class="grow"><div class="name" style="font-size:14px;font-weight:500">${esc(r.title)}</div><div class="time">${fmt(r.time)}</div></div><div class="pts ${r.points >= 0 ? 'plus' : 'minus'}">${r.points >= 0 ? '+' : ''}${r.points} 分</div></div>`).join('')
+    ? recs.slice(0, 50).map(r => `<div class="row"><div class="grow"><div class="name" style="font-size:14px;font-weight:500">${esc(r.title)}</div><div class="time">${fmt(r.time)}${addedText(r) ? ' · ' + addedText(r) : ''}</div></div><div class="pts ${r.points >= 0 ? 'plus' : 'minus'}">${r.points >= 0 ? '+' : ''}${r.points} 分</div></div>`).join('')
       + (recs.length > 50 ? `<div class="empty">仅显示最近 50 条，共 ${recs.length} 条</div>` : '')
     : '<div class="empty">暂无记录</div>');
 }
@@ -149,14 +151,14 @@ export function addRule(name, points, streaks) {
 export function editRule(id, name, points, streaks) {
   return call('rule/edit', { id, name, points, streaks });
 }
-// 灵活规则记一笔：points 由本次填写
-export function applyScore(member, rule, points) {
-  return call('score/add', { memberId: member.id, ruleId: rule.id, points })
+// 灵活规则记一笔：points 由本次填写；date 为可选补记日期（YYYY-MM-DD）
+export function applyScore(member, rule, points, date) {
+  return call('score/add', { memberId: member.id, ruleId: rule.id, points, date })
     .then(() => toast(`${member.name} ${points > 0 ? '加' : '减'} ${Math.abs(points)} 分 ✓`));
 }
 export function delRule(id) { if (confirm('删除该计分规则？')) return call('rule/del', { id }); }
-export function applyCustomScore(member, title, points) {
-  return call('score/custom', { memberId: member.id, title, points })
+export function applyCustomScore(member, title, points, date) {
+  return call('score/custom', { memberId: member.id, title, points, date })
     .then(() => toast(`${member.name} ${points > 0 ? '加' : '减'} ${Math.abs(points)} 分 ✓`));
 }
 export function addItem(name, cost) { return call('item/add', { name, cost }); }

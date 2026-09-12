@@ -1,10 +1,11 @@
 <script setup>
 // 主页面：只读展示积分排行榜和成员详情、最近记录；绑定成员的账号可自助兑换
 import { ref, computed } from 'vue';
-import { state, loaded, ranked, memberRecords, sortedRecords, showMember, fmt, memberStreak, user, myMemberId, redeemSelf, esc } from '../store.js';
+import RecordPager from '../components/RecordPager.vue';
+import { state, loaded, ranked, memberRecords, sortedRecords, showMember, fmt, addedText, memberStreak, user, myMemberId, redeemSelf, esc } from '../store.js';
 
 const visibleMembers = computed(() => state.members.filter(m => !m.hidden));
-const PAGE_SIZE = 15;
+const pageSize = ref(15);
 const page = ref(1);
 const recent = computed(() => {
   const ids = new Set(visibleMembers.value.map(m => m.id));
@@ -12,9 +13,8 @@ const recent = computed(() => {
 });
 const detailId = ref(''); // 记录区按成员筛选
 const filteredRecent = computed(() => recent.value.filter(r => !detailId.value || r.memberId === detailId.value));
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredRecent.value.length / PAGE_SIZE)));
-const pageRecords = computed(() => filteredRecent.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE));
-function gotoPage(p) { page.value = Math.min(Math.max(1, p), totalPages.value); }
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredRecent.value.length / pageSize.value)));
+const pageRecords = computed(() => filteredRecent.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value));
 const myMember = computed(() => state.members.find(m => m.id === myMemberId.value));
 function onRedeem(it) {
   if (confirm(`确定用 ${it.cost} 积分兑换「${it.name}」？`)) redeemSelf(it.id);
@@ -58,16 +58,12 @@ function onRedeem(it) {
       <div class="row" v-for="r in pageRecords" :key="r.id || (r.time + r.memberId)">
         <div class="grow">
           <div class="name" style="font-size:14px;font-weight:500">{{ r.name }} · {{ r.title }}</div>
-          <div class="time">{{ fmt(r.time) }}</div>
+          <div class="time">{{ fmt(r.time) }}<template v-if="addedText(r)"> · {{ addedText(r) }}</template></div>
         </div>
         <div class="pts" :class="r.points >= 0 ? 'plus' : 'minus'">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</div>
       </div>
       <div v-if="!filteredRecent.length" class="empty">暂无记录</div>
-      <div class="pager" v-if="totalPages > 1">
-        <button class="btn ghost" :disabled="page <= 1" @click="gotoPage(page - 1)">上一页</button>
-        <span class="sub">{{ page }} / {{ totalPages }}</span>
-        <button class="btn ghost" :disabled="page >= totalPages" @click="gotoPage(page + 1)">下一页</button>
-      </div>
+      <RecordPager v-if="filteredRecent.length" v-model:page="page" v-model:page-size="pageSize" :total-pages="totalPages" />
     </div>
   </template>
 </template>

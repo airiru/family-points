@@ -1,11 +1,12 @@
 <script setup>
 // 后台设置页：成员管理（成员即账号）、计分规则、记一笔、兑换商城、全部记录
 import { ref } from 'vue';
+import RecordPager from '../components/RecordPager.vue';
 import {
   state, loaded, ranked, memberRecords, sortedRecords, call,
   addMember, delMember, resetScore, showMember, setMemberLogin, setMemberHidden,
   addRule, delRule, editRule, applyScore, applyCustomScore,
-  addItem, delItem, editItem, redeemModal, fmt, memberStreak, user, toast,
+  addItem, delItem, editItem, redeemModal, fmt, addedText, memberStreak, user, toast,
 } from '../store.js';
 
 const tab = ref('members');
@@ -91,12 +92,13 @@ function rulePointsText(r) {
 const pickedMemberId = ref('');
 const pickedMember = () => state.members.find(m => m.id === pickedMemberId.value);
 const customScore = ref({ title: '', points: '' });
+const scoreDate = ref(''); // 可选补记日期（留空 = 今天）
 function doApplyCustom() {
   const m = pickedMember();
   if (!m) return;
   const title = customScore.value.title.trim(); const points = parseInt(customScore.value.points, 10);
   if (!title || isNaN(points) || points === 0) return;
-  applyCustomScore(m, title, points).then(() => (customScore.value = { title: '', points: '' }));
+  applyCustomScore(m, title, points, scoreDate.value).then(() => (customScore.value = { title: '', points: '' }));
 }
 
 const newItem = ref({ name: '', cost: '' });
@@ -120,14 +122,13 @@ function doSaveItem() {
 
 const recordFilter = ref('');
 // ---------- 记录分页 ----------
-const PAGE_SIZE = 15;
+const recordPageSize = ref(15);
 const recordPage = ref(1);
 const filteredRecordList = () => sortedRecords().filter(r => !recordFilter.value || r.memberId === recordFilter.value);
-const recordTotalPages = () => Math.max(1, Math.ceil(filteredRecordList().length / PAGE_SIZE));
-function gotoRecordPage(p) { recordPage.value = Math.min(Math.max(1, p), recordTotalPages()); }
+const recordTotalPages = () => Math.max(1, Math.ceil(filteredRecordList().length / recordPageSize.value));
 function pageRecords() {
   const list = filteredRecordList();
-  return list.slice((recordPage.value - 1) * PAGE_SIZE, recordPage.value * PAGE_SIZE);
+  return list.slice((recordPage.value - 1) * recordPageSize.value, recordPage.value * recordPageSize.value);
 }
 
 // ---------- 记一笔 ----------
@@ -135,14 +136,14 @@ const scoreInput = ref(null); // 灵活规则记一笔：{ member, rule, points 
 function doApplyScore(rule) {
   const m = pickedMember();
   if (!m) return;
-  if (rule.flex) { scoreInput.value = { member: m, rule, points: '' }; return; }
-  applyScore(m, rule, rule.points);
+  if (rule.flex) { scoreInput.value = { member: m, rule, points: '', date: scoreDate.value }; return; }
+  applyScore(m, rule, rule.points, scoreDate.value);
 }
 function doSaveScoreInput() {
   const f = scoreInput.value;
   const p = parseInt(f.points, 10);
   if (isNaN(p) || p === 0) return toast('请填写不为 0 的分值');
-  applyScore(f.member, f.rule, p).then(() => (scoreInput.value = null));
+  applyScore(f.member, f.rule, p, f.date).then(() => (scoreInput.value = null));
 }
 </script>
 
@@ -219,7 +220,9 @@ function doSaveScoreInput() {
               <option value="" disabled>选择成员</option>
               <option v-for="m in state.members" :key="m.id" :value="m.id">{{ m.name }}（{{ m.score }} 分）</option>
             </select>
+            <input v-model="scoreDate" type="date" title="事项发生的日期（留空 = 今天）">
           </div>
+          <div class="sub" style="margin-top:6px">日期留空默认记为今天；选过去的日期可补记。</div>
           <template v-if="state.rules.length">
             <div class="form" style="margin-bottom:8px"></div>
             <button class="rule-btn" v-for="r in state.rules" :key="r.id" @click="doApplyScore(r)">
@@ -270,16 +273,12 @@ function doSaveScoreInput() {
         <div class="row" v-for="r in pageRecords()" :key="r.id || (r.time + r.memberId)">
           <div class="grow">
             <div class="name" style="font-size:14px;font-weight:500">{{ r.name }} · {{ r.title }}</div>
-            <div class="time">{{ fmt(r.time) }}</div>
+            <div class="time">{{ fmt(r.time) }}<template v-if="addedText(r)"> · {{ addedText(r) }}</template></div>
           </div>
           <div class="pts" :class="r.points >= 0 ? 'plus' : 'minus'">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</div>
         </div>
         <div v-if="!filteredRecordList().length" class="empty">暂无记录</div>
-        <div class="pager" v-if="recordTotalPages() > 1">
-          <button class="btn ghost" :disabled="recordPage <= 1" @click="gotoRecordPage(recordPage - 1)">上一页</button>
-          <span class="sub">{{ recordPage }} / {{ recordTotalPages() }}</span>
-          <button class="btn ghost" :disabled="recordPage >= recordTotalPages()" @click="gotoRecordPage(recordPage + 1)">下一页</button>
-        </div>
+        <RecordPager v-if="filteredRecordList().length" v-model:page="recordPage" v-model:page-size="recordPageSize" :total-pages="recordTotalPages()" />
       </div>
     </template>
     <!-- 灵活规则记一笔：填写本次分值 -->

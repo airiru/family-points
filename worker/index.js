@@ -26,6 +26,17 @@ function streakCount(state, memberId, ruleName, after) {
 // 名称相关 = 互相包含（“不按时睡觉”与“按时睡觉”相关）
 const namesRelated = (a, b) => a.includes(b) || b.includes(a);
 
+// 解析可选的补记日期（YYYY-MM-DD，按东八区当天中午计），不填或非法则用当前时间；不接受未来日期
+function resolveTime(b) {
+  if (typeof b.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.date)) {
+    const t = Date.parse(b.date + 'T12:00:00+08:00');
+    if (isNaN(t)) throw new Error('日期格式不正确');
+    if (t > Date.now() + 86400e3) throw new Error('日期不能是未来的');
+    return t;
+  }
+  return Date.now();
+}
+
 // 违反减分规则时，重置相关的连续计数并写入一条 0 分记录说明
 function resetStreaksOnViolation(s, m, ruleName) {
   for (const rule of s.rules) {
@@ -55,7 +66,10 @@ async function getState(kv) {
 
 async function saveState(kv, state) {
   state.records = state.records.slice(-MAX_RECORDS);
-  state.records.forEach(r => { if (!r.id) r.id = uid(); });
+  state.records.forEach(r => {
+    if (!r.id) r.id = uid();
+    if (!r.addedAt) r.addedAt = Date.now(); // 实际添加时间（补记时与事项发生时间不同）
+  });
   await kv.put(STATE_KEY, JSON.stringify(state));
 }
 
@@ -223,8 +237,9 @@ const actions = {
       pts = parseInt(b.points, 10);
       if (isNaN(pts) || pts === 0) throw new Error('请填写这次的分值（不能为 0）');
     }
+    const time = resolveTime(b);
     m.score += pts;
-    s.records.push({ time: Date.now(), memberId: m.id, name: m.name, title: r.name, points: pts });
+    s.records.push({ time, memberId: m.id, name: m.name, title: r.name, points: pts });
     // 负分视为“违反”，相关的连续计数清零（灵活规则按本次填的分值判断）
     if (pts < 0) resetStreaksOnViolation(s, m, r.name);
     // 连续打卡奖励：规则可配置多档 streaks: [{every, bonus}]，各档独立计算——
@@ -241,7 +256,7 @@ const actions = {
           if (!alreadyAwarded) {
             m.score += tier.bonus;
             s.records.push({
-              time: Date.now(), memberId: m.id, name: m.name,
+              time, memberId: m.id, name: m.name,
               title: `连续 ${count} 次「${r.name}」，奖励`, points: tier.bonus,
               streakAward: { every: tier.every, n: count, from },
             });
@@ -255,8 +270,9 @@ const actions = {
     const points = parseInt(b.points, 10);
     const title = (b.title || '').trim();
     if (!m || isNaN(points) || !title) throw new Error('参数不完整');
+    const time = resolveTime(b);
     m.score += points;
-    s.records.push({ time: Date.now(), memberId: m.id, name: m.name, title, points });
+    s.records.push({ time, memberId: m.id, name: m.name, title, points });
     if (points < 0) resetStreaksOnViolation(s, m, title);
   },
   'item/add': (s, b) => {
