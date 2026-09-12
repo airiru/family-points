@@ -108,6 +108,27 @@ function doAddItem() {
 
 const recordFilter = ref('');
 
+// ---------- 兑换记录编辑 ----------
+const recordEdit = ref(null); // { id, name, cost }
+function isRedeemRecord(r) { return (r.title || '').startsWith('兑换「'); }
+function doEditRecord(r) {
+  const m = r.title.match(/^兑换「(.+)」$/);
+  recordEdit.value = { id: r.id, name: m ? m[1] : '', cost: String(-r.points) };
+}
+function doSaveRecordEdit() {
+  const f = recordEdit.value;
+  const cost = parseInt(f.cost, 10);
+  if (isNaN(cost) || cost < 0) return toast('请填写不小于 0 的抵扣积分');
+  if (!f.name.trim()) return toast('请填写物品名称');
+  call('record/edit', { id: f.id, cost, itemName: f.name.trim() })
+    .then(() => { toast('兑换记录已修改 ✓'); recordEdit.value = null; })
+    .catch(e => toast(e.message));
+}
+function doDelRecord(r) {
+  if (!confirm('删除这条兑换记录？扣掉的积分会退回给成员。')) return;
+  call('record/del', { id: r.id }).then(() => toast('已删除并退分 ✓')).catch(e => toast(e.message));
+}
+
 // ---------- 记一笔 ----------
 const scoreInput = ref(null); // 灵活规则记一笔：{ member, rule, points }
 function doApplyScore(rule) {
@@ -244,14 +265,34 @@ function doSaveScoreInput() {
           <option value="">全部成员</option>
           <option v-for="m in state.members" :key="m.id" :value="m.id">{{ m.name }}</option>
         </select>
-        <div class="row" v-for="r in sortedRecords().filter(r => !recordFilter || r.memberId === recordFilter)" :key="r.time + r.memberId">
+        <div class="row" v-for="r in sortedRecords().filter(r => !recordFilter || r.memberId === recordFilter)" :key="r.id || (r.time + r.memberId)">
           <div class="grow">
             <div class="name" style="font-size:14px;font-weight:500">{{ r.name }} · {{ r.title }}</div>
             <div class="time">{{ fmt(r.time) }}</div>
           </div>
           <div class="pts" :class="r.points >= 0 ? 'plus' : 'minus'">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</div>
+          <template v-if="isRedeemRecord(r)">
+            <button class="btn ghost" @click="doEditRecord(r)">编辑</button>
+            <button class="btn del" @click="doDelRecord(r)">删</button>
+          </template>
         </div>
         <div v-if="!sortedRecords().length" class="empty">暂无记录</div>
+        <div class="sub" style="margin-top:6px">兑换记录可编辑抵扣分值/物品名，或删除后退回积分；加减分记录不可编辑。</div>
+      </div>
+      <!-- 编辑兑换记录 -->
+      <div class="modal-bg" :class="{ show: recordEdit }" @click.self="recordEdit = null">
+        <div class="modal" v-if="recordEdit">
+          <h3>编辑兑换记录</h3>
+          <div class="form" style="flex-direction:column;align-items:stretch">
+            <input v-model="recordEdit.name" placeholder="物品名称">
+            <input v-model="recordEdit.cost" type="number" placeholder="抵扣积分（不小于 0）" @keydown.enter="doSaveRecordEdit">
+            <div class="sub">修改后成员积分会自动按差价调整。</div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button class="btn" style="flex:1" @click="doSaveRecordEdit">保存</button>
+              <button class="btn ghost" style="flex:1" @click="recordEdit = null">取消</button>
+            </div>
+          </div>
+        </div>
       </div>
     </template>
     <!-- 灵活规则记一笔：填写本次分值 -->
@@ -269,17 +310,17 @@ function doSaveScoreInput() {
     </div>
     <!-- 编辑规则表单 -->
     <div class="modal-bg" :class="{ show: ruleEdit }" @click.self="ruleEdit = null">
-      <div class="modal" v-if="ruleEdit">
+      <div class="modal modal-wide" v-if="ruleEdit">
         <h3>编辑规则</h3>
         <div class="form" style="flex-direction:column;align-items:stretch">
           <input v-model="ruleEdit.name" placeholder="规则名称" @keydown.enter="doSaveRule">
           <input v-model="ruleEdit.points" type="number" placeholder="±分值（留空为灵活规则，记一笔时再填）" @keydown.enter="doSaveRule">
           <div class="sub" style="margin:4px 0 0">连续打卡奖励档位（选填，可加多档，各档独立计算）：</div>
-          <div style="display:flex;gap:8px;align-items:center" v-for="(t, i) in ruleEdit.streaks" :key="i">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" v-for="(t, i) in ruleEdit.streaks" :key="i">
             <span class="sub" style="white-space:nowrap">连续</span>
-            <input v-model="t.every" type="number" placeholder="N次" style="flex:1">
+            <input v-model="t.every" type="number" placeholder="N次" style="flex:1 1 80px;min-width:0">
             <span class="sub" style="white-space:nowrap">次奖</span>
-            <input v-model="t.bonus" type="number" placeholder="M分值" style="flex:1">
+            <input v-model="t.bonus" type="number" placeholder="M分" style="flex:1 1 80px;min-width:0">
             <button class="btn del" @click="ruleEdit.streaks.splice(i, 1)">删</button>
           </div>
           <button class="btn ghost" @click="ruleEdit.streaks.push(emptyStreak())">+ 添加档位</button>

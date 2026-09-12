@@ -55,6 +55,7 @@ async function getState(kv) {
 
 async function saveState(kv, state) {
   state.records = state.records.slice(-MAX_RECORDS);
+  state.records.forEach(r => { if (!r.id) r.id = uid(); });
   await kv.put(STATE_KEY, JSON.stringify(state));
 }
 
@@ -106,6 +107,15 @@ function currentUser(request, state) {
 // 对外输出的成员信息：去掉密码哈希等敏感字段
 const publicMember = ({ salt, passHash, ...pub }) => pub;
 const publicState = s => ({ members: s.members.map(publicMember), rules: s.rules, items: s.items, records: s.records });
+
+// 查找可编辑的兑换记录（仅兑换类记录允许编辑/删除）
+function findRedemption(s, id) {
+  const rec = s.records.find(x => x.id === id && x.title?.startsWith('兑换「'));
+  if (!rec) throw new Error('兑换记录不存在或不可编辑');
+  const m = s.members.find(x => x.id === rec.memberId);
+  if (!m) throw new Error('成员不存在');
+  return { rec, m };
+}
 
 const validUsername = u => /^[a-zA-Z0-9_-]{1,20}$/.test(u);
 
@@ -185,6 +195,21 @@ const actions = {
     const m = s.members.find(x => x.id === b.id);
     if (!m) throw new Error('成员不存在');
     m.score = 0;
+  },
+  // ---------- 兑换记录编辑（仅管理员）----------
+  // 只允许编辑/删除兑换记录；修改抵扣分值或删除时自动给成员退回差价
+  'record/edit': (s, b) => {
+    const { rec, m } = findRedemption(s, b.id);
+    const cost = parseInt(b.cost, 10);
+    if (isNaN(cost) || cost < 0) throw new Error('请填写不小于 0 的抵扣积分');
+    m.score += -rec.points - cost; // 退回旧抵扣，再按新抵扣扣除
+    rec.points = -cost;
+    if (b.itemName) rec.title = `兑换「${b.itemName}」`;
+  },
+  'record/del': (s, b) => {
+    const { rec, m } = findRedemption(s, b.id);
+    m.score += -rec.points; // 退回兑换扣掉的积分
+    s.records = s.records.filter(x => x.id !== b.id);
   },
   'rule/add': (s, b) => {
     const name = (b.name || '').trim();
