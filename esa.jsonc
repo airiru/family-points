@@ -1,0 +1,6 @@
+{
+  "name": "family-points",
+  "entry": "./index.js",
+  "installCommand": "",
+  "buildCommand": ""
+}

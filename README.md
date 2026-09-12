@@ -10,8 +10,19 @@
    登录 [ESA 控制台](https://esa.console.aliyun.com/) → 左侧导航「边缘计算和 AI」→「KV 存储」→「创建存储空间」，
    空间名称填 **`jifen`**（如果想用别的名字，需同步修改 `index.js` 顶部的 `KV_NAMESPACE`）。
 
+### 方式一：边缘函数（推荐，无构建步骤）
+
 2. **创建边缘函数**
    「边缘计算和 AI」→「边缘函数」→ 创建函数，把 `index.js` 的全部内容粘贴到在线编辑器中并部署。
+
+### 方式二：ESA Pages（连接 GitHub 仓库自动部署）
+
+创建 Pages 项目并导入本仓库即可。仓库已含 `esa.jsonc`：
+
+- `entry: "./index.js"` — 指定边缘函数入口；
+- `installCommand` / `buildCommand` 留空 — 本项目单文件、无依赖，跳过安装和构建（之前报 "Build command execution failed" 就是因为 Pages 试图对纯单文件项目执行 npm 构建）。
+
+Pages 模式下所有请求都会由该函数处理（无静态资源），行为与边缘函数方式一致。若在控制台改过构建配置，注意仓库中 `esa.jsonc` 的优先级更高。
 
 3. **绑定路由**
    给该函数绑定一个路由（例如你的站点 `example.com/*`），使所有请求都走这个函数。
