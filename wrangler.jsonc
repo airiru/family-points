@@ -1,17 +1,24 @@
 {
-  // Cloudflare Workers 部署配置（https://developers.cloudflare.com/workers/wrangler/configuration/）
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "family-points",
-  "main": "worker/index.js",
-  "compatibility_date": "2026-09-01",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-02-04",
+  "observability": {
+    "enabled": true
+  },
   "assets": {
     // Vite 构建产物；未命中静态资源的请求（即 /api/*）进入 worker/index.js
     "directory": "./dist"
   },
+
+  // Add this to your wrangler.jsonc
   "kv_namespaces": [
     {
-      // 执行 `npx wrangler kv namespace create KV` 后，把返回的 id 填到这里
       "binding": "KV",
-      "id": "family"
+      "id": "d6963179250941a596f76d5eba51a74e",
+
+      // Optional: preview_id used when running `wrangler dev` for local dev
+      "preview_id": "<ID_OF_PREVIEW_KV_NAMESPACE_FOR_LOCAL_DEVELOPMENT>"
     }
   ]
 }
