@@ -12,19 +12,32 @@ const TOKEN_DAYS = 30; // 登录有效期（天）
 
 // 连续打卡奖励：规则可自带 streak: { every, bonus }（在后台设置页配置），
 // 该规则每连续打卡 every 天自动额外奖励 bonus 分
-const TZ_OFFSET = 8 * 3600e3; // “同一天”按东八区计算
-const dayKey = t => new Date(t + TZ_OFFSET).toISOString().slice(0, 10);
+// 连续打卡按“连续点几次”计数：某成员使用该规则加分的次数即为连续次数，
+// 每满 every 次自动奖励 bonus 分（奖励后计数继续累积）。
+// 若成员被名称相关的减分规则扣分（如“不按时睡觉”之于“按时睡觉”），连续次数自动清零重新计。
+function streakResetAt(m, ruleName) {
+  return (m.streakResetAt && m.streakResetAt[ruleName]) || 0;
+}
+function streakCount(state, memberId, ruleName, after) {
+  return state.records
+    .filter(r => r.memberId === memberId && r.title === ruleName && r.time > after)
+    .length;
+}
+// 名称相关 = 互相包含（“不按时睡觉”与“按时睡觉”相关）
+const namesRelated = (a, b) => a.includes(b) || b.includes(a);
 
-// 成员当前连续打卡：返回 { n: 连续天数, from: 本轮起始日的日期键 }（截至今天或昨天）
-function streak(state, memberId, ruleName) {
-  const days = new Set(state.records
-    .filter(r => r.memberId === memberId && r.title === ruleName)
-    .map(r => dayKey(r.time)));
-  let t = Date.now();
-  if (!days.has(dayKey(t))) t -= 86400e3;
-  let n = 0;
-  while (days.has(dayKey(t))) { n++; t -= 86400e3; }
-  return { n, from: n ? dayKey(t + 86400e3) : '' };
+// 违反减分规则时，重置相关的连续计数并写入一条 0 分记录说明
+function resetStreaksOnViolation(s, m, ruleName) {
+  for (const rule of s.rules) {
+    if (!(rule.streaks?.length || rule.streak)) continue;
+    if (ruleName === rule.name || !namesRelated(ruleName, rule.name)) continue;
+    if (!m.streakResetAt) m.streakResetAt = {};
+    m.streakResetAt[rule.name] = Date.now();
+    s.records.push({
+      time: Date.now(), memberId: m.id, name: m.name, points: 0,
+      title: `违反「${ruleName}」，「${rule.name}」连续打卡重新计数`,
+    });
+  }
 }
 
 // ---------- 数据与操作 ----------
@@ -201,22 +214,24 @@ const actions = {
     if (!m || !r) throw new Error('成员或规则不存在');
     m.score += r.points;
     s.records.push({ time: Date.now(), memberId: m.id, name: m.name, title: r.name, points: r.points });
+    // 负分规则视为“违反”，相关的连续计数清零
+    if (r.points < 0) resetStreaksOnViolation(s, m, r.name);
     // 连续打卡奖励：规则可配置多档 streaks: [{every, bonus}]，各档独立计算——
-    // 连续天数达到 every 的整数倍时自动加该档 bonus 分（每轮每个档位的每个里程碑只奖励一次）
+    // 该规则累计打卡每满 every 次自动加该档 bonus 分（每个里程碑只奖励一次）
     if (r.streaks?.length || r.streak) {
       const tiers = r.streaks?.length ? r.streaks : [r.streak]; // 兼容旧的单档字段
-      const st = streak(s, m.id, r.name);
+      const count = streakCount(s, m.id, r.name, streakResetAt(m, r.name));
       for (const tier of tiers) {
-        if (st.n > 0 && st.n % tier.every === 0) {
+        if (count > 0 && count % tier.every === 0) {
           const alreadyAwarded = s.records.some(x =>
             x.memberId === m.id && x.streakAward && x.streakAward.every === tier.every
-            && x.streakAward.n === st.n && x.streakAward.from === st.from);
+            && x.streakAward.n === count);
           if (!alreadyAwarded) {
             m.score += tier.bonus;
             s.records.push({
               time: Date.now(), memberId: m.id, name: m.name,
-              title: `连续 ${st.n} 天「${r.name}」，奖励`, points: tier.bonus,
-              streakAward: { every: tier.every, n: st.n, from: st.from },
+              title: `连续 ${count} 次「${r.name}」，奖励`, points: tier.bonus,
+              streakAward: { every: tier.every, n: count },
             });
           }
         }
@@ -230,6 +245,7 @@ const actions = {
     if (!m || isNaN(points) || !title) throw new Error('参数不完整');
     m.score += points;
     s.records.push({ time: Date.now(), memberId: m.id, name: m.name, title, points });
+    if (points < 0) resetStreaksOnViolation(s, m, title);
   },
   'item/add': (s, b) => {
     const name = (b.name || '').trim();

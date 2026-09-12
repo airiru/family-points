@@ -46,7 +46,7 @@ function loginDesc(m) {
   return `登录：${m.username} · ${m.role === 'admin' ? '管理员' : '普通成员'}`;
 }
 
-// 连续奖励档位：每档 { every: '每N天', bonus: '奖M分' }，可加多档
+// 连续奖励档位：每档 { every: 每N次, bonus: 奖M分 }，可加多档
 const emptyStreak = () => ({ every: '', bonus: '' });
 const newRule = ref({ name: '', points: '', streaks: [] });
 const ruleEdit = ref(null); // { id, name, points, streaks: [...] }
@@ -58,7 +58,7 @@ function tiersOf(f) {
 }
 function streakText(r) {
   const tiers = r.streaks?.length ? r.streaks : (r.streak ? [r.streak] : []);
-  return tiers.map(t => `连续 ${t.every} 天 +${t.bonus} 分`).join(' · ');
+  return tiers.map(t => `连续 ${t.every} 次 +${t.bonus} 分`).join(' · ');
 }
 function doAddRule() {
   const n = newRule.value.name.trim(); const p = parseInt(newRule.value.points, 10);
@@ -121,7 +121,7 @@ const recordFilter = ref('');
         <div class="row">
           <div class="grow clickable" @click="showMember(m)">
             <div class="name">{{ m.name }} ›<span v-if="m.username === user?.username" class="sub" style="display:inline">（当前登录）</span></div>
-            <div class="sub">{{ memberRecords(m.id).length }} 条记录<template v-if="memberStreak(m.id) > 0"> · 🔥 连续 {{ memberStreak(m.id) }} 天</template> · {{ loginDesc(m) }}</div>
+            <div class="sub">{{ memberRecords(m.id).length }} 条记录<template v-if="memberStreak(m.id) > 0"> · 🔥 连续 {{ memberStreak(m.id) }} 次</template> · {{ loginDesc(m) }}</div>
           </div>
           <div class="score">{{ m.score }} 分</div>
           <button class="btn ghost" @click="pickedMemberId = m.id; tab = 'score'">记一笔</button>
@@ -144,7 +144,7 @@ const recordFilter = ref('');
     <!-- 计分规则 -->
     <template v-if="tab === 'rules'">
       <div class="card">
-        <div class="desc">计分规则可自定义，正数为加分，负数为减分。可给规则附加"连续打卡奖励"：该规则每连续打卡 N 天自动额外奖 M 分（如：按时睡觉 +1，每连续 7 天再奖 2 分），中断后重新计数，一天内多次打卡不重复计天。</div>
+        <div class="desc">计分规则可自定义，正数为加分，负数为减分。可给规则附加"连续打卡奖励"：该规则每累计打卡 N 次自动额外奖 M 分（如：按时睡觉 +1，每满 7 次再奖 2 分），按点加分次数连续计数。若成员被名称相关的减分规则扣分（如"不按时睡觉"扣分），对应连续次数自动清零重新计。</div>
         <div class="row" v-for="r in state.rules" :key="r.id">
           <div class="grow"><div class="name">{{ r.name }}</div><div class="sub" v-if="streakText(r)">🔥 {{ streakText(r) }}</div></div>
           <div class="pts" :class="r.points >= 0 ? 'plus' : 'minus'">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</div>
@@ -158,9 +158,9 @@ const recordFilter = ref('');
         </div>
         <div class="form" style="margin-top:8px;align-items:center" v-for="(t, i) in newRule.streaks" :key="i">
           <span class="sub" style="white-space:nowrap">连续</span>
-          <input v-model="t.every" class="n" type="number" placeholder="N天">
-          <span class="sub" style="white-space:nowrap">天奖</span>
-          <input v-model="t.bonus" class="n" type="number" placeholder="M分">
+          <input v-model="t.every" class="n" type="number" placeholder="N次">
+          <span class="sub" style="white-space:nowrap">次奖</span>
+          <input v-model="t.bonus" class="n" type="number" placeholder="M分值">
           <button class="btn del" @click="newRule.streaks.splice(i, 1)">删</button>
         </div>
         <div style="margin-top:8px">
@@ -246,9 +246,9 @@ const recordFilter = ref('');
           <div class="sub" style="margin:4px 0 0">连续打卡奖励档位（选填，可加多档，各档独立计算）：</div>
           <div style="display:flex;gap:8px;align-items:center" v-for="(t, i) in ruleEdit.streaks" :key="i">
             <span class="sub" style="white-space:nowrap">连续</span>
-            <input v-model="t.every" type="number" placeholder="N天" style="flex:1">
-            <span class="sub" style="white-space:nowrap">天奖</span>
-            <input v-model="t.bonus" type="number" placeholder="M分" style="flex:1">
+            <input v-model="t.every" type="number" placeholder="N次" style="flex:1">
+            <span class="sub" style="white-space:nowrap">次奖</span>
+            <input v-model="t.bonus" type="number" placeholder="M分值" style="flex:1">
             <button class="btn del" @click="ruleEdit.streaks.splice(i, 1)">删</button>
           </div>
           <button class="btn ghost" @click="ruleEdit.streaks.push(emptyStreak())">+ 添加档位</button>

@@ -20,7 +20,7 @@ function onRedeem(it) {
         <div style="font-size:18px;width:26px;text-align:center">{{ ['🥇', '🥈', '🥉'][i] || (i + 1) }}</div>
         <div class="grow clickable" @click="showMember(m)">
           <div class="name">{{ m.name }} ›</div>
-          <div class="sub">{{ memberRecords(m.id).length }} 条记录<template v-if="memberStreak(m.id) > 0"> · 🔥 已连续 {{ memberStreak(m.id) }} 天</template></div>
+          <div class="sub">{{ memberRecords(m.id).length }} 条记录<template v-if="memberStreak(m.id) > 0"> · 🔥 已连续 {{ memberStreak(m.id) }} 次</template></div>
         </div>
         <div class="score">{{ m.score }} 分</div>
       </div>

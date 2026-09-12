@@ -114,21 +114,15 @@ export function memberRecords(id) {
 export const sortedRecords = () => [...state.records].sort((a, b) => b.time - a.time);
 export const ranked = () => [...state.members].sort((a, b) => b.score - a.score);
 
-// 连续打卡展示：统计成员在各条带连续奖励的规则上的连续天数（与 worker 的 dayKey 口径一致）
-const TZ_OFFSET = 8 * 3600e3;
-const dayKey = t => new Date(t + TZ_OFFSET).toISOString().slice(0, 10);
+// 连续打卡展示：按成员使用各带奖励规则的计分次数计（被相关减分规则扣分后重新计数，与 worker 口径一致）
 export function memberStreak(id) {
   const streakRules = state.rules.filter(r => (r.streaks?.length || r.streak));
   if (!streakRules.length) return 0;
   let best = 0;
   for (const r of streakRules) {
-    const days = new Set(state.records
-      .filter(x => x.memberId === id && x.title === r.name)
-      .map(x => dayKey(x.time)));
-    let t = Date.now();
-    if (!days.has(dayKey(t))) t -= 86400e3;
-    let n = 0;
-    while (days.has(dayKey(t))) { n++; t -= 86400e3; }
+    const m = state.members.find(x => x.id === id);
+    const after = (m?.streakResetAt && m.streakResetAt[r.name]) || 0;
+    const n = state.records.filter(x => x.memberId === id && x.title === r.name && x.time > after).length;
     if (n > best) best = n;
   }
   return best;
