@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "family-points",
-  "main": "worker/index.ts",
+  "main": "worker/index.js",
   "compatibility_date": "2025-02-04",
   "observability": {
     "enabled": true
@@ -11,14 +11,10 @@
     "directory": "./dist"
   },
 
-  // Add this to your wrangler.jsonc
   "kv_namespaces": [
     {
       "binding": "KV",
-      "id": "d6963179250941a596f76d5eba51a74e",
-
-      // Optional: preview_id used when running `wrangler dev` for local dev
-      "preview_id": "<ID_OF_PREVIEW_KV_NAMESPACE_FOR_LOCAL_DEVELOPMENT>"
+      "id": "d6963179250941a596f76d5eba51a74e"
     }
   ]
 }
