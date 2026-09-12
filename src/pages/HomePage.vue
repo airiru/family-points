@@ -2,7 +2,7 @@
 // 主页面：只读展示积分排行榜和成员详情、最近记录；绑定成员的账号可自助兑换
 import { ref, computed } from 'vue';
 import RecordPager from '../components/RecordPager.vue';
-import { state, loaded, ranked, memberRecords, sortedRecords, showMember, fmt, addedText, memberStreak, user, myMemberId, redeemSelf, esc } from '../store.js';
+import { state, loaded, ranked, memberRecords, sortedRecords, showMember, fmt, addedText, ptsText, ptsClass, memberStreak, user, myMemberId, redeemSelf, esc } from '../store.js';
 
 const visibleMembers = computed(() => state.members.filter(m => !m.hidden));
 const pageSize = ref(15);
@@ -60,7 +60,7 @@ function onRedeem(it) {
           <div class="name" style="font-size:14px;font-weight:500">{{ r.name }} · {{ r.title }}</div>
           <div class="time">{{ fmt(r.time) }}<template v-if="addedText(r)"> · {{ addedText(r) }}</template></div>
         </div>
-        <div class="pts" :class="r.points >= 0 ? 'plus' : 'minus'">{{ r.points >= 0 ? '+' : '' }}{{ r.points }} 分</div>
+        <div class="pts" :class="ptsClass(r)">{{ ptsText(r) }}</div>
       </div>
       <div v-if="!filteredRecent.length" class="empty">暂无记录</div>
       <RecordPager v-if="filteredRecent.length" v-model:page="page" v-model:page-size="pageSize" :total-pages="totalPages" />

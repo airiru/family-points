@@ -231,15 +231,16 @@ const actions = {
     const m = s.members.find(x => x.id === b.memberId);
     const r = s.rules.find(x => x.id === b.ruleId);
     if (!m || !r) throw new Error('成员或规则不存在');
-    // 灵活规则：分值由记一笔时传入
+    // 灵活规则：分值由记一笔时传入；0 分允许（属于中性记录，不算扣分、不清连续）
     let pts = r.points;
     if (r.flex || pts === undefined) {
       pts = parseInt(b.points, 10);
-      if (isNaN(pts) || pts === 0) throw new Error('请填写这次的分值（不能为 0）');
+      if (isNaN(pts)) throw new Error('请填写分值');
     }
     const time = resolveTime(b);
     m.score += pts;
     s.records.push({ time, memberId: m.id, name: m.name, title: r.name, points: pts });
+    const bonusNotes = []; // 本次触发的连续奖励提示
     // 负分视为“违反”，相关的连续计数清零（灵活规则按本次填的分值判断）
     if (pts < 0) resetStreaksOnViolation(s, m, r.name);
     // 连续打卡奖励：规则可配置多档 streaks: [{every, bonus}]，各档独立计算——
@@ -260,10 +261,12 @@ const actions = {
               title: `连续 ${count} 次「${r.name}」，奖励`, points: tier.bonus,
               streakAward: { every: tier.every, n: count, from },
             });
+            bonusNotes.push(`连续 ${count} 次，奖励 +${tier.bonus} 分`);
           }
         }
       }
     }
+    return { bonus: bonusNotes };
   },
   'score/custom': (s, b) => {
     const m = s.members.find(x => x.id === b.memberId);
@@ -379,9 +382,9 @@ export default {
         const handler = actions[path];
         if (!handler) return json({ ok: false, error: '未知操作' }, 404);
         const body = await request.json().catch(() => ({}));
-        await handler(state, body, user);
+        const extra = await handler(state, body, user); // 操作可返回附加信息（如连续奖励提示）
         await saveState(kv, state);
-        return json({ ok: true, state: publicState(state) });
+        return json({ ok: true, state: publicState(state), ...(extra || {}) });
       }
       return json({ ok: false, error: '不支持的请求' }, 405);
     } catch (e) {

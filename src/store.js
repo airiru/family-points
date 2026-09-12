@@ -98,16 +98,20 @@ async function request(path, body) {
   const j = await r.json().catch(() => ({ ok: false, error: '网络错误' }));
   if (!j.ok) { toast(j.error || '操作失败'); throw new Error(j.error); }
   Object.assign(state, j.state);
+  return j; // 返回完整响应（可含 bonus 等附加信息）
 }
 
-// 调用后端操作，done 为成功后的额外回调（如清空表单）
+// 调用后端操作，done 为成功后的额外回调（如清空表单）；返回后端响应
 export function call(path, body, done) {
-  return request(path, body).then(() => { if (done) done(); });
+  return request(path, body).then(j => { if (done) done(); return j; });
 }
 
 export const fmt = t => new Date(t).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 // 补记的记录额外显示实际添加时间（事项时间与添加时间相差超过 12 小时视为补记）
 export const addedText = r => (r.addedAt && r.addedAt - r.time > 12 * 3600e3) ? `补记于 ${fmt(r.addedAt)}` : '';
+// 0 分记录（如“违反重新计数”说明）显示为中性，不算正分
+export const ptsText = r => (r.points > 0 ? '+' : '') + r.points + ' 分';
+export const ptsClass = r => (r.points > 0 ? 'plus' : r.points < 0 ? 'minus' : '');
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export function memberRecords(id) {
@@ -141,7 +145,7 @@ export function resetScore(m) {
 export function showMember(m) {
   const recs = memberRecords(m.id);
   openModal(`${m.name} · 当前 ${m.score} 分`, recs.length
-    ? recs.slice(0, 50).map(r => `<div class="row"><div class="grow"><div class="name" style="font-size:14px;font-weight:500">${esc(r.title)}</div><div class="time">${fmt(r.time)}${addedText(r) ? ' · ' + addedText(r) : ''}</div></div><div class="pts ${r.points >= 0 ? 'plus' : 'minus'}">${r.points >= 0 ? '+' : ''}${r.points} 分</div></div>`).join('')
+    ? recs.slice(0, 50).map(r => `<div class="row"><div class="grow"><div class="name" style="font-size:14px;font-weight:500">${esc(r.title)}</div><div class="time">${fmt(r.time)}${addedText(r) ? ' · ' + addedText(r) : ''}</div></div><div class="pts ${ptsClass(r)}">${ptsText(r)}</div></div>`).join('')
       + (recs.length > 50 ? `<div class="empty">仅显示最近 50 条，共 ${recs.length} 条</div>` : '')
     : '<div class="empty">暂无记录</div>');
 }
@@ -153,8 +157,10 @@ export function editRule(id, name, points, streaks) {
 }
 // 灵活规则记一笔：points 由本次填写；date 为可选补记日期（YYYY-MM-DD）
 export function applyScore(member, rule, points, date) {
-  return call('score/add', { memberId: member.id, ruleId: rule.id, points, date })
-    .then(() => toast(`${member.name} ${points > 0 ? '加' : '减'} ${Math.abs(points)} 分 ✓`));
+  return call('score/add', { memberId: member.id, ruleId: rule.id, points, date }).then(j => {
+    const bonus = j.bonus?.length ? '，' + j.bonus.join('，') : '';
+    toast(`${member.name} ${points > 0 ? '+' : ''}${points} 分 ✓${bonus}`);
+  });
 }
 export function delRule(id) { if (confirm('删除该计分规则？')) return call('rule/del', { id }); }
 export function applyCustomScore(member, title, points, date) {
