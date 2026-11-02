@@ -102,6 +102,7 @@ CREATE TABLE members (
   name            VARCHAR(32)  NOT NULL,
   score           INT          NOT NULL DEFAULT 0,
   hidden          TINYINT(1)   NOT NULL DEFAULT 0,
+  avatar          VARCHAR(255) NULL,          -- 头像 URL 或本地资源标识
   username        VARCHAR(20)  NULL UNIQUE,   -- NULL 可重复，天然支持「部分成员无账号」
   pass_hash       VARCHAR(60)  NULL,          -- bcrypt
   role            ENUM('admin','member') NOT NULL DEFAULT 'member',
@@ -119,6 +120,8 @@ CREATE TABLE rules (
   points     INT          NULL,             -- NULL = 灵活规则
   flex       TINYINT(1)   NOT NULL DEFAULT 0,
   streaks    JSON         NULL,             -- [{every, bonus}]
+  member_ids JSON         NULL,             -- 适用范围：[成员id]；NULL 表示全组生效
+  daily_limit INT         NULL,             -- 每人每日可计分次数上限；NULL 表示不限
   created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   KEY idx_family (family_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -164,6 +167,73 @@ CREATE TABLE transfers (
   KEY idx_family_time (family_id, created_at DESC),
   KEY idx_from (from_member_id),
   KEY idx_to (to_member_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 任务（家长发布，孩子认领后提交，家长确认）
+CREATE TABLE tasks (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id    BIGINT UNSIGNED NOT NULL,
+  title        VARCHAR(128) NOT NULL,
+  points       INT          NOT NULL,         -- 完成后计分（可为负，表示惩罚任务）
+  rule_id      BIGINT UNSIGNED NULL,          -- 可选：关联计分规则，复用连续奖励
+  assignee_id  BIGINT UNSIGNED NULL,          -- 指定成员；NULL 表示全组可认领
+  due_at       DATETIME(3)  NULL,             -- 截止时间
+  repeat_rule  VARCHAR(32)  NULL,             -- 'daily' | 'weekly' | NULL（暂不实现，预留）
+  status       ENUM('open','closed') NOT NULL DEFAULT 'open',
+  created_by   BIGINT UNSIGNED NOT NULL,
+  created_at   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_family_status (family_id, status, created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 任务提交（状态机：submitted → approved / rejected）
+CREATE TABLE task_submissions (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id    BIGINT UNSIGNED NOT NULL,
+  task_id      BIGINT UNSIGNED NOT NULL,
+  member_id    BIGINT UNSIGNED NOT NULL,
+  note         VARCHAR(255) NULL,             -- 孩子的说明
+  image_url    VARCHAR(255) NULL,             -- 可选凭证
+  status       ENUM('submitted','approved','rejected') NOT NULL DEFAULT 'submitted',
+  review_by    BIGINT UNSIGNED NULL,
+  review_note  VARCHAR(255) NULL,
+  reviewed_at  DATETIME(3)  NULL,
+  record_id    BIGINT UNSIGNED NULL,          -- 通过后生成的积分记录
+  created_at   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_family_status (family_id, status, created_at DESC),
+  KEY idx_task (task_id),
+  KEY idx_task_member (task_id, member_id, status)  -- 「同一任务同一成员仅一条待审」由应用层事务保证
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 操作审计日志（append-only，禁止 UPDATE / DELETE）
+CREATE TABLE audit_logs (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id    BIGINT UNSIGNED NOT NULL,
+  operator_id  BIGINT UNSIGNED NULL,          -- 操作者成员 id；设备上报为 NULL
+  operator_type ENUM('member','device','system') NOT NULL DEFAULT 'member',
+  action       VARCHAR(48)  NOT NULL,         -- 'score.add' / 'member.reset' / 'rule.edit' ...
+  target_type  VARCHAR(24)  NULL,             -- 'member' / 'record' / 'rule' / 'task' ...
+  target_id    BIGINT UNSIGNED NULL,
+  before_json  JSON         NULL,
+  after_json   JSON         NULL,
+  ip           VARCHAR(45)  NULL,
+  created_at   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_family_time (family_id, created_at DESC),
+  KEY idx_target (target_type, target_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 站内通知
+CREATE TABLE notifications (
+  id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id   BIGINT UNSIGNED NOT NULL,
+  member_id   BIGINT UNSIGNED NOT NULL,       -- 接收者
+  type        VARCHAR(32)  NOT NULL,          -- 'task_review' / 'redeem' / 'score' / 'transfer'
+  title       VARCHAR(64)  NOT NULL,
+  body        VARCHAR(255) NULL,
+  ref_type    VARCHAR(24)  NULL,              -- 关联对象类型
+  ref_id      BIGINT UNSIGNED NULL,
+  read_at     DATETIME(3)  NULL,
+  created_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_member_unread (member_id, read_at, created_at DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 屏幕时间规则（每成员一条）
@@ -275,6 +345,12 @@ CREATE TABLE devices (
 | 7.5 | 里程碑只奖励一次 | ⬜ |
 | 7.6 | 违反时重置连续计数 | ⬜ 名称互相包含即相关 |
 | 7.7 | 按次数 vs 按自然日计数 | ⚠️ v1 按次数，v3 建议改按自然日（19.4） |
+| 7.8 | **规则适用范围** | ⬜ 新增。`member_ids` 指定生效成员，NULL = 全组 |
+| 7.9 | **每人每日计分上限** | ⬜ 新增。`daily_limit` 限制同一规则每人每日可计分次数，防刷分 |
+
+> **7.8 解决的问题**：「练琴 +2」对不学琴的孩子毫无意义，若全组共享，规则列表会越来越长。
+> **7.9 解决的问题**：孩子有账号时，同一规则一天连点 10 次即可刷分。
+> 两者都在 `score/add` 的校验链路里实现，**上限校验必须在事务内**（并发下先查后写会超限）。
 
 ---
 
@@ -382,13 +458,18 @@ COMMIT;
 
 | # | 功能 | 状态 |
 |---|---|---|
-| 11.1 | 积分排行榜 | ⬜ |
-| 11.2 | 连续打卡展示（🔥） | ⬜ |
-| 11.3 | 记录列表服务端分页 | ⬜ |
-| 11.4 | 按成员 / 日期范围筛选 | ⬜ |
-| 11.5 | 记录搜索 | ⬜ |
-| 11.6 | 积分趋势图 | ⬜ 建议 v3.1 再做 |
-| 11.7 | 记录总量上限 | ⬜ **取消 500 条截断**（MySQL 无此约束） |
+| 11.1 | 积分排行榜（总榜） | ⬜ |
+| 11.2 | **周期排行榜（周榜 / 月榜）** | ⬜ 新增。按 `occurred_at` 范围聚合，解决总榜差距过大导致落后者失去动力 |
+| 11.3 | 连续打卡展示（🔥） | ⬜ |
+| 11.4 | 记录列表服务端分页 | ⬜ |
+| 11.5 | 按成员 / 日期范围筛选 | ⬜ |
+| 11.6 | 记录搜索 | ⬜ |
+| 11.7 | **积分趋势图** | ⬜ 按周/月聚合折线，展示进步曲线 |
+| 11.8 | **数据导出 CSV** | ⬜ 新增。导出记录与成员积分，兼作手工备份手段 |
+| 11.9 | 记录总量上限 | ⬜ **取消 500 条截断**（MySQL 无此约束） |
+
+> **周期榜的实现口径**：不是「当前积分的快照排名」，而是**按区间内 `records.points` 求和后排名**。
+> 两者语义不同——后者能反映「这段时间谁表现好」，前者只是总分比较。实现前须确认取哪种。
 
 ---
 
@@ -457,10 +538,12 @@ COMMIT;
 | 13.6 | 最近记录 | 分页、按成员筛选 |
 | 13.7 | 我的兑换 | 商城、余额校验、确认兑换 |
 | 13.8 | **赠送积分** | 选受赠成员、填金额与附言、确认；赠送历史 |
-| 13.9 | 屏幕时间状态 | 权限状态、今日时长、上报状态、手动上报 |
-| 13.10 | 设置 | 账号、家庭组信息、退出、修改密码 |
+| 13.9 | **任务** | 可认领任务列表、提交完成（附说明/图片）、我的提交记录 |
+| 13.10 | **通知中心** | 未读列表、点击跳转、标记已读 |
+| 13.11 | 屏幕时间状态 | 权限状态、今日时长、上报状态、手动上报 |
+| 13.12 | 设置 | 账号、家庭组信息、退出、修改密码、头像 |
 
-**共 10 个界面**（v2 方案为 17 个，因后台移出而减少）。
+**共 12 个界面**（v2 方案为 17 个，因后台移出而减少）。
 
 **技术栈**：Kotlin + Jetpack Compose + Retrofit + OkHttp + Coroutines + Hilt（依赖注入）+ WorkManager。
 
@@ -471,15 +554,18 @@ COMMIT;
 | # | 页面 | 对应功能 |
 |---|---|---|
 | 14.1 | 登录 / 注册 | 账号、家庭组 |
-| 14.2 | 成员管理 | 增删改、隐藏、清零、登录设置 |
-| 14.3 | 计分规则 | 增删改、灵活规则、连续档位 |
+| 14.2 | 成员管理 | 增删改、隐藏、清零、登录设置、头像 |
+| 14.3 | 计分规则 | 增删改、灵活规则、连续档位、适用范围、每日上限 |
 | 14.4 | 记一笔 | 选成员、选规则、补记日期、自定义 |
-| 14.5 | 兑换商城 | 物品管理、代兑换、撤销 |
-| 14.6 | 赠送管理 | 代任意成员赠送、赠送记录、撤销赠送 |
-| 14.7 | 记录 | 分页、筛选、搜索、删除 |
-| 14.8 | 屏幕时间 | 按成员配置阈值与分值 |
-| 14.9 | 设备管理 | 列表、生成令牌、吊销 |
-| 14.10 | 家庭组设置 | 组名、邀请码、角色、转让管理员 |
+| 14.5 | **任务管理** | 发布任务、待审列表、通过/驳回、关闭 |
+| 14.6 | 兑换商城 | 物品管理、代兑换、撤销 |
+| 14.7 | 赠送管理 | 代任意成员赠送、赠送记录、撤销赠送 |
+| 14.8 | 记录 | 分页、筛选、搜索、删除、导出 CSV |
+| 14.9 | 统计 | 周期排行榜、积分趋势图 |
+| 14.10 | **审计日志** | 按成员/动作/时间筛选，查看 before/after |
+| 14.11 | 屏幕时间 | 按成员配置阈值与分值 |
+| 14.12 | 设备管理 | 列表、生成令牌、吊销 |
+| 14.13 | 家庭组设置 | 组名、邀请码、角色、转让管理员 |
 
 > 现有 Vue 3 前端可复用约 **60%** 的结构与样式，主要改动在 API 层与新增页面。
 
@@ -514,6 +600,17 @@ COMMIT;
 | 15.21 | `/transfer/send` | POST | JWT |
 | 15.22 | `/transfer/revoke` | POST | admin |
 | 15.23 | `/transfer/list` | GET | JWT |
+| 15.24 | `/task/*` | POST | admin（发布/关闭） |
+| 15.25 | `/task/list` | GET | JWT |
+| 15.26 | `/task/submit` | POST | JWT |
+| 15.27 | `/task/review` | POST | admin |
+| 15.28 | `/audit/list` | GET | admin |
+| 15.29 | `/notification/list` | GET | JWT |
+| 15.30 | `/notification/read` | POST | JWT |
+| 15.31 | `/export/records` | GET | admin |
+| 15.32 | `/stats/ranking` | GET | JWT |
+| 15.33 | `/stats/trend` | GET | JWT |
+| 15.34 | `/member/avatar` | POST | JWT（本人）或 admin |
 
 > **命名冲突提醒**：原「转让管理员」接口为 `/family/transfer`，与积分赠送的 `/transfer/*` 前缀混淆。
 > 已重命名为 `/family/transfer-owner`，实现时不要再用旧名。
@@ -606,10 +703,137 @@ COMMIT;
 | 19.8 | 旧 KV 数据是否迁移 | 决定是否需要迁移脚本 |
 | 19.9 | 赠送是否需要受赠方确认 | 直接到账（简单）vs 请求-接受（防误操作） |
 | 19.10 | 是否设置单笔/每日赠送上限 | 家庭场景可省；若开放注册则建议有 |
+| 19.11 | 任务提交是否强制图片凭证 | 强制防作弊但增加摩擦，建议可选 |
+| 19.12 | 周期排行榜口径 | 区间内得分求和 vs 期末总分快照（语义不同，见 11 节注） |
+| 19.13 | 审计日志保留期 | 建议 180 天，需配套定时清理任务 |
+| 19.14 | 头像存储方式 | 本地磁盘（须纳入备份）vs 对象存储（额外成本） |
+| 19.15 | 任务驳回后重提次数上限 | 建议 3 次，防止刷屏 |
 
 ---
 
-## 20. 验收要点
+## 20. 任务认领与家长确认
+
+### 20.1 目的
+
+v3 之前的「记一笔」是**家长单方面操作**，孩子只能被动接受。这让积分变成「家长的恩赐」而非「自己的成就」。
+本节补上**孩子主动参与**的闭环：家长发布任务 → 孩子认领并提交 → 家长确认 → 自动计分。
+
+### 20.2 状态机
+
+```
+任务 open
+   └─ 孩子提交 → submission: submitted
+        ├─ 家长通过 → approved  → 写入 records，任务可关闭
+        └─ 家长驳回 → rejected  → 孩子可重新提交（新 submission 行）
+```
+
+### 20.3 功能项
+
+| # | 功能 | 状态 |
+|---|---|---|
+| 20.3.1 | 发布任务（标题、分值、指定成员、截止时间） | ⬜ |
+| 20.3.2 | 任务列表（孩子视角：可认领 / 进行中 / 已完成） | ⬜ |
+| 20.3.3 | 提交完成（附说明，可选附图） | ⬜ |
+| 20.3.4 | 待审列表（家长视角） | ⬜ |
+| 20.3.5 | 通过 / 驳回（可填驳回理由） | ⬜ |
+| 20.3.6 | 通过后自动写入积分记录 | ⬜ |
+| 20.3.7 | 关联计分规则（复用连续奖励与每日上限） | ⬜ |
+| 20.3.8 | 任务关闭 / 删除 | ⬜ |
+| 20.3.9 | 重复任务（每日/每周） | ⛔ 暂不实现，`repeat_rule` 字段预留 |
+
+### 20.4 实现约束
+
+1. **通过时必须走 `score/add` 的同一套逻辑**，不要另写一份计分代码——否则连续奖励、每日上限、违反重置会出现两套口径。
+2. **「同一任务同一成员仅一条待审」由应用层事务保证**（MySQL 不支持部分索引，不能靠 UNIQUE 约束）。
+3. **通过动作必须幂等**：`task_submissions.status` 从 `submitted` 条件更新为 `approved`，
+   受影响行数为 0 则说明已处理过，直接返回成功。
+4. **驳回后可重新提交**，但要限制次数（建议 3 次）防止刷屏。
+
+### 20.5 边界规则
+
+| 场景 | 处理 |
+|---|---|
+| 任务已关闭后提交 | 拒绝 |
+| 同一任务重复提交 | 拒绝（已有 `submitted` 记录） |
+| 家长审核自己的提交 | 允许，但记录审计日志 |
+| 删除有提交记录的任务 | 拒绝，改为关闭（保留历史） |
+| 任务分值为负（惩罚任务） | 允许，走减分逻辑 |
+| 截止时间已过 | 提交时提示，但仍允许（家庭场景不必强卡） |
+
+---
+
+## 21. 操作审计日志
+
+### 21.1 目的
+
+管理员可任意改分、清零、删记录，**当前无任何追溯**。多租户环境下，一旦积分对不上账，无法定位。
+这是清单中**优先级最高的技术缺口**——不是体验问题，是数据可信度问题。
+
+### 21.2 记录范围
+
+| 动作 | action 值 | 是否记 before/after |
+|---|---|---|
+| 记一笔 / 自定义计分 | `score.add` / `score.custom` | 是 |
+| 删除记录 | `record.delete` | 是（完整记录快照） |
+| 积分清零 | `member.reset` | 是（原积分） |
+| 成员增删改 | `member.*` | 是 |
+| 规则增删改 | `rule.*` | 是 |
+| 兑换 / 撤销兑换 | `item.redeem` / `item.revoke` | 是 |
+| 积分赠送 / 撤销 | `transfer.send` / `transfer.revoke` | 是 |
+| 任务审核 | `task.review` | 是 |
+| 设备生成 / 吊销 | `device.*` | 是 |
+| 登录 / 修改密码 | `auth.login` / `auth.password` | 否（仅记录事件） |
+
+### 21.3 功能项
+
+| # | 功能 | 状态 |
+|---|---|---|
+| 21.3.1 | 全量写入审计日志 | ⬜ |
+| 21.3.2 | Web 后台查询（按成员 / 动作 / 时间筛选） | ⬜ |
+| 21.3.3 | 单条记录查看 before/after 差异 | ⬜ |
+| 21.3.4 | 日志保留期与清理（建议 180 天） | ⬜ |
+| 21.3.5 | 日志导出 | ⬜ |
+
+### 21.4 实现约束
+
+1. **append-only**：应用层不得提供 UPDATE / DELETE 接口；数据库层建议用独立账号或触发器限制。
+2. **必须脱敏**：`before_json` / `after_json` 若包含成员对象，**必须剔除 `pass_hash`**，
+   否则等于把密码哈希写进了可查询的日志表。
+3. **写入失败不能阻断主流程**：审计日志是旁路，写失败时记应用日志并继续，不要因为审计失败导致记分失败。
+4. **`family_id` 必须来自 JWT**，与其他表一致，避免日志本身成为越权入口。
+
+---
+
+## 22. 站内通知与成员头像
+
+### 22.1 站内通知
+
+| # | 功能 | 状态 |
+|---|---|---|
+| 22.1.1 | 通知生成（任务待审 / 审核结果 / 兑换成功 / 收到赠送） | ⬜ |
+| 22.1.2 | 未读数角标 | ⬜ |
+| 22.1.3 | 通知列表与标记已读 | ⬜ |
+| 22.1.4 | 点击跳转到对应对象 | ⬜ |
+| 22.1.5 | 系统推送（FCM / 厂商通道） | ⛔ 明确不做：国内需接多家通道，成本远高于收益 |
+
+> **不做推送的取舍**：Android 端靠「打开 App 时拉取未读」即可满足家庭场景。
+> 若日后确有实时性需求，再评估厂商通道。
+
+### 22.2 成员头像
+
+| # | 功能 | 状态 |
+|---|---|---|
+| 22.2.1 | 预设头像选择（内置一组） | ⬜ |
+| 22.2.2 | 自定义上传 | ⬜ |
+| 22.2.3 | 图片校验（格式、尺寸 ≤ 2 MB、服务端二次校验） | ⬜ |
+| 22.2.4 | 排行榜与记录列表展示头像 | ⬜ |
+
+> **自建服务器的存储决策**：头像存本地磁盘目录，由 Nginx 直接托管。
+> ⚠️ **该目录必须纳入备份范围**，否则数据库恢复后头像全部丢失。
+
+---
+
+## 23. 验收要点
 
 **多租户隔离（最高优先级）**
 1. A 组 admin 无法通过任何接口读写 B 组数据（逐接口测）。
@@ -624,13 +848,27 @@ COMMIT;
 8. **赠送前后家庭总积分不变**（转出与转入等额）。
 9. 撤销赠送后，双方积分与记录均正确回滚；转出方余额不足时撤销被拒绝。
 
+**任务与审计**
+17. 同一任务同一成员重复提交，只产生一条待审记录。
+18. 同一提交被并发审核两次，只计一次分（条件更新受影响行数为 0 即返回成功）。
+19. 任务通过后的计分，与「记一笔」走同一套连续奖励与每日上限逻辑（同一任务用两种方式记分，结果必须一致）。
+20. 审计日志能查到每一次改分、清零、删记录的 before/after。
+21. 审计日志中**不含任何 `pass_hash`**。
+22. 审计日志写入失败时，主流程仍然成功。
+
+**规则与统计**
+23. 设置了 `daily_limit` 的规则，第 N+1 次计分被拒绝。
+24. 设置了 `member_ids` 的规则，不在范围内的成员看不到也调不动。
+25. 周期排行榜的数值与「区间内记录求和」一致。
+
 **部署**
-10. 服务器重启后所有服务自动拉起。
-11. 备份文件能在**空库**上完整恢复（真做一次）。
-12. HTTPS 证书自动续期正常。
-13. MySQL 与 Go 端口不对外暴露。
+26. 服务器重启后所有服务自动拉起。
+27. 备份文件能在**空库**上完整恢复（真做一次）。
+28. 头像目录也在备份范围内（恢复后头像不丢）。
+29. HTTPS 证书自动续期正常。
+30. MySQL 与 Go 端口不对外暴露。
 
 **Android**
-14. 未授权 `PACKAGE_USAGE_STATS` 时给出引导，不崩溃。
-15. 杀后台后打开 App 能补齐遗漏日期。
-16. 设备令牌吊销后立即 401。
+31. 未授权 `PACKAGE_USAGE_STATS` 时给出引导，不崩溃。
+32. 杀后台后打开 App 能补齐遗漏日期。
+33. 设备令牌吊销后立即 401。
