@@ -52,7 +52,14 @@ npm run deploy = npm run build && wrangler pages deploy
   `~/.workbuddy-ai/skills/`、`~/.workbuddy/skills/`、`~/.dsh/skills/`
 - 同步后必须逐份 `diff` 核验为空，不要只信脚本跑过了。
 
-## 五、已知待办 / 未修
+## 五、功能口径的单一事实源
+
+**`docs/features.md` 是功能清单的唯一依据**（2026-11-02 起）。它按「✅ 已实现 / ⬜ 待实现 /
+⚠️ 需确认 / ⛔ 已知缺口」标注每一条，并含权限矩阵、接口清单、数据模型、验收要点。
+**README 已过时，不要拿它当功能依据**；两者冲突时以 `features.md` 与代码为准。
+新增或修改功能后，须同步更新该文件的对应条目——它是给人 review 的交付物，不是草稿。
+
+## 六、已知待办 / 未修
 
 - **README.md 与代码已漂移**（2026-11-02 核验）：
   - 文中写 `wrangler.jsonc`，实际文件是 `wrangler.toml`
