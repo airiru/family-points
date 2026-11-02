@@ -95,7 +95,18 @@ CREATE TABLE families (
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 成员（账号即成员：username 非空即可登录）
+-- 后台管理员账号（与前台成员完全独立，不参与积分）
+CREATE TABLE admins (
+  id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id  BIGINT UNSIGNED NOT NULL,
+  username   VARCHAR(20)  NOT NULL UNIQUE,
+  pass_hash  VARCHAR(60)  NOT NULL,          -- bcrypt
+  created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_family (family_id),
+  CONSTRAINT fk_admins_family FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 成员（账号即成员：username 非空即可登录前台）
 CREATE TABLE members (
   id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   family_id       BIGINT UNSIGNED NOT NULL,
@@ -105,7 +116,7 @@ CREATE TABLE members (
   avatar          VARCHAR(255) NULL,          -- 头像 URL 或本地资源标识
   username        VARCHAR(20)  NULL UNIQUE,   -- NULL 可重复，天然支持「部分成员无账号」
   pass_hash       VARCHAR(60)  NULL,          -- bcrypt
-  role            ENUM('admin','member') NOT NULL DEFAULT 'member',
+  role            ENUM('leader','member') NOT NULL DEFAULT 'member',  -- 组长/成员（前台角色）
   streak_reset_at JSON         NULL,          -- { "规则名": "时间戳" }
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   KEY idx_family (family_id),
@@ -297,36 +308,82 @@ CREATE TABLE devices (
 
 ## 4. 角色与权限
 
-| 角色 | 入口 | 查看 | 自助兑换 | 后台管理 | 设备上报 |
-|---|---|---|---|---|---|
-| 未登录 | — | ❌ | ❌ | ❌ | ❌ |
-| 成员 `member` | Android / Web | ✅ 本组 | ✅ 仅自己 | ❌ | ❌ |
-| 管理员 `admin` | Web（推荐）/ Android | ✅ 本组 | ✅ | ✅ 本组 | ❌ |
-| 设备 | Android | ❌ | ❌ | ❌ | ✅ 仅绑定成员 |
+### 4.1 两套账号体系（v3 核心设计）
 
-**多租户硬规则（最高优先级）**：
+**后台与前台是两套完全独立的账号系统**，互不通用、互不共享 token。
 
-- 所有 SQL **必须带 `family_id = ?`**
-- `family_id` **只能从 JWT claims 取**，**禁止从请求体、query、路径参数取**
-- 任何跨组访问一律返回 404（而非 403，避免泄露资源是否存在）
+| | 后台（Web） | 前台（Android） |
+|---|---|---|
+| 账号表 | `admins` | `members` |
+| 角色 | 管理员（唯一角色） | 组长 `leader` / 成员 `member` |
+| 登录接口 | `/api/admin/login` | `/api/app/login` |
+| Token 类型 | `typ = 'admin'` | `typ = 'member'` |
+| 是否参与积分 | **否**（管理员不是家庭成员） | 是 |
+
+> **为什么分开**：管理员是「运营者」，负责配置与维护，不应该出现在排行榜上；
+> 家庭成员是「参与者」，有积分、有记录。混在一起会导致「管理员给自己加分」的信任问题。
+
+### 4.2 权限矩阵
+
+| 角色 | 入口 | 看积分 | 自助兑换 | 记一笔 | 任务发布/审核 | 成员/规则/设备管理 | 审计日志 | 设备上报 |
+|---|---|---|---|---|---|---|---|---|
+| 后台管理员 `admin` | Web | ✅ 本组 | ❌ | ✅ | ✅ | ✅ 本组 | ✅ | ✅ |
+| 家庭组组长 `leader` | Android | ✅ 本组 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 普通成员 `member` | Android | ✅ 本组 | ✅ 仅自己 | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 设备 | Android | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ 仅绑定成员 |
+
+> **组长是「家庭内协调者」，不是系统管理员**：能发布任务、审核、记一笔，
+> 但**不能**改成员、改规则、管设备、看审计——那些是后台专属。
+> 组长具体权限边界见 19.18（待确认）。
+
+### 4.3 越权防护硬规则（最高优先级）
+
+1. **Token 类型必须校验**：`/api/admin/*` 只接受 `typ='admin'`，`/api/app/*` 只接受 `typ='member'`。
+   前台 token 打后台接口一律 401，反之亦然。
+2. **所有 SQL 必须带 `family_id = ?`**。
+3. **`family_id` 只能从 JWT claims 取**，禁止从请求体、query、路径参数取。
+4. **跨组访问返回 404 而非 403**（避免泄露资源是否存在）。
+5. **管理员账号不属于任何成员**，不得出现在成员列表、排行榜、记录中。
 
 ---
 
-## 5. 家庭组与账号
+## 5. 账号与家庭组
+
+### 5.1 后台账号（管理员）
 
 | # | 功能 | 状态 |
 |---|---|---|
-| 5.1 | 注册并创建家庭组（创建者自动 admin） | ⬜ |
-| 5.2 | 邀请码加入家庭组 | ⬜ |
-| 5.3 | 一个用户仅属一个家庭组 | ⬜ 由 `username` 全局唯一保证 |
-| 5.4 | 查看 / 重置邀请码 | ⬜ |
-| 5.5 | 家庭组改名 | ⬜ |
-| 5.6 | 转让管理员 | ⬜ 必须有，否则唯一 admin 丢失即无人可管 |
-| 5.7 | 退出家庭组 | ⚠️ 记录归属待定（19.2） |
-| 5.8 | 解散家庭组 | ⚠️ 高危，需输入组名二次确认 |
-| 5.9 | 登录 / 退出 | ⬜ JWT |
-| 5.10 | **Token 刷新** | ⬜ v3 新增。Access Token 2h + Refresh Token 30d，解决 v1「30 天到期静默失败」 |
-| 5.11 | 修改密码 | ⬜ v3 新增 |
+| 5.1.1 | 注册并创建家庭组（生成 `admins` 记录） | ⬜ |
+| 5.1.2 | 后台登录 / 退出 | ⬜ `/api/admin/login` |
+| 5.1.3 | 修改密码 | ⬜ |
+| 5.1.4 | Token 刷新（Access 2h + Refresh 30d） | ⬜ |
+| 5.1.5 | 同一家庭组可有多个管理员 | ⚠️ 待确认（19.19） |
+| 5.1.6 | 转让 / 移交管理员 | ⬜ 至少保留一个管理员，否则无人可管 |
+
+### 5.2 前台账号（家庭成员）
+
+| # | 功能 | 状态 |
+|---|---|---|
+| 5.2.1 | 由管理员在后台创建成员并设置前台登录凭证 | ⬜ |
+| 5.2.2 | 前台登录 / 退出 | ⬜ `/api/app/login` |
+| 5.2.3 | 修改自己的密码 | ⬜ |
+| 5.2.4 | 成员可无账号（仅作为计分对象） | ⬜ |
+| 5.2.5 | **首个成员自动成为组长** | ⬜ 后台创建第一个成员时自动 `leader` |
+| 5.2.6 | 组长转让 | ⬜ 后台可指定其他成员为组长 |
+| 5.2.7 | 一个前台账号仅属一个家庭组 | ⬜ 由 `members.username` 全局唯一保证 |
+
+> **家长通常需要两个账号**：一个后台管理员账号（配置与维护），一个前台成员账号（参与积分）。
+> 这是「两套系统」的必然代价，换来的是「管理员不会出现在排行榜上」的清晰边界。
+
+### 5.3 家庭组
+
+| # | 功能 | 状态 |
+|---|---|---|
+| 5.3.1 | 查看 / 重置邀请码 | ⬜ |
+| 5.3.2 | 家庭组改名 | ⬜ |
+| 5.3.3 | 退出家庭组（前台成员） | ⚠️ 记录归属待定（19.2） |
+| 5.3.4 | 解散家庭组 | ⚠️ 高危，需输入组名二次确认 |
+| 5.3.5 | 邀请码加入 | ⬜ 仅用于「已有账号加入另一个组」的场景，家庭场景较少用 |
 
 ---
 
@@ -741,24 +798,28 @@ COMMIT;
 
 ## 13. Android App（Kotlin 原生）
 
-> 面向**家庭成员**，不含后台管理界面（后台在 Web）。
+> 面向**家庭成员**（组长与成员），**不含任何后台管理界面**。
+> **无注册入口**——前台账号由管理员在 Web 后台创建后下发。
 
-| # | 界面 | 关键内容 |
-|---|---|---|
-| 13.1 | 启动页 | 检查 token，有效则直进主页 |
-| 13.2 | 登录页 | 用户名、密码、去注册 |
-| 13.3 | 注册 / 加入 | 创建家庭组 或 输入邀请码加入 |
-| 13.4 | 积分榜 | 排名、奖牌、积分、连续次数 |
-| 13.5 | 成员详情 | 该成员记录（分页） |
-| 13.6 | 最近记录 | 分页、按成员筛选 |
-| 13.7 | 我的兑换 | 商城、余额校验、确认兑换 |
-| 13.8 | **赠送积分** | 选受赠成员、填金额与附言、确认；赠送历史 |
-| 13.9 | **任务** | 可认领任务列表、提交完成（附说明/图片）、我的提交记录 |
-| 13.10 | **通知中心** | 未读列表、点击跳转、标记已读 |
-| 13.11 | 屏幕时间状态 | 权限状态、今日时长、上报状态、手动上报、**手动补录** |
-| 13.12 | 设置 | 账号、家庭组信息、退出、修改密码、头像 |
+| # | 界面 | 关键内容 | 可见角色 |
+|---|---|---|---|
+| 13.1 | 启动页 | 检查前台 token，有效则直进主页 | 全部 |
+| 13.2 | 登录页 | 用户名、密码；**无注册按钮**，附「账号由管理员创建」提示 | 全部 |
+| 13.3 | 积分榜 | 排名、奖牌、积分、连续天数（仅睡觉规则） | 全部 |
+| 13.4 | 成员详情 | 该成员记录（分页） | 全部 |
+| 13.5 | 最近记录 | 分页、按成员筛选 | 全部 |
+| 13.6 | 我的兑换 | 商城、余额校验、确认兑换 | 全部 |
+| 13.7 | 赠送积分 | 选受赠成员、金额与附言、赠送历史 | 全部 |
+| 13.8 | 任务 | 可认领任务、提交完成、我的提交 | 全部 |
+| 13.9 | **任务审核** | 待审列表、通过 / 驳回 | **仅组长** |
+| 13.10 | 通知中心 | 未读列表、点击跳转、标记已读 | 全部 |
+| 13.11 | 屏幕时间状态 | 权限状态、今日时长、上报状态、手动补录 | 全部 |
+| 13.12 | 设置 | 账号、家庭组信息、退出、改密码、头像 | 全部 |
 
-**共 12 个界面**（v2 方案为 17 个，因后台移出而减少）。
+**共 12 个界面**，其中 1 个（任务审核）仅组长可见。
+
+**组长在 Android 上能做**：发布任务、审核任务、记一笔。
+**不能做**：改成员、改规则、管设备、看审计——这些只在 Web 后台。
 
 **技术栈**：Kotlin + Jetpack Compose + Retrofit + OkHttp + Coroutines + Hilt（依赖注入）+ WorkManager。
 
@@ -766,11 +827,13 @@ COMMIT;
 
 ## 14. Web 管理后台
 
+> **仅管理员使用**（`admins` 账号）。不提供成员只读视图——成员看数据请用 Android。
+
 | # | 页面 | 对应功能 |
 |---|---|---|
-| 14.1 | 登录 / 注册 | 账号、家庭组 |
-| 14.2 | 成员管理 | 增删改、隐藏、清零、登录设置、头像 |
-| 14.3 | 计分规则 | 增删改、灵活规则、连续档位（仅 screen_night）、适用范围、触发方式 |
+| 14.1 | 登录 / 注册 | 后台管理员账号；注册即创建家庭组 |
+| 14.2 | 成员管理 | 增删改、隐藏、清零、**设置前台登录凭证**、设组长、头像 |
+| 14.3 | 计分规则 | 增删改、灵活规则、触发方式、适用范围、睡觉时间点配置 |
 | 14.4 | 记一笔 | 选成员、选规则、补记日期、自定义 |
 | 14.5 | **任务管理** | 发布任务、待审列表、通过/驳回、关闭 |
 | 14.6 | 兑换商城 | 物品管理、代兑换、撤销 |
@@ -778,59 +841,88 @@ COMMIT;
 | 14.8 | 记录 | 分页、筛选、搜索、删除、导出 CSV |
 | 14.9 | 统计 | 周期排行榜、积分趋势图 |
 | 14.10 | **审计日志** | 按成员/动作/时间筛选，查看 before/after |
-| 14.11 | 屏幕时间 | 按成员配置阈值与分值、**手动录入使用时长**、上报历史（含来源标识） |
+| 14.11 | 屏幕时间 | 按成员配置阈值与睡觉时间点、手动录入、上报历史 |
 | 14.12 | 设备管理 | 列表、生成令牌、吊销 |
-| 14.13 | 家庭组设置 | 组名、邀请码、角色、转让管理员 |
+| 14.13 | 家庭组设置 | 组名、邀请码、移交管理员 |
 
-> 现有 Vue 3 前端可复用约 **60%** 的结构与样式，主要改动在 API 层与新增页面。
+> **复用率下降**：现有 Vue 3 前端是「积分榜 + 后台」的合并体，v3 改为纯管理后台后，
+> 积分榜、自助兑换、成员视角的页面**全部要移出**，预计可复用约 **35%**（表单与样式），
+> 而非此前估计的 60%。这是「两套账号系统」的直接成本。
 
 ---
 
 ## 15. 接口清单
 
-统一前缀 `/api`，响应 `{ ok: bool, data?: any, error?: string }`。
+响应统一 `{ ok: bool, data?: any, error?: string }`。
+**两套前缀，两套鉴权，互不通用**：
 
-| # | 接口 | 方法 | 鉴权 |
+- `/api/admin/*` —— 仅接受 `typ='admin'` 的 token
+- `/api/app/*` —— 仅接受 `typ='member'` 的 token
+- `/api/device/*` —— 仅接受设备令牌
+
+### 15.1 公开接口（无需鉴权）
+
+| # | 接口 | 方法 | 说明 |
 |---|---|---|---|
-| 15.1 | `/auth/register` | POST | 无 |
-| 15.2 | `/auth/login` | POST | 无 |
-| 15.3 | `/auth/refresh` | POST | refresh token |
-| 15.4 | `/auth/password` | POST | JWT |
-| 15.5 | `/family/join` | POST | JWT |
-| 15.6 | `/family/info` | GET | JWT |
-| 15.7 | `/family/update` | POST | admin |
-| 15.8 | `/family/invite/reset` | POST | admin |
-| 15.9 | `/family/transfer-owner` | POST | admin |
-| 15.10 | `/family/leave` | POST | JWT |
-| 15.11 | `/state` | GET | JWT |
-| 15.12 | `/records` | GET | JWT |
-| 15.13 | `/member/*` | POST | admin |
-| 15.14 | `/rule/*` | POST | admin |
-| 15.15 | `/score/*` | POST | admin |
-| 15.16 | `/item/*` | POST | admin |
-| 15.17 | `/item/redeem` | POST | JWT |
-| 15.18 | `/screen-rule/*` | POST | admin |
-| 15.19 | `/device/*` | POST | admin |
-| 15.20 | `/device/report` | POST | **设备令牌** |
-| 15.21 | `/transfer/send` | POST | JWT |
-| 15.22 | `/transfer/revoke` | POST | admin |
-| 15.23 | `/transfer/list` | GET | JWT |
-| 15.24 | `/task/*` | POST | admin（发布/关闭） |
-| 15.25 | `/task/list` | GET | JWT |
-| 15.26 | `/task/submit` | POST | JWT |
-| 15.27 | `/task/review` | POST | admin |
-| 15.28 | `/audit/list` | GET | admin |
-| 15.29 | `/notification/list` | GET | JWT |
-| 15.30 | `/notification/read` | POST | JWT |
-| 15.31 | `/export/records` | GET | admin |
-| 15.32 | `/stats/ranking` | GET | JWT |
-| 15.33 | `/stats/trend` | GET | JWT |
-| 15.34 | `/member/avatar` | POST | JWT（本人）或 admin |
-| 15.35 | `/screen/report-manual` | POST | admin（成员自助见 19.17） |
-| 15.36 | `/screen/reports` | GET | JWT（列表含来源与 revision） |
+| 15.1.1 | `/api/admin/register` | POST | 创建家庭组 + 后台管理员账号 |
+| 15.1.2 | `/api/admin/login` | POST | 后台登录 |
+| 15.1.3 | `/api/app/login` | POST | 前台登录 |
+| 15.1.4 | `/api/admin/refresh` | POST | 后台 token 刷新 |
+| 15.1.5 | `/api/app/refresh` | POST | 前台 token 刷新 |
 
-> **命名冲突提醒**：原「转让管理员」接口为 `/family/transfer`，与积分赠送的 `/transfer/*` 前缀混淆。
-> 已重命名为 `/family/transfer-owner`，实现时不要再用旧名。
+### 15.2 后台接口（`typ='admin'`）
+
+| # | 接口 | 方法 | 说明 |
+|---|---|---|---|
+| 15.2.1 | `/api/admin/password` | POST | 改密码 |
+| 15.2.2 | `/api/admin/family` | GET/POST | 查看 / 改名 |
+| 15.2.3 | `/api/admin/family/invite-reset` | POST | 重置邀请码 |
+| 15.2.4 | `/api/admin/family/transfer-admin` | POST | 移交管理员 |
+| 15.2.5 | `/api/admin/member/*` | POST | 成员增删改、隐藏、清零、登录设置、设组长 |
+| 15.2.6 | `/api/admin/rule/*` | POST | 规则增删改（含 screen_night 配置） |
+| 15.2.7 | `/api/admin/score/*` | POST | 记一笔 / 自定义 / 删除记录 |
+| 15.2.8 | `/api/admin/item/*` | POST | 物品增删改、代兑换、撤销 |
+| 15.2.9 | `/api/admin/screen-rule/*` | POST | 屏幕时间规则与睡觉时间点配置 |
+| 15.2.10 | `/api/admin/screen/report-manual` | POST | 手动录入使用时长 |
+| 15.2.11 | `/api/admin/device/*` | POST | 设备生成 / 吊销 |
+| 15.2.12 | `/api/admin/task/*` | POST | 发布 / 关闭任务、审核 |
+| 15.2.13 | `/api/admin/audit/list` | GET | 审计日志查询 |
+| 15.2.14 | `/api/admin/export/records` | GET | 导出 CSV |
+| 15.2.15 | `/api/admin/state` | GET | 后台初始化数据 |
+
+### 15.3 前台接口（`typ='member'`）
+
+| # | 接口 | 方法 | 说明 |
+|---|---|---|---|
+| 15.3.1 | `/api/app/password` | POST | 改自己的密码 |
+| 15.3.2 | `/api/app/state` | GET | 本组概览（不含全量记录） |
+| 15.3.3 | `/api/app/records` | GET | 记录分页 / 筛选 / 搜索 |
+| 15.3.4 | `/api/app/item/redeem` | POST | 自助兑换 |
+| 15.3.5 | `/api/app/transfer/send` | POST | 赠送积分 |
+| 15.3.6 | `/api/app/transfer/list` | GET | 赠送历史 |
+| 15.3.7 | `/api/app/task/list` | GET | 可认领任务 |
+| 15.3.8 | `/api/app/task/submit` | POST | 提交完成 |
+| 15.3.9 | `/api/app/task/review` | POST | **仅 leader**：通过 / 驳回 |
+| 15.3.10 | `/api/app/score/add` | POST | **仅 leader**：记一笔 |
+| 15.3.11 | `/api/app/task/create` | POST | **仅 leader**：发布任务 |
+| 15.3.12 | `/api/app/notification/list` | GET | 通知列表 |
+| 15.3.13 | `/api/app/notification/read` | POST | 标记已读 |
+| 15.3.14 | `/api/app/stats/ranking` | GET | 排行榜 |
+| 15.3.15 | `/api/app/stats/trend` | GET | 趋势图 |
+| 15.3.16 | `/api/app/member/avatar` | POST | 改自己的头像 |
+| 15.3.17 | `/api/app/screen/report-manual` | POST | 手动补录（19.17 未开放前仅 leader） |
+
+### 15.4 设备接口（设备令牌）
+
+| # | 接口 | 方法 | 说明 |
+|---|---|---|---|
+| 15.4.1 | `/api/device/report` | POST | 上报使用时长（含 `night_min`） |
+
+> **命名说明**：原 `/family/transfer`（转让管理员）已改名 `/family/transfer-admin`，
+> 与积分赠送的 `/transfer/*` 区分；且因两套账号分离，「转让管理员」只发生在 `admins` 之间。
+
+> **越权测试基线**：前台 token 打任一 `/api/admin/*` 必须 401；
+> 后台 token 打任一 `/api/app/*` 必须 401；普通成员打 leader 专属接口必须 403。
 
 ---
 
@@ -910,7 +1002,6 @@ COMMIT;
 
 | # | 事项 | 影响 |
 |---|---|---|
-| 19.1 | Web 是否保留「成员只读视图」 | 决定 Web 是纯后台还是双角色 |
 | 19.2 | 退出家庭组时记录归属 | 保留 / 带走 / 删除 |
 | 19.5 | 服务器规格与操作系统 | 影响部署脚本 |
 | 19.6 | 是否公开注册 | 决定是否需要限流/验证码 |
@@ -924,8 +1015,14 @@ COMMIT;
 | 19.15 | 任务驳回后重提次数上限 | 建议 3 次，防止刷屏 |
 | 19.16 | 手动上传是否需要截图凭证 | 有凭证可核对但增加摩擦；建议可选 |
 | 19.17 | 普通成员能否自助手动上传 | 开放则孩子可能少报时长作弊；建议仅 admin |
+| 19.18 | 组长的权限边界 | 当前设计为「发布/审核任务、记一笔」；是否还要代兑换、撤销记录 |
+| 19.19 | 同一家庭组是否允许多个后台管理员 | 家庭场景单人足够；多人可分担但增加移交复杂度 |
 
 > **已关闭的决策**：
+>
+> - **19.1（Web 是否保留成员只读视图）** —— 2026-11-02 拍板为「**不保留**」：
+>   Web 仅做管理后台，成员看数据请用 Android。详见 4.1 与 14 节。
+>   此项关闭后，现有 Vue 前端可复用率由 60% 下调至约 **35%**。
 >
 > - **19.3（屏幕时间覆盖策略）** —— 2026-11-02 拍板为「**后报覆盖**」：
 >   同一天多次上报以最后一次为准，按新值重算积分（回滚旧结果 + 重新结算）。
@@ -1127,3 +1224,11 @@ v3 之前的「记一笔」是**家长单方面操作**，孩子只能被动接�
 50. 赠送金额等于余额时成功，余额变为 0。
 51. 赠送金额超出余额 1 分即被拒绝。
 52. 管理员代赠时，转出方余额不足同样被拒绝——**不能凭空生成积分**。
+
+**两套账号体系隔离（最高优先级）**
+53. 前台 token 调用任一 `/api/admin/*` 返回 **401**。
+54. 后台 token 调用任一 `/api/app/*` 返回 **401**。
+55. 普通成员调用 leader 专属接口（发布任务、审核任务、记一笔）返回 **403**。
+56. 管理员**不出现在**成员列表、排行榜、记录中——`admins` 与 `members` 完全隔离。
+57. 同一个字符串作为后台用户名和前台用户名可同时存在，互不干扰（两套独立命名空间）。
+58. 后台变更组长后，**旧组长立即失去** leader 接口权限（不依赖重新登录）。
