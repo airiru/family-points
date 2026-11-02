@@ -483,11 +483,17 @@ COMMIT;
 | 决策项 | 结论 |
 |---|---|
 | 计分方向 | 双向：≤ 阈值加分，> 阈值减分 |
-| 迟到数据 | 补算但不回滚 |
-| 幂等 | `UNIQUE(member_id, report_date)` |
-| 认证 | 设备令牌（`X-Device-Token` 头） |
-| 结算锁定 | 首次上报即锁定（⚠️ 19.3 待确认是否允许当天内覆盖） |
-| 数据来源 | `auto`（设备自动）与 `manual`（手动上传）共存，冲突规则见 12.4 |
+| 迟到数据 | 补算但不回滚（指**新增日期**的补记） |
+| **重复上报** | **后报覆盖**：同一天多次上报，以最后一次为准，按新值重算积分 |
+| **上报值语义** | **当天累计总时长**（不是增量）。客户端不得传增量，服务端也不做累加 |
+| 幂等 | `UNIQUE(member_id, report_date)` 保证一天只有一行；重复提交走覆盖逻辑而非拒绝 |
+| 认证 | 设备令牌（`X-Device-Token` 头）；手动上传走 JWT |
+| 数据来源 | `auto`（设备自动）与 `manual`（手动上传）**共用同一套覆盖规则** |
+
+> **覆盖示例**（对应 19.3 的结论）：
+> 第一次上报「当天累计 10 分钟」→ 判达标，记 +2；
+> 第二次上报「当天累计 30 分钟」→ **回滚 +2，按 30 分钟重新结算**，若超阈值则改记 -3。
+> 最终状态与「一开始就上报 30 分钟」完全一致。
 
 ### 12.2 功能项
 
@@ -504,27 +510,46 @@ COMMIT;
 
 ### 12.3 结算事务（MySQL 版）
 
+核心是 **upsert + 重算**：同一天已有结算行时，先回滚旧积分与旧记录，再按新值结算。
+
 ```sql
 BEGIN;
-  -- 1. 校验设备
-  SELECT d.family_id, d.member_id FROM devices d
-   WHERE d.token_hash = ? AND d.revoked = 0 FOR UPDATE;
+  -- 1. 校验身份（设备令牌 或 管理员 JWT），得到 family_id / member_id
+  SELECT family_id, member_id FROM devices
+   WHERE token_hash = ? AND revoked = 0 FOR UPDATE;
 
   -- 2. 查规则
   SELECT threshold_min, bonus_points, penalty_points FROM screen_rules
    WHERE member_id = ? AND enabled = 1;
 
-  -- 3. 幂等检查（UNIQUE 索引兜底，冲突则回滚）
-  INSERT INTO screen_reports (family_id, member_id, report_date, total_min, points, reported_at)
-  VALUES (?, ?, ?, ?, ?, NOW(3));
+  -- 3. 锁定当日结算行
+  SELECT id, total_min, points, record_id FROM screen_reports
+   WHERE member_id = ? AND report_date = ? FOR UPDATE;
 
-  -- 4. 结算积分
-  UPDATE members SET score = score + ? WHERE id = ? AND family_id = ?;
+  -- 4. 若已存在且数值未变 → 直接 COMMIT，不产生新记录（避免无意义 revision 增长）
+  --    若已存在且数值变化 → 回滚旧结果
+  UPDATE members SET score = score - :old_points
+   WHERE id = :member_id AND family_id = :family_id;
+  DELETE FROM records WHERE id = :old_record_id;
+
+  -- 5. 按新值结算（新值 = 请求传入的当天累计值，不是增量）
+  UPDATE members SET score = score + :new_points WHERE id = :member_id;
   INSERT INTO records (...) VALUES (...);
+
+  -- 6. 写入 / 覆盖结算行
+  UPDATE screen_reports
+     SET total_min = :new_total, points = :new_points, record_id = :new_record,
+         source = :source, revision = revision + 1, updated_at = NOW(3)
+   WHERE member_id = ? AND report_date = ?;
 COMMIT;
 ```
 
-> 用 `INSERT` 触发唯一键冲突来保证幂等，比「先 SELECT 再判断」更可靠——并发下不会双写。
+**四条实现要点**：
+
+1. **必须在一个事务内完成「回滚 + 重算 + 覆盖」**，否则中途失败会留下「积分已扣、记录已删、结算行未更新」的脏状态。
+2. **数值未变时直接返回成功**，不要无条件 `revision+1`——否则设备每天重试会把 revision 刷到很大。
+3. **积分允许因覆盖而下降**（如 30 分钟改成 10 分钟，从扣分变加分）。这是「以最新数据为准」的必然结果，**不是 bug**。
+4. **旧记录若已被单独删除**（`DELETE` 受影响行数为 0），跳过删除继续重算，并记一条异常日志，不要因此中断事务。
 
 ### 12.4 手动上传手机使用时间
 
@@ -557,15 +582,20 @@ COMMIT;
 
 #### （三）与自动上报的冲突规则（核心）
 
-两者共用 `UNIQUE(member_id, report_date)`，**同一天只能存在一条结算记录**。冲突处理必须显式定义：
+两者共用 `UNIQUE(member_id, report_date)`，**同一天只能存在一条结算记录**。
+自 19.3 拍板后，**来源不再影响覆盖行为**——任何一次新上报都以最新值为准：
 
-| 已有记录 | 手动上传来源 | 处理 |
+| 已有记录 | 新上报来源 | 处理 |
 |---|---|---|
-| 无 | 任何人 | 正常结算，`source='manual'` |
-| `auto` | 管理员 | **允许覆盖**：回滚旧积分 → 写入新值 → `revision+1` → 记审计 |
-| `auto` | 普通成员 | 拒绝，提示「该日已有自动上报」 |
-| `manual` | 管理员 | 允许覆盖（同上） |
-| `manual` | 普通成员 | 拒绝（除非 19.17 开放） |
+| 无 | 自动 / 手动 | 正常结算，`source` 记为本次来源 |
+| `auto` | 自动 | **覆盖重算**（设备当天继续使用后补报） |
+| `auto` | 手动（admin） | **覆盖重算**，`source` 改为 `manual` |
+| `manual` | 自动 | **覆盖重算**，`source` 改回 `auto` |
+| `manual` | 手动（admin） | **覆盖重算** |
+| 任意 | 手动（普通成员） | 拒绝，权限未开放（19.17） |
+
+> **权限只约束「谁能发起手动上传」，不约束「覆盖是否发生」。**
+> 覆盖逻辑本身对 auto / manual 一视同仁，见 12.3 的事务。
 
 **覆盖必须重算，不能只改数字**：
 
@@ -585,14 +615,13 @@ BEGIN;
   -- 3. 更新结算行
   UPDATE screen_reports
      SET total_min = :new_total, points = :new_points, record_id = :new_record,
-         source = 'manual', revision = revision + 1, updated_at = NOW(3)
+         source = :source, revision = revision + 1, updated_at = NOW(3)
    WHERE member_id = ? AND report_date = ?;
 COMMIT;
 ```
 
-> ⚠️ **这条规则与 19.3（当天内覆盖）是同一件事的两个入口**：手动上传的覆盖策略，
-> 本质上就是「自动上报是否也允许当天内覆盖」的答案。**定 19.3 时必须一并考虑手动上传**，
-> 否则两条路径会给出互相矛盾的结算行为。
+> 若只改 `total_min` 而不回滚旧积分，账就对不上；若把新旧值相加，就会重复计分。
+> 这两种错误在验收要点 34、35 中各有对应测试。
 
 #### （四）边界规则
 
@@ -781,7 +810,6 @@ COMMIT;
 |---|---|---|
 | 19.1 | Web 是否保留「成员只读视图」 | 决定 Web 是纯后台还是双角色 |
 | 19.2 | 退出家庭组时记录归属 | 保留 / 带走 / 删除 |
-| 19.3 | 屏幕时间是否允许当天内覆盖 | 决定结算分支 |
 | 19.4 | 连续打卡按次数还是自然日 | 影响结算与文案 |
 | 19.5 | 服务器规格与操作系统 | 影响部署脚本 |
 | 19.6 | 是否公开注册 | 决定是否需要限流/验证码 |
@@ -796,6 +824,11 @@ COMMIT;
 | 19.15 | 任务驳回后重提次数上限 | 建议 3 次，防止刷屏 |
 | 19.16 | 手动上传是否需要截图凭证 | 有凭证可核对但增加摩擦；建议可选 |
 | 19.17 | 普通成员能否自助手动上传 | 开放则孩子可能少报时长作弊；建议仅 admin |
+
+> **已关闭的决策**：
+> **19.3（屏幕时间覆盖策略）** —— 2026-11-02 拍板为「**后报覆盖**」：
+> 同一天多次上报以最后一次为准，按新值重算积分（回滚旧结果 + 重新结算）。
+> 详见 12.1 与 12.3。此项曾从 v1 拖延至今，**关闭后同时解除了 12.1 与 12.4 的矛盾**。
 
 ---
 
@@ -961,9 +994,13 @@ v3 之前的「记一笔」是**家长单方面操作**，孩子只能被动接�
 32. 杀后台后打开 App 能补齐遗漏日期。
 33. 设备令牌吊销后立即 401。
 
-**手动上传**
-34. 手动覆盖自动记录后，积分等于**按新值重算的结果**，不是旧值与新值相加。
+**屏幕时间覆盖（19.3 已定：后报覆盖）**
+34. 先报「当天累计 10 分钟」（达标 +2），再报「当天累计 30 分钟」（超阈值 -3）
+    → 最终积分**等于直接上报 30 分钟的结果**，即 +2 已被回滚。
 35. 覆盖后旧记录被删除，记录列表**不出现两条**屏幕时间记录。
-36. 普通成员覆盖已有记录被拒绝；管理员可覆盖。
-37. 分钟数为 1441 或负数时被拒绝。
-38. 覆盖操作在审计日志中可查到 `before` / `after`。
+36. 重复上报**相同数值**时，`revision` 不增长，也不产生新记录。
+37. 覆盖导致积分下降是**允许的**，不触发任何保护或告警逻辑。
+38. 手动上传由普通成员发起时被拒绝（19.17 未开放）；管理员可覆盖自动记录。
+39. 分钟数为 1441 或负数时被拒绝。
+40. 覆盖操作在审计日志中可查到 `before` / `after`。
+41. 事务中途失败时，积分、记录、结算行三者**不会出现半更新状态**。
