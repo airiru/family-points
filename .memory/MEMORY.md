@@ -102,6 +102,9 @@ Token 改 **Access 2h + Refresh 30d**；并发兑换需事务 + `FOR UPDATE` 防
 21. **「按时睡觉」由屏幕时间自动判定，没有手动入口**：
     `rules.trigger_type = 'screen_night'` 的规则**不出现在「记一笔」列表**，
     只能由 12.5 的夜间判定写入。`rules.streaks` 字段保留但**仅对 screen_night 生效**。
+    **连续奖励档位全部可配置**（用户 2026-11-02 明确）：结构 `[{every, bonus, mode}]`，
+    `every`=连续天数阈值、`bonus`=奖励分、`mode`=`repeat`（每满 N 天发一次）/`once`（本轮只发一次）；
+    **档位数不限（建议 ≤5）、多档独立计算、同时命中则都发**。改配置**不追溯历史**。
     判定模型是「**可配置的睡觉时间点 + 夜间时段使用时长**」：
     `night_start_hour`（如 0 = 24:00 前放下手机）~ `night_end_hour`（如 7），
     该时段内 `night_min ≤ night_max_min` 即达标，`night_max_min` 建议默认 0。
