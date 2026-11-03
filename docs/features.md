@@ -334,6 +334,7 @@ CREATE TABLE refresh_tokens (
   KEY idx_subject (subject_type, subject_id),
   KEY idx_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 ```
 
 **设计要点（2026-11-03 随 P0 建表校正）：**
@@ -400,7 +401,10 @@ CREATE TABLE refresh_tokens (
 **五条关键边界**：
 
 1. **家庭用户永远没有后台账号**——包括组长。后台是运营者的工具，不是家长的。
-2. **管理员不能发布任务、不能投票、不能兑换**——管理员不是家庭成员，没有积分。
+2. **管理员不能发布组内任务、不能投票、不能兑换**——管理员不是家庭成员，没有积分。
+   > **未来例外（见 25 节，暂不实现）**：将来做全服任务时，管理员发的不是个人积分
+   > 而是**家庭星**（另一本账，平台计价）。不写 `records`、不动 `members.score`。
+   > 当前不存在全服任务，本条仍按原文执行。
 3. **组长只有一名**，且只在本组内有效；变更后原组长立即降为普通成员。
 4. **已移除的权限**：手动「记一笔」、手动补录使用时长、删除记录——**三者全部取消**。
 5. **退出 / 踢出后积分清零且禁止回组**（见 5.3）。
@@ -420,7 +424,6 @@ CREATE TABLE refresh_tokens (
    跨组访问先记应用日志，P8 换成写 `audit_logs`。
 6. **配置即租户数据**：睡觉时间点、连续奖励档位、阈值、分值等**全部按 `family_id` 隔离**，
    存在数据库表里（`rules` / `screen_rules`），**不得写成全局常量、环境变量或配置文件**。
-   A 组改配置绝不影响 B 组。任何"全局默认配置"都必须落库并带 `family_id`。
 
 ---
 
@@ -976,6 +979,7 @@ rules.streaks = [
 | 13.15 | **商品管理** | 商品增删改 | **仅组长** |
 
 **共 15 个界面**，其中 3 个（13.13–13.15）仅组长可见。
+> 未来升级还会加 2 个界面（全服任务、家庭星榜，见 25 节），当前**不做**。
 
 > **组长的管理能力放在前台**，不需要登录 Web 后台——这是本次权限重划的核心：
 > 组长管「家庭内的事务」（成员、睡觉规则、商品），管理员管「系统与安全」（设备、审计、家庭组）。
@@ -1667,7 +1671,6 @@ FROM task_votes WHERE submission_id=?;
 99. 日志清理**分批执行**，单批不影响主流程写入。
 100. 头像接口只接受**预设标识**；传 URL 或非法标识返回 400。
 101. 服务器上**不存在头像上传目录**，`members.avatar` 中无任何 URL 形态的值。
-
 ---
 
 ## 24. 开发起点与实施顺序（2026-11-03 新增）
@@ -1708,6 +1711,7 @@ FROM task_votes WHERE submission_id=?;
 脚本见 `server/scripts/`）。
 **P8 拆成两半**：P8a（审计 + 通知）✅、P8b（后台管理接口 + CSV 导出）✅ 均已完成
 （P8a 19 项、P8b 36 项）。服务端 P0–P8 全部完成，**P9 客户端未开始**。
+**未来升级（暂不实现）**：全服任务与家庭星已设计、暂缓（见 25 节），排在 P9 之后再说。
 **撤销兑换 / 撤销赠送已按用户要求移除**（2026-11-03），接口返回 404，脚本里有断言兜住。
 P3 未做的部分：**按用户名邀请（5.2.3）**需要「待确认邀请」状态机 + 新表，单独排到 P3.1。
 
@@ -1748,3 +1752,255 @@ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER ON 
   迁移表被打成 `dirty`，当时只能把字段并入 `0001` 并 `-reset` 重建。
   **教训：拿到新库先跑一次 `-grants` 和 `-check-ddl`**，别等到写迁移时才发现
 - `-reset`（仅 dev）仍然保留，用于「确实要清库重来」的场景，**不再作为改表的唯一手段**
+
+---
+
+## 25. 未来升级：全服任务与家庭星（**已设计，暂不实现**）
+
+> **2026-11-03 用户拍板**：这个功能**留着作为未来升级，先放下**。
+> 本节是当次讨论的完整设计成果，**不进入当前实现范围**——
+> 当前接口清单、表结构、验收条目均不含本节内容。
+> 将来开工时，把本节内容按编号拆回 3 / 4 / 11 / 13 / 15 / 19 / 23 节即可。
+
+**当时的讨论路径**（值得记住，避免重新争论）：
+全服积分榜 → 被否（个人积分跨家庭不可比）→ 全服任务 → 被否（管理员没有积分、一任务一接取）
+→ **家庭星**（独立计价）→ 设计完成 → 搁置。
+
+### 25.1 搁置时已定的口径
+
+- 家庭星**只用于排名**，不可消费（用户拍板）
+- 认定方式**按任务可配**：自助 / 全服评分 / 平台审核（用户拍板）
+- 下面三条是推定值，将来实现前可改：
+
+| # | 事项 | 推定口径 | 改动成本 |
+|---|---|---|---|
+| 19.20 | 家庭是否默认上榜 | 默认上榜、可主动退出（`stars_public=1`） | 低 |
+| 19.21 | `global_vote` 通过阈值 | 平均分 ≥ 3.5 且评分家庭 ≥ 3 | 低 |
+| 19.22 | 榜单周期 | 总榜 + 月榜 | 中 |
+
+> 19.20 的风险：家庭名可能含孩子姓名，默认公开等于默认暴露。
+
+### 25.2 全服任务与家庭星（设计稿）
+
+> **背景**：想要「全服排行榜」，但个人积分跨家庭不可比（见 25.3）；
+> 想让管理员发任务，但**管理员不是家庭成员、没有积分可冻**（4 节第 2 条）。
+> 解法是把两件事合成一件：**平台用「家庭星」这个独立计价单位发全服任务**。
+
+#### 25.2.1 两本账，互不兑换
+
+| | 个人积分 | 家庭星 |
+|---|---|---|
+| 存储 | `members.score` / `frozen_score` | `families.stars` |
+| 定价 | **组长/管理员按组配置**（7.1–7.3） | **平台在发任务时统一设定** |
+| 来源 | 睡觉达标（唯一生成入口） | **只有全服任务** |
+| 用途 | 组内兑换、赠送、任务转移 | **只用于全服榜排名，不可消费** |
+| 流水 | `records` | `family_star_logs` |
+| 互兑 | — | **严禁兑换成个人积分** |
+
+> ⚠️ **红线 1：家庭星不得兑换成个人积分。** 一旦能换，个人账本立刻通胀，
+> `8.1` 的 `家庭总积分 = Σ(睡觉奖励) − Σ(兑换消耗)` 失效，P4/P5 的全部测试口径作废。
+> ⇒ 不提供任何兑换接口，也不做「家庭星补贴孩子零花」这类功能。
+>
+> ⚠️ **红线 2：同一任务每家庭只计一次。** `UNIQUE(global_task_id, family_id)` 下沉到数据库，
+> 否则 4 人家庭做 4 次拿 4 倍，榜单又变回「谁家人口多」。
+
+#### 25.2.2 流程
+
+```
+管理员后台发布（标题 / 说明 / 家庭星 / 认定方式 / 起止时间）
+        ↓
+各组组长在「全服任务」列表看到（active 且在时间窗内）
+        ↓
+组长代表本家提交（附文字说明）—— 每家庭每任务仅一次
+        ↓
+按 verify_mode 认定 ──┬─ self        → 立即 approved
+                     ├─ admin       → 管理员后台审核
+                     └─ global_vote → 其他家庭组长评分，达阈值自动 approved
+        ↓
+同一事务：写 family_star_logs + families.stars += N + 回填 star_log_id
+```
+
+- **全服任务不发个人积分**，不写 `records`，`records.source` 枚举**不变**（5 个值）
+- 与组内任务（20.1–20.7）**完全独立**：不占 `tasks` 表、不走组内投票、不冻结任何人积分
+- 组长提交不消耗自己的分——家庭星是平台出的，不是家庭自付
+
+#### 25.2.3 三种认定方式
+
+| `verify_mode` | 谁认定 | 通过判据 | 适用场景 |
+|---|---|---|---|
+| `self` | 组长自助 | 点「已完成」即通过 | 无法验证的软性任务（「全家一起散步」） |
+| `global_vote` | 其他家庭组长评分 | 平均分 **≥ 3.5** 且评分家庭数 **≥ 3** | 有成果可看的任务（手工作品、照片描述） |
+| `admin` | 平台管理员 | 后台审核通过 | 标准明确、需要把关的任务 |
+
+**`global_vote` 细则**：
+
+- 评分人 = **其他家庭的组长**（家庭代表）。不让全员涌入：一是刷票面太大，二是评分质量不可控
+- 每家庭对同一提交只能评一次：`UNIQUE(submission_id, rater_family_id)`
+- **不能评自己家**的提交（列表里本就不返回）
+- 1–5 分；到期时评分家庭数 **< 3 → 自动 `rejected`**（宁可不发，不发错）
+- ⚠️ **提交说明对其他家庭可见**：提交页必须明确写「这段说明会公开给其他家庭看」，
+  评分页只显示**家庭名**，不显示成员姓名
+
+#### 25.2.4 发星事务
+
+```sql
+-- 三步同一事务，任一步失败全部回滚
+UPDATE global_task_submissions
+   SET status='approved', reviewed_at=NOW(3), star_log_id=?
+ WHERE id=? AND status='submitted';          -- 条件更新，防重复审核
+
+INSERT INTO family_star_logs (family_id, global_task_id, amount, note) VALUES (...);
+-- uk_task_family 兜底：重复发放直接撞唯一键
+
+UPDATE families SET stars = stars + ? WHERE id=?;
+```
+
+- 审核用**条件更新**（`AND status='submitted'`）：并发下只有一个请求能改成 approved
+- `families.stars` 与 `SUM(family_star_logs.amount)` **必须恒等**，验收里专查
+- 家庭星只增不减（不可消费），所以**不需要 frozen 概念**
+
+#### 25.2.5 功能项
+
+| # | 功能 | 状态 |
+|---|---|---|
+| 20.8.5.1 | 管理员发布 / 编辑 / 关闭全服任务 | ⬜ |
+| 20.8.5.2 | 家庭端全服任务列表（仅 active 且在时间窗内） | ⬜ |
+| 20.8.5.3 | 组长提交（附说明，每家庭限一次） | ⬜ |
+| 20.8.5.4 | `self` 自助认定 | ⬜ |
+| 20.8.5.5 | `admin` 后台审核（通过 / 驳回） | ⬜ |
+| 20.8.5.6 | `global_vote` 跨家庭评分（每家庭一票，达阈值自动通过） | ⬜ |
+| 20.8.5.7 | 发星事务（流水 + 余额 + 回填，同事务） | ⬜ |
+| 20.8.5.8 | 全服家庭星榜（总榜 / 月榜 / 本家名次） | ⬜ |
+| 20.8.5.9 | 家庭主页展示自己的家庭星 | ⬜ |
+| 20.8.5.10 | 退出榜单（`stars_public=0`，仍累计） | ⬜ |
+
+#### 25.2.6 边界规则
+
+| 场景 | 处理 |
+|---|---|
+| 非组长提交 | 拒绝（家庭由组长代表） |
+| 同一家庭重复提交 | 409（`UNIQUE(global_task_id, family_id)`） |
+| 任务未开始 / 已结束 | 不在列表展示 / 拒绝提交 |
+| 提交说明为空 | 拒绝（说明是唯一凭证） |
+| 给自己的提交评分 | 拒绝 |
+| 同一家庭重复评分 | 409 |
+| 到期评分家庭数 < 3 | 自动 `rejected`，不发星 |
+| 管理员驳回后重提 | **不允许**（每家庭只有一次机会，避免反复打扰评分人） |
+| 家庭星试图兑换个人积分 | **不存在此接口**（红线 1） |
+| 家庭解散 / 成员进出 | 家庭星留在家庭，不随成员走 |
+| 已发星的任务被管理员删除 | 拒绝删除，只能 `closed`（保留流水） |
+
+> **产品提醒（如实记录）**：家庭星**对孩子没有直接激励**——它不能换任何东西，
+> 只影响家庭在全服的排名。所以全服任务的参与动力来自「家庭荣誉 + 家长推动」，
+> 不要指望孩子像对兑换商城那样主动去做。若要给孩子动力，应由组长另发**组内任务**
+> （用个人积分，走第 20 节原有流程）。
+
+---
+
+### 25.3 全服家庭星榜口径
+
+| 项 | 口径 |
+|---|---|
+| 排序 | `families.stars` 降序；同分按 `families.id` 升序 |
+| 周期 | 总榜（累计）+ 月榜（流水当月聚合） |
+| 返回字段 | 名次、家庭名、家庭星、`is_mine`；**本家名次单独返回** |
+| **禁止返回** | 成员列表、成员姓名、个人积分、`records`、明文 `family_id` |
+| 退出 | `stars_public=0` 不上榜，仍累计 |
+
+> **对账口径**：`families.stars` 必须恒等于 `SUM(family_star_logs.amount)`。
+
+### 25.4 隔离例外（实现时新增 4.3 第 7 条）
+
+跨家庭读取只有两个白名单入口：**全服家庭星榜**与**全服任务**。允许读的字段**穷举**：
+家庭名、家庭星、任务模板、`global_vote` 模式下提交的说明文字、评分。
+禁止读：成员列表、成员姓名、个人积分、`records`、明文 `family_id`。
+⇒ 必须在 service 层用**专用查询**，不得复用组内 repo 方法。
+
+### 25.5 数据库变更（4 张新表 + families 两列）
+
+**families 加列**：`stars INT NOT NULL DEFAULT 0`、`stars_public TINYINT(1) NOT NULL DEFAULT 1`
+
+```sql
+CREATE TABLE global_tasks (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  title        VARCHAR(64)  NOT NULL,
+  description  VARCHAR(500) NULL,
+  stars        INT          NOT NULL,
+  verify_mode  ENUM('self','global_vote','admin') NOT NULL DEFAULT 'self',
+  start_at     DATETIME(3)  NOT NULL,
+  end_at       DATETIME(3)  NOT NULL,
+  status       ENUM('draft','active','closed') NOT NULL DEFAULT 'draft',
+  created_by   BIGINT UNSIGNED NOT NULL,
+  created_at   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_status_time (status, end_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE global_task_submissions (
+  id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  global_task_id  BIGINT UNSIGNED NOT NULL,
+  family_id       BIGINT UNSIGNED NOT NULL,
+  submitted_by    BIGINT UNSIGNED NOT NULL,
+  note            VARCHAR(255) NOT NULL,
+  status          ENUM('submitted','approved','rejected') NOT NULL DEFAULT 'submitted',
+  avg_score       DECIMAL(3,2) NULL,
+  rater_count     INT NOT NULL DEFAULT 0,
+  reviewed_by     BIGINT UNSIGNED NULL,
+  reviewed_at     DATETIME(3) NULL,
+  star_log_id     BIGINT UNSIGNED NULL,
+  created_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_task_family (global_task_id, family_id),
+  KEY idx_family (family_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE global_task_ratings (
+  id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  submission_id    BIGINT UNSIGNED NOT NULL,
+  rater_family_id  BIGINT UNSIGNED NOT NULL,
+  rater_member_id  BIGINT UNSIGNED NOT NULL,
+  score            TINYINT UNSIGNED NOT NULL,
+  created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_submission_family (submission_id, rater_family_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE family_star_logs (
+  id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id       BIGINT UNSIGNED NOT NULL,
+  global_task_id  BIGINT UNSIGNED NOT NULL,
+  amount          INT NOT NULL,
+  note            VARCHAR(64) NOT NULL,
+  created_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_task_family (global_task_id, family_id),
+  KEY idx_family_time (family_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+```
+
+### 25.6 接口（实现时登记进 15 节）
+
+| # | 接口 | 方法 | 说明 |
+|---|---|---|---|
+| A1 | `/api/app/global-task/list` | GET | 全服任务列表（含本家提交状态） |
+| A2 | `/api/app/global-task/detail` | GET | 详情（`global_vote` 返回待评分提交） |
+| A3 | `/api/app/global-task/submit` | POST | 组长代表本家提交（每家庭每任务仅一次） |
+| A4 | `/api/app/global-task/rate` | POST | 给其他家庭提交评分（1–5，每家庭一票） |
+| A5 | `/api/app/stars/ranking` | GET | 家庭星榜（`period=all\|month`） |
+| A6 | `/api/admin/global-task/list` | GET | 任务列表（含草稿） |
+| A7 | `/api/admin/global-task/save` | POST | 发布 / 编辑 / 关闭 |
+| A8 | `/api/admin/global-task/submissions` | GET | 全部家庭提交（含评分汇总） |
+| A9 | `/api/admin/global-task/review` | POST | 审核通过 / 驳回 |
+
+### 25.7 验收条目（实现时登记进 23 节，接 101 之后）
+
+102. 全服任务完成后 **`records` 无新增行**、`members.score` 不变。
+103. 同一家庭对同一全服任务重复提交返回 **409**；`family_star_logs` 只有一行。
+104. 发星后 `families.stars` 与 `SUM(family_star_logs.amount)` **恒等**。
+105. `global_vote` 不能给自己家的提交评分；同一家庭重复评分 **409**。
+106. `global_vote` 到期评分家庭数 < 3 → 自动 `rejected`，不发星。
+107. 全服榜响应中**不含**成员名、个人积分、`records`、明文 `family_id`。
+108. `stars_public=0` 的家庭不上榜，但 `stars` 仍正常增长。
+
+### 25.8 Android 界面（实现时登记进 13 节，界面数 15 → 17）
+
+| # | 界面 | 关键内容 | 可见角色 |
+|---|---|---|---|
+| 13.16 | **全服任务** | 平台任务列表、本家提交、待评分 | 全部（提交仅组长） |
+| 13.17 | **家庭星榜** | 总榜 / 月榜、本家名次、退出榜单 | 全部 |
