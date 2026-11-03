@@ -1684,14 +1684,14 @@ P4 的账目模型定不下来，P5–P7 全部无法结算；审计（P8）放�
 - 敏感值（主机、账号、口令）**不得**出现在 `docs/`、`.memory/`、提交信息里
 - 建库与建表由 `server/cmd/migrate` 执行，**不要手工建表**（保证与 3 节一致）
 
-**⚠️ 开发库账号权限受限**（2026-11-03 实测 `SHOW GRANTS`）：
+**开发库账号权限**（2026-11-03 已补齐）：
 
 ```
-GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP ON `aabb`.* TO `abc`@`%`
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER ON `aabb`.* TO `abc`@`%`
 ```
 
-- **没有 `ALTER` / `INDEX`** ⇒ 给**已有表**加字段、加索引都会 `Error 1142`
-- 因此开发期改表只有两条路：
-  1. `go run ./cmd/migrate -reset` 全删重建（**仅 dev，会清空数据**），再把字段并入 `0001`；
-  2. 让 DBA 给 `abc` 补 `ALTER, INDEX` 权限（**上线前必须补**，否则迁移无法演进）
-- 已有表结构变更**优先走方案 2**；`-reset` 只在「还没有任何真实数据」时用
+- 现状：**ALTER / INDEX 可用**，迁移可以正常演进已有表（`go run ./cmd/migrate -check-ddl` 可复验）
+- 沿革：权限最初只有 `CREATE/DROP`，导致 `0002` 的 `ALTER TABLE` 报 `Error 1142`、
+  迁移表被打成 `dirty`，当时只能把字段并入 `0001` 并 `-reset` 重建。
+  **教训：拿到新库先跑一次 `-grants` 和 `-check-ddl`**，别等到写迁移时才发现
+- `-reset`（仅 dev）仍然保留，用于「确实要清库重来」的场景，**不再作为改表的唯一手段**

@@ -41,11 +41,19 @@ func main() {
 	grants := flag.Bool("grants", false, "打印当前账号的授权（排查权限问题）")
 	force := flag.Int("force", 0, "把迁移版本强制设为 N（N=-1 表示清空），用于修复 dirty 状态")
 	reset := flag.Bool("reset", false, "【仅 dev】删除全部表与迁移记录，从零重建")
+	checkDDL := flag.Bool("check-ddl", false, "验证账号能否执行 ALTER / INDEX（迁移演进的前提）")
 	flag.Parse()
 
 	cfg, err := config.Load()
 	if err != nil {
 		fail("配置加载失败", err)
+	}
+
+	if *checkDDL {
+		if err := checkDDLPrivileges(cfg.DB); err != nil {
+			fail("DDL 权限不足", err)
+		}
+		return
 	}
 
 	if *reset {
@@ -325,6 +333,38 @@ func verifySchema(cfg config.DB) error {
 	fmt.Println("✅ families.invite_code_expires_at 存在")
 
 	fmt.Println("\n结构核对全部通过")
+	return nil
+}
+
+// checkDDLPrivileges 用一个可回滚的探针验证 ALTER / INDEX 权限。
+//
+// 为什么需要：只有 CREATE/DROP 时，给已有表加字段会 1142，
+// 而迁移的常态恰恰是「改已有表」。开发库权限变动后跑一次即可确认。
+func checkDDLPrivileges(cfg config.DB) error {
+	conn, err := sql.Open("mysql", cfg.DSN(cfg.Name))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	const probe = "priv_probe"
+	steps := []struct {
+		name string
+		sql  string
+	}{
+		{"ADD COLUMN", "ALTER TABLE `screen_rules` ADD COLUMN `" + probe + "` TINYINT NULL"},
+		{"ADD INDEX", "ALTER TABLE `screen_rules` ADD INDEX `idx_" + probe + "` (`" + probe + "`)"},
+		{"DROP COLUMN", "ALTER TABLE `screen_rules` DROP COLUMN `" + probe + "`"},
+	}
+	for _, st := range steps {
+		if _, err := conn.Exec(st.sql); err != nil {
+			// 失败时尽力清理，避免留下探针列
+			_, _ = conn.Exec("ALTER TABLE `screen_rules` DROP COLUMN `" + probe + "`")
+			return fmt.Errorf("%s 失败: %w", st.name, err)
+		}
+		fmt.Printf("✅ %s 可用\n", st.name)
+	}
+	fmt.Println("\nALTER / INDEX 权限正常，迁移可以演进已有表")
 	return nil
 }
 
