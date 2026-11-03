@@ -54,6 +54,63 @@ func (f *Family) InviteCodeUsable(now time.Time) bool {
 	return f.InviteCodeExpiresAt != nil && now.Before(*f.InviteCodeExpiresAt)
 }
 
+// Item 是商城商品。
+type Item struct {
+	ID        uint64    `db:"id" json:"id"`
+	FamilyID  uint64    `db:"family_id" json:"family_id"`
+	Name      string    `db:"name" json:"name"`
+	Cost      int       `db:"cost" json:"cost"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+// Redemption 是兑换单（撤销状态载体；积分流水在 records）。
+type Redemption struct {
+	ID        uint64     `db:"id"`
+	FamilyID  uint64     `db:"family_id"`
+	MemberID  uint64     `db:"member_id"`
+	ItemID    *uint64    `db:"item_id"`
+	ItemName  string     `db:"item_name"`
+	Cost      int        `db:"cost"`
+	CreatedAt time.Time  `db:"created_at"`
+	RevokedAt *time.Time `db:"revoked_at"`
+}
+
+// Transfer 是赠送单。
+type Transfer struct {
+	ID           uint64     `db:"id" json:"id"`
+	FamilyID     uint64     `db:"family_id" json:"family_id"`
+	FromMemberID uint64     `db:"from_member_id" json:"from_member_id"`
+	ToMemberID   uint64     `db:"to_member_id" json:"to_member_id"`
+	Amount       int        `db:"amount" json:"amount"`
+	Note         *string    `db:"note" json:"note"`
+	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
+	RevokedAt    *time.Time `db:"revoked_at" json:"revoked_at"`
+}
+
+// Record 是一条积分流水。**所有积分变动都必须写这里**（用户 2026-11-03 明确）。
+type Record struct {
+	ID           uint64    `db:"id" json:"id"`
+	FamilyID     uint64    `db:"family_id" json:"-"`
+	MemberID     uint64    `db:"member_id" json:"member_id"`
+	MemberName   string    `db:"member_name" json:"member_name"`
+	Title        string    `db:"title" json:"title"`
+	Points       int       `db:"points" json:"points"`
+	OccurredAt   time.Time `db:"occurred_at" json:"occurred_at"`
+	AddedAt      time.Time `db:"added_at" json:"added_at"`
+	Source       string    `db:"source" json:"source"`
+	TransferID   *uint64   `db:"transfer_id" json:"transfer_id"`
+	RedemptionID *uint64   `db:"redemption_id" json:"redemption_id"`
+}
+
+// 流水来源常量，与 records.source 枚举一一对应。
+const (
+	SourceScreen   = "screen"
+	SourceNight    = "night"
+	SourceTask     = "task"
+	SourceTransfer = "transfer"
+	SourceRedeem   = "redeem"
+)
+
 // RefreshToken 对应 refresh_tokens 表（只存哈希）。
 type RefreshToken struct {
 	ID            uint64     `db:"id"`

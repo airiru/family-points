@@ -20,7 +20,8 @@ import (
 )
 
 // Build 组装 gin 引擎。
-func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *handler.Family, mw *middleware.Auth) *gin.Engine {
+func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *handler.Family,
+	ledgerHandler *handler.Ledger, mw *middleware.Auth) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -58,6 +59,10 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		// 管理员跨组：family_id 只能走路径参数（4.3 第 3 条）
 		admin.GET("/family/:family_id", familyHandler.AdminInfo)
 		admin.GET("/family/:family_id/members", familyHandler.AdminMembers)
+
+		// 撤销类操作仅管理员（9.4 / 10.2.6），family_id 走路径参数
+		admin.POST("/family/:family_id/item/redeem/revoke", ledgerHandler.AdminRevokeRedemption)
+		admin.POST("/family/:family_id/transfer/revoke", ledgerHandler.AdminRevokeTransfer)
 	}
 
 	// 前台：只认 member token；组内接口额外要求已加入家庭组
@@ -89,6 +94,19 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		inFamily.POST("/family/transfer-leader", familyHandler.AppTransferLeader)
 		inFamily.POST("/member/hidden", familyHandler.AppSetHidden)
 		inFamily.POST("/member/rename", familyHandler.AppRenameMember)
+
+		// 商城
+		inFamily.GET("/item/list", ledgerHandler.AppItems)
+		inFamily.POST("/item/save", ledgerHandler.AppSaveItem)
+		inFamily.POST("/item/delete", ledgerHandler.AppDeleteItem)
+		inFamily.POST("/item/redeem", ledgerHandler.AppRedeem)
+
+		// 赠送
+		inFamily.POST("/transfer/send", ledgerHandler.AppSendTransfer)
+		inFamily.GET("/transfer/list", ledgerHandler.AppTransfers)
+
+		// 流水
+		inFamily.GET("/records", ledgerHandler.AppRecords)
 	}
 
 	return r

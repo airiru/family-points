@@ -49,10 +49,14 @@ func main() {
 	authHandler := handler.NewAuth(authSvc)
 	authMW := middleware.NewAuth(tokenMgr, authSvc)
 
-	familySvc := service.NewFamily(repo.NewFamily(conn))
+	familyRepo := repo.NewFamily(conn)
+	familySvc := service.NewFamily(familyRepo)
 	familyHandler := handler.NewFamily(familySvc)
 
-	r := router.Build(cfg.Env, conn, authHandler, familyHandler, authMW)
+	ledgerSvc := service.NewLedger(repo.NewLedger(conn), familyRepo)
+	ledgerHandler := handler.NewLedger(ledgerSvc)
+
+	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler, authMW)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
