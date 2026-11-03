@@ -110,6 +110,8 @@ CREATE TABLE admins (
   id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   username   VARCHAR(20)  NOT NULL UNIQUE,
   pass_hash  VARCHAR(60)  NOT NULL,          -- bcrypt
+  must_change_password TINYINT(1) NOT NULL DEFAULT 1,  -- 首次登录强制改密（含默认账号）
+  disabled   TINYINT(1)   NOT NULL DEFAULT 0,          -- 停用后无法登录（19.19）
   created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
   -- 注意：管理员是「网站运营者」，不属于任何家庭组，可跨组查看与管理。
   -- 家庭用户（含组长）永远没有后台账号。
@@ -127,9 +129,11 @@ CREATE TABLE members (
   username        VARCHAR(20)  NOT NULL UNIQUE,  -- 注册即创建账号，全局唯一 ⇒ 一人只属一个家庭组
   pass_hash       VARCHAR(60)  NOT NULL,         -- bcrypt
   role            ENUM('leader','member') NOT NULL DEFAULT 'member',  -- 组长/成员（前台角色）
-  streak_reset_at JSON         NULL,          -- { "规则名": "时间戳" }
+  -- 「每组仅一名组长」下沉到数据库：组长时取 family_id，否则 NULL；UNIQUE 允许多个 NULL
+  leader_family_id BIGINT UNSIGNED GENERATED ALWAYS AS (IF(role='leader', family_id, NULL)) STORED,
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  KEY idx_family (family_id)
+  KEY idx_family (family_id),
+  UNIQUE KEY uk_leader_per_family (leader_family_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 计分规则
@@ -137,8 +141,7 @@ CREATE TABLE rules (
   id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   family_id  BIGINT UNSIGNED NOT NULL,
   name       VARCHAR(64)  NOT NULL,
-  points     INT          NULL,             -- NULL = 灵活规则
-  flex       TINYINT(1)   NOT NULL DEFAULT 0,
+  points     INT          NOT NULL,         -- 达标奖励分（睡觉规则唯一类型，见 7.4）
   streaks    JSON         NULL,             -- 连续奖励档位，结构见 7.3
   member_ids JSON         NULL,             -- 适用范围：[成员id]；NULL 表示全组生效
   created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -166,7 +169,7 @@ CREATE TABLE records (
   occurred_at  DATETIME(3)  NOT NULL,       -- 事项发生时间
   added_at     DATETIME(3)  NOT NULL,       -- 实际写入时间（补记判定）
   streak_award JSON         NULL,
-  source       ENUM('manual','screen','device','transfer') NOT NULL DEFAULT 'manual',
+  source       ENUM('screen','night','task','transfer','redeem') NOT NULL,  -- 与 8.1 四种变动对应
   transfer_id  BIGINT UNSIGNED NULL,        -- 赠送产生的一对记录共享同一 transfer
   KEY idx_family_time (family_id, occurred_at DESC),
   KEY idx_member_time (member_id, occurred_at DESC),
@@ -239,7 +242,7 @@ CREATE TABLE task_votes (
 -- 操作审计日志（append-only，禁止 UPDATE / DELETE）
 CREATE TABLE audit_logs (
   id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  family_id    BIGINT UNSIGNED NOT NULL,
+  family_id    BIGINT UNSIGNED NULL,          -- 管理员登录等系统事件可为空
   operator_id  BIGINT UNSIGNED NULL,          -- 操作者成员 id；设备上报为 NULL
   operator_type ENUM('member','device','system') NOT NULL DEFAULT 'member',
   action       VARCHAR(48)  NOT NULL,         -- 'score.add' / 'member.reset' / 'rule.edit' ...
@@ -295,7 +298,7 @@ CREATE TABLE screen_reports (
   points      INT          NOT NULL,
   record_id   BIGINT UNSIGNED NULL,                           -- 日总量判定产生的记录
   night_record_id BIGINT UNSIGNED NULL,                       -- 夜间判定产生的记录（睡觉打卡）
-  source      ENUM('auto','manual') NOT NULL DEFAULT 'auto',  -- 数据来源
+  source      ENUM('auto') NOT NULL DEFAULT 'auto',           -- 手动上传已移除，只有设备自动上报
   revision    INT          NOT NULL DEFAULT 1,                -- 被覆盖的次数
   reported_at DATETIME(3)  NOT NULL,
   updated_at  DATETIME(3)  NULL,                              -- 最近一次覆盖时间
@@ -317,12 +320,23 @@ CREATE TABLE devices (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-**四条设计要点：**
+**设计要点（2026-11-03 随 P0 建表校正）：**
 
-1. **`username` 可空且唯一** —— MySQL 允许多个 NULL 参与 UNIQUE，正好表达「有的成员没有账号」，同时保证「一个账号只属一个家庭组」。
+1. **`members.username` 非空且全局唯一** —— 系统里**不存在「无账号成员」**（决策 24），
+   所以它不能为空；`UNIQUE` 同时保证「一个账号只属一个家庭组」。
+   （原文写「可空且唯一」是 v2 遗留，已作废。）
 2. **`records.member_name` 快照** —— 成员改名不污染历史。
 3. **`UNIQUE(member_id, report_date)`** —— 幂等下沉到数据库，重试不会产生重复结算。
-4. **`ON DELETE CASCADE` 仅用于 families→members** —— 其余关联表**不级联**，避免误删数据链。删除成员时由 service 层显式处理记录。
+4. **不建外键约束** —— 一致性由 service 层事务 + 唯一索引保证。
+   不建外键是为了避免级联误删与迁移时的锁风险；**删除成员时由 service 显式处理记录**。
+5. **`records.source` 只有五个值**：`screen`（屏幕时间日总量）、`night`（睡觉打卡）、
+   `task`（任务转移）、`transfer`（赠送转移）、`redeem`（兑换消耗）—— 与 8.1 的四种变动一一对应。
+   `manual` / `device` 已随「记一笔」「手动上传」移除而废弃。
+6. **「每组仅一名组长」用生成列 + UNIQUE 下沉到数据库**：`leader_family_id = IF(role='leader', family_id, NULL)`，
+   `UNIQUE(leader_family_id)` —— 多个 NULL 不冲突，因此每组最多一名 `leader`。
+   变更组长必须在同一事务里「旧组长降级 + 新组长升级」，否则第二条 UPDATE 会撞唯一键。
+7. **连续天数不落计数器** —— 由 `screen_reports` 按自然日回溯计算（原 `members.streak_reset_at` 已删）。
+   计数器在「覆盖上报」时极难回滚正确，回溯计算天然幂等。
 
 ---
 
@@ -1633,11 +1647,17 @@ P4 的账目模型定不下来，P5–P7 全部无法结算；审计（P8）放�
 - 每个阶段结束跑一次全量 `go test ./...`；**没测试的条目如实标注「未验证」**，不要写成已完成。
 - 阶段完成即提交（含记忆），提交完停下汇报，不自行推进下一阶段。
 
-### 24.4 尚未选型（不阻塞后端）
+### 24.4 前端选型
 
-| 项 | 待定 | 影响 |
+| 项 | 结论 | 备注 |
 |---|---|---|
-| **Web 后台前端框架** | Vue 3 / React / Go 模板 + HTMX 三选一 | 只影响 P9；后端接口与它无关 |
-| Android 最低支持版本 | 建议 `minSdk 26`（Android 8.0，`UsageStatsManager` 稳定） | 影响 P9 的设备兼容范围 |
+| **Web 后台前端框架** | ✅ **Vue 3 + Vite**（2026-11-03 定） | 只影响 P9；后端接口与它无关。目录建议 `web/`，与 `server/` 并列 |
+| Android 最低支持版本 | ⚠️ 待定，建议 `minSdk 26` | 影响 P9 的设备兼容范围（`UsageStatsManager` 在 8.0 上稳定） |
 
-> 这两项**不要**因为没定就停住后端开发 —— P0–P8 全是纯服务端。
+### 24.5 开发库连接（**凭证不入库**）
+
+开发期直连一台远端 MySQL（非本机），连接参数**只写进本地 `.env`**：
+
+- `.env` 已在 `.gitignore` 中，**绝不提交**；仓库只提交 `.env.example`（占位符）
+- 敏感值（主机、账号、口令）**不得**出现在 `docs/`、`.memory/`、提交信息里
+- 建库与建表由 `server/cmd/migrate` 执行，**不要手工建表**（保证与 3 节一致）
