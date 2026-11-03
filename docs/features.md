@@ -524,12 +524,12 @@ CREATE TABLE refresh_tokens (
 
 | # | 功能 | 状态 |
 |---|---|---|
-| 7.1 | **睡觉规则（`screen_night`）** | ⬜ 唯一规则类型；每成员一条，见 12.4 |
-| 7.2 | **睡觉时间点配置** | ⬜ `night_start_hour` / `night_end_hour` / `night_max_min` |
-| 7.3 | **连续奖励档位（全部可配置）** | ⬜ 天数、分值、是否循环、档位数都由组长或管理员设置 |
+| 7.1 | **睡觉规则（`screen_night`）** | ✅ 唯一规则类型；每成员通过 `screen_rules.night_rule_id` 引用 |
+| 7.2 | **睡觉时间点配置** | ✅ `night_start_hour` / `night_end_hour` / `night_max_min` |
+| 7.3 | **连续奖励档位（全部可配置）** | ✅ 天数、分值、循环方式、档位数都可配，保存时校验 |
 | 7.4 | 连续打卡计数口径 | ✅ **按自然日**，一天最多计 1 次 |
-| 7.5 | 里程碑去重 | ⬜ 以 `streak_award` 记录已发档位，避免重复发奖 |
-| 7.6 | 配置按家庭组隔离 | ⬜ 落库带 `family_id`，无全局默认值 |
+| 7.5 | 里程碑去重 | ✅ 靠「`repeat` 按倍数 / `once` 仅在 `n == every` 时发」天然去重，`streak_award` 只做记录 |
+| 7.6 | 配置按家庭组隔离 | ✅ 落库带 `family_id`；**建组时写入一份初始配置**（不是全局默认值） |
 
 ### 7.3 连续奖励档位结构
 
@@ -551,7 +551,8 @@ CREATE TABLE refresh_tokens (
 
 **关键语义**：
 
-- **多档独立计算**：第 21 天既满 3 的倍数、又满 7 的倍数 → 两档**都发**。
+- **多档独立计算**：两档**都是 `repeat`** 时，第 21 天既满 3 的倍数又满 7 的倍数 → 两档**都发**。
+  （若 7 天那档是 `once`，则只在第 7 天发，第 21 天不再发——这是 `once` 的定义，不是 bug。）
 - **`repeat` 与 `once` 的区别**：`repeat` 按倍数循环；`once` 只在达到阈值那一次发，
   要等连续中断重来才会再发。
 - **中断即清零**：未达标或未上报 → 连续天数归零，所有档位重新可发。
@@ -799,7 +800,7 @@ SELECT member_id, SUM(points) AS period_score
 | 12.2.6 | 失败重试（指数退避） | ⬜ |
 | 12.2.7 | 上报状态展示 | ⬜ |
 | 12.2.8 | 国产 ROM 保活引导 | ⬜ |
-| 12.2.9 | **采集并上报夜间时段使用分钟数**（`night_min`） | ⬜ 供「按时睡觉」自动判定使用，见 12.4 |
+| 12.2.9 | **采集并上报夜间时段使用分钟数**（`night_min`） | ✅ 服务端已支持；Android 端采集待 P9 |
 
 ### 12.3 结算事务（MySQL 版）
 
@@ -837,7 +838,7 @@ BEGIN;
 COMMIT;
 ```
 
-**四条实现要点**：
+**四条实现要点**（2026-11-03 已实现，见 `server/internal/repo/screen.go` 的 `Settle`）：
 
 1. **必须在一个事务内完成「回滚 + 重算 + 覆盖」**，否则中途失败会留下「积分已扣、记录已删、结算行未更新」的脏状态。
 2. **数值未变时直接返回成功**，不要无条件 `revision+1`——否则设备每天重试会把 revision 刷到很大。
@@ -877,6 +878,9 @@ COMMIT;
 > 因此 **① 每个家庭组各配各的；② 同一组内还能按成员分别设**（如小学生 21:00、初中生 22:30）。
 > 后台提供「**应用到全组**」的快捷操作，避免逐个配置。
 > **不存在全局默认值**——任何默认值也必须落库并归属到具体 `family_id`。
+> **实现（2026-11-03）**：创建家庭组时在**同一事务**里写入一份初始配置
+> （规则「按时睡觉」+2、档位 3 天 +5 / 7 天 +10、日总量阈值 120 分钟、夜间 0–7 点允许 0 分钟），
+> 之后各组独立修改，互不影响。
 
 #### （三）结算行为
 
@@ -1040,6 +1044,8 @@ rules.streaks = [
 | 15.2.15 | `/api/admin/family/:family_id` | GET | 跨组查看单个家庭组（**family_id 只能走路径参数**） |
 | 15.2.16 | `/api/admin/family/:family_id/members` | GET | 跨组查看成员（含被隐藏的） |
 | 15.2.19 | `/api/admin/me` | GET | 当前管理员信息（含 `must_change_password`） |
+| 15.2.20 | `/api/admin/family/:family_id/device` | POST/GET | 生成设备令牌（明文只返回一次）/ 列出设备 |
+| 15.2.21 | `/api/admin/family/:family_id/device/revoke` | POST | 吊销设备令牌（吊销后上报立即 401） |
 
 > **已移除**：`/api/admin/score/*`（记一笔）、`/api/admin/screen/report-manual`（手动录入）。
 > 接口层**直接删除，返回 404**，不是隐藏。
@@ -1074,6 +1080,9 @@ rules.streaks = [
 | 15.3.27 | `/api/app/family/members` | GET | 本组成员（过滤被隐藏的） |
 | 15.3.28 | `/api/app/family/rename` | POST | 改家庭组名（**组长**） |
 | 15.3.29 | `/api/app/member/rename` | POST | 改昵称（本人或**组长**） |
+| 15.3.34 | `/api/app/records` | GET | 本组流水分页（`limit` / `offset`） |
+| 15.3.35 | `/api/app/me` | GET | 当前成员信息（`score` / `frozen_score` / `role` / `family_id`） |
+| 15.3.38 | `/api/app/screen/reports` | GET | 结算历史（本人；组长可查他人） |
 
 **仅组长（`role='leader'`）**
 
@@ -1081,22 +1090,18 @@ rules.streaks = [
 |---|---|---|---|
 | 15.3.21 | `/api/app/member/invite` | POST | 邀请已注册用户加入（按用户名） |
 | 15.3.22 | `/api/app/member/remove` | POST | 踢出成员（积分清零 + 写入 `family_bans`；**需 `confirm=true`**） |
-| 15.3.30 | `/api/app/family/invite-code` | GET/POST | 查看 / 重置邀请码（7 天） |
+| 15.3.23 | `/api/app/family/invite-code` | GET/POST | 查看 / 重置邀请码 |
+| 15.3.24 | `/api/app/rule` · `/api/app/rule/save` | GET/POST | 睡觉规则与连续奖励档位（保存限**组长**） |
+| 15.3.25 | `/api/app/item/save` · `/api/app/item/delete` | POST | 商品增改 / 删除（**组长**） |
 | 15.3.31 | `/api/app/member/hidden` | POST | 隐藏 / 显示成员 |
 | 15.3.32 | `/api/app/family/transfer-leader` | POST | **组长转让**（同事务降旧升新） |
-| 15.3.33 | `/api/app/item/save` · `/api/app/item/delete` | POST | 商品增改 / 删除（**组长**） |
-| 15.3.34 | `/api/app/records` | GET | 本组流水分页（`limit` / `offset`） |
-| 15.3.35 | `/api/app/me` | GET | 当前成员信息（`score` / `frozen_score` / `role` / `family_id`） |
-| 15.3.23 | `/api/app/family/invite-code` | GET/POST | 查看 / 重置邀请码 |
-| 15.3.24 | `/api/app/rule/save` | POST | 睡觉时间点与连续奖励档位 |
-| 15.3.25 | `/api/app/item/save` | POST | 商品增删改 |
-
+| 15.3.37 | `/api/app/screen-rule` · `/api/app/screen-rule/save` | GET/POST | 每成员屏幕时间规则（保存限**组长**） |
 
 ### 15.4 设备接口（设备令牌）
 
 | # | 接口 | 方法 | 说明 |
 |---|---|---|---|
-| 15.4.1 | `/api/device/report` | POST | 上报使用时长（含 `night_min`） |
+| 15.4.1 | `/api/device/screen/report` | POST | 上报当天累计时长（`total_min`）与夜间时长（`night_min`）；**后报覆盖**，`report_date` 缺省按归属日推算 |
 
 > **越权测试基线**：前台 token 打任一 `/api/admin/*` 必须 401；
 > 后台 token 打任一 `/api/app/*` 必须 401；
@@ -1680,9 +1685,9 @@ FROM task_votes WHERE submission_id=?;
 | **P8 后台 + 审计 + 通知** | 管理员全量接口、审计 append-only（剔除 `pass_hash`、失败不阻断）、180 天清理、站内通知、预设头像 | 84–86、98–101 |
 | **P9 客户端** | Android 15 界面（3 个组长专属）、Web 后台前端 | 92–94 及全部界面条目 |
 
-**当前进度（2026-11-03）**：**P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅**
-（P1 19 项、P2 15 项、P3 33 项、P4 23 项接口测试全通过，脚本见 `server/scripts/`）/
-P5 睡觉规则与屏幕时间未开始。
+**当前进度（2026-11-03）**：**P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / P5 ✅**
+（P1 19 项、P2 15 项、P3 33 项、P4 23 项、P5 37 项接口测试 + 计分单测全通过，
+脚本见 `server/scripts/`）/ P6 任务与投票未开始。
 **撤销兑换 / 撤销赠送已按用户要求移除**（2026-11-03），接口返回 404，脚本里有断言兜住。
 P3 未做的部分：**按用户名邀请（5.2.3）**需要「待确认邀请」状态机 + 新表，单独排到 P3.1。
 

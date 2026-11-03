@@ -21,7 +21,8 @@ import (
 
 // Build 组装 gin 引擎。
 func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *handler.Family,
-	ledgerHandler *handler.Ledger, mw *middleware.Auth) *gin.Engine {
+	ledgerHandler *handler.Ledger, screenHandler *handler.Screen,
+	mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -59,6 +60,11 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		// 管理员跨组：family_id 只能走路径参数（4.3 第 3 条）
 		admin.GET("/family/:family_id", familyHandler.AdminInfo)
 		admin.GET("/family/:family_id/members", familyHandler.AdminMembers)
+
+		// 设备令牌（屏幕时间上报的唯一凭证）
+		admin.POST("/family/:family_id/device", screenHandler.AdminCreateDevice)
+		admin.GET("/family/:family_id/device", screenHandler.AdminDevices)
+		admin.POST("/family/:family_id/device/revoke", screenHandler.AdminRevokeDevice)
 	}
 
 	// 前台：只认 member token；组内接口额外要求已加入家庭组
@@ -103,6 +109,19 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 
 		// 流水
 		inFamily.GET("/records", ledgerHandler.AppRecords)
+
+		// 睡觉规则与屏幕时间配置
+		inFamily.GET("/rule", screenHandler.AppRules)
+		inFamily.POST("/rule/save", screenHandler.AppSaveRule)
+		inFamily.GET("/screen-rule", screenHandler.AppScreenRules)
+		inFamily.POST("/screen-rule/save", screenHandler.AppSaveScreenRule)
+		inFamily.GET("/screen/reports", screenHandler.AppScreenReports)
+	}
+
+	// 设备上报：只认 X-Device-Token（19 条：屏幕时间唯一写入路径）
+	device := r.Group("/api/device", deviceMW.Require())
+	{
+		device.POST("/screen/report", screenHandler.DeviceReport)
 	}
 
 	return r

@@ -100,6 +100,7 @@ type Record struct {
 	Source       string    `db:"source" json:"source"`
 	TransferID   *uint64   `db:"transfer_id" json:"transfer_id"`
 	RedemptionID *uint64   `db:"redemption_id" json:"redemption_id"`
+	StreakAward  *string   `db:"streak_award" json:"streak_award"`
 }
 
 // 流水来源常量，与 records.source 枚举一一对应。
@@ -110,6 +111,74 @@ const (
 	SourceTransfer = "transfer"
 	SourceRedeem   = "redeem"
 )
+
+// Rule 是睡觉规则（系统里唯一一种规则）。streaks 为连续奖励档位 JSON。
+type Rule struct {
+	ID        uint64    `db:"id" json:"id"`
+	FamilyID  uint64    `db:"family_id" json:"family_id"`
+	Name      string    `db:"name" json:"name"`
+	Points    int       `db:"points" json:"points"`
+	Streaks   *string   `db:"streaks" json:"streaks,omitempty"`
+	MemberIDs *string   `db:"member_ids" json:"member_ids,omitempty"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+// StreakTier 是一个连续奖励档位（rules.streaks 数组的元素）。
+type StreakTier struct {
+	Every int    `json:"every"` // 连续天数阈值，≥1
+	Bonus int    `json:"bonus"` // 奖励分值，≠0（可为负）
+	Mode  string `json:"mode"`  // repeat | once
+}
+
+// ScreenRule 是每成员一条的屏幕时间规则。
+type ScreenRule struct {
+	ID             uint64 `db:"id" json:"id"`
+	FamilyID       uint64 `db:"family_id" json:"family_id"`
+	MemberID       uint64 `db:"member_id" json:"member_id"`
+	ThresholdMin   int    `db:"threshold_min" json:"threshold_min"`
+	BonusPoints    int    `db:"bonus_points" json:"bonus_points"`
+	PenaltyPoints  int    `db:"penalty_points" json:"penalty_points"`
+	Enabled        bool   `db:"enabled" json:"enabled"`
+	NightStartHour *int   `db:"night_start_hour" json:"night_start_hour"`
+	NightEndHour   *int   `db:"night_end_hour" json:"night_end_hour"`
+	NightMaxMin    *int   `db:"night_max_min" json:"night_max_min"`
+	NightRuleID    *uint64 `db:"night_rule_id" json:"night_rule_id"`
+}
+
+// NightEnabled 判断是否启用了夜间判定（三项都配置了才算启用）。
+func (r *ScreenRule) NightEnabled() bool {
+	return r.NightStartHour != nil && r.NightEndHour != nil && r.NightMaxMin != nil
+}
+
+// Device 是设备令牌（只存 SHA-256 哈希）。
+type Device struct {
+	ID         uint64     `db:"id" json:"id"`
+	FamilyID   uint64     `db:"family_id" json:"family_id"`
+	MemberID   uint64     `db:"member_id" json:"member_id"`
+	Name       string     `db:"name" json:"name"`
+	TokenHash  string     `db:"token_hash" json:"-"`
+	Revoked    bool       `db:"revoked" json:"revoked"`
+	CreatedAt  time.Time  `db:"created_at" json:"created_at"`
+	LastSeenAt *time.Time `db:"last_seen_at" json:"last_seen_at"`
+}
+
+// ScreenReport 是一天的屏幕时间结算行（幂等载体）。
+type ScreenReport struct {
+	ID            uint64    `db:"id" json:"id"`
+	FamilyID      uint64    `db:"family_id" json:"-"`
+	MemberID      uint64    `db:"member_id" json:"member_id"`
+	ReportDate    time.Time `db:"report_date" json:"report_date"`
+	TotalMin      int       `db:"total_min" json:"total_min"`
+	NightMin      *int      `db:"night_min" json:"night_min"`
+	NightOK       *bool     `db:"night_ok" json:"night_ok"`
+	Points        int       `db:"points" json:"points"`
+	RecordID      *uint64   `db:"record_id" json:"record_id"`
+	NightRecordID *uint64   `db:"night_record_id" json:"night_record_id"`
+	Source        string    `db:"source" json:"source"`
+	Revision      int       `db:"revision" json:"revision"`
+	ReportedAt    time.Time `db:"reported_at" json:"reported_at"`
+	UpdatedAt     *time.Time `db:"updated_at" json:"updated_at"`
+}
 
 // RefreshToken 对应 refresh_tokens 表（只存哈希）。
 type RefreshToken struct {

@@ -102,6 +102,14 @@ func (r *Auth) CreateMember(ctx context.Context, username, passHash, name string
 	if err != nil {
 		return nil, err
 	}
+
+	// 建组时写入一份默认配置（决策 25：不存在全局默认值，但新组必须有初始值落库）
+	if familyID != nil {
+		if err := seedDefaultScreenConfig(ctx, tx, *familyID, uint64(id)); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -218,6 +226,32 @@ func (r *Auth) RevokeAllForSubject(ctx context.Context, subjectType string, subj
 		`UPDATE refresh_tokens SET revoked_at = NOW(3)
 		  WHERE subject_type = ? AND subject_id = ? AND revoked_at IS NULL`,
 		subjectType, subjectID)
+	return err
+}
+
+// seedDefaultScreenConfig 给新家庭组写初始规则与组长自己的屏幕时间规则。
+//
+// 取值来自 docs 12.4 的建议：0 点前放下手机、夜间 0–7 点、允许 0 分钟；
+// 连续奖励 满 3 天 +5（repeat）、满 7 天 +10（once）；日总量阈值 120 分钟。
+// **这不是「全局默认值」**——它落库并归属于具体 family_id，之后各组独立修改。
+func seedDefaultScreenConfig(ctx context.Context, tx *sqlx.Tx, familyID, memberID uint64) error {
+	const defaultStreaks = `[{"every":3,"bonus":5,"mode":"repeat"},{"every":7,"bonus":10,"mode":"once"}]`
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO rules (family_id, name, points, streaks) VALUES (?, '按时睡觉', 2, ?)`,
+		familyID, defaultStreaks)
+	if err != nil {
+		return err
+	}
+	ruleID, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO screen_rules
+		   (family_id, member_id, threshold_min, bonus_points, penalty_points, enabled,
+		    night_start_hour, night_end_hour, night_max_min, night_rule_id)
+		 VALUES (?, ?, 120, 2, 3, 1, 0, 7, 0, ?)`,
+		familyID, memberID, ruleID)
 	return err
 }
 

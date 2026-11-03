@@ -277,7 +277,7 @@ func (r *Ledger) Records(ctx context.Context, familyID uint64, limit, offset int
 	var list []model.Record
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, member_id, member_name, title, points,
-		        occurred_at, added_at, source, transfer_id, redemption_id
+		        occurred_at, added_at, source, transfer_id, redemption_id, streak_award
 		   FROM records WHERE family_id = ?
 		  ORDER BY occurred_at DESC, id DESC LIMIT ? OFFSET ?`, familyID, limit, offset)
 	return list, err

@@ -39,7 +39,10 @@ func fail(c *gin.Context, err error) {
 		errors.Is(err, service.ErrConfirmRequired),
 		errors.Is(err, service.ErrCannotTargetSelf),
 		errors.Is(err, service.ErrSameMember),
-		errors.Is(err, service.ErrNotEnoughScore):
+		errors.Is(err, service.ErrNotEnoughScore),
+		errors.Is(err, service.ErrNightConfigInvalid),
+		errors.Is(err, service.ErrScreenRuleMissing),
+		errors.Is(err, service.ErrDeviceTokenInvalid):
 		httpx.BadRequest(c, err.Error())
 	default:
 		httpx.Internal(c, "服务器内部错误")

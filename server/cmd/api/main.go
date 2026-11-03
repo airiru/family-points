@@ -56,7 +56,13 @@ func main() {
 	ledgerSvc := service.NewLedger(repo.NewLedger(conn), familyRepo)
 	ledgerHandler := handler.NewLedger(ledgerSvc)
 
-	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler, authMW)
+	screenRepo := repo.NewScreen(conn)
+	screenSvc := service.NewScreen(screenRepo, familyRepo)
+	screenHandler := handler.NewScreen(screenSvc)
+	deviceMW := middleware.NewDevice(screenRepo)
+
+	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler,
+		screenHandler, authMW, deviceMW)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
