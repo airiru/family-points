@@ -91,7 +91,8 @@ CREATE TABLE families (
   id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name            VARCHAR(64)  NOT NULL,
   invite_code     CHAR(8)      NOT NULL UNIQUE,
-  owner_member_id BIGINT UNSIGNED NULL,
+  -- 不设 owner_member_id：组长身份唯一来源是 members.role='leader'（见设计要点 6），
+  -- 两处都存必然分叉
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -332,7 +333,8 @@ CREATE TABLE devices (
 5. **`records.source` 只有五个值**：`screen`（屏幕时间日总量）、`night`（睡觉打卡）、
    `task`（任务转移）、`transfer`（赠送转移）、`redeem`（兑换消耗）—— 与 8.1 的四种变动一一对应。
    `manual` / `device` 已随「记一笔」「手动上传」移除而废弃。
-6. **「每组仅一名组长」用生成列 + UNIQUE 下沉到数据库**：`leader_family_id = IF(role='leader', family_id, NULL)`，
+6. **组长身份唯一来源是 `members.role`** —— `families` 表**不设** `owner_member_id`，
+   两处都存必然分叉。「每组仅一名组长」用生成列 + UNIQUE 下沉到数据库：`leader_family_id = IF(role='leader', family_id, NULL)`，
    `UNIQUE(leader_family_id)` —— 多个 NULL 不冲突，因此每组最多一名 `leader`。
    变更组长必须在同一事务里「旧组长降级 + 新组长升级」，否则第二条 UPDATE 会撞唯一键。
 7. **连续天数不落计数器** —— 由 `screen_reports` 按自然日回溯计算（原 `members.streak_reset_at` 已删）。

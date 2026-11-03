@@ -1,0 +1,17 @@
+-- 0001_init.down.sql —— 回滚初始表结构（顺序与依赖相反）
+DROP TABLE IF EXISTS devices;
+DROP TABLE IF EXISTS screen_reports;
+DROP TABLE IF EXISTS screen_rules;
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS task_votes;
+DROP TABLE IF EXISTS task_submissions;
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS transfers;
+DROP TABLE IF EXISTS records;
+DROP TABLE IF EXISTS items;
+DROP TABLE IF EXISTS rules;
+DROP TABLE IF EXISTS members;
+DROP TABLE IF EXISTS admins;
+DROP TABLE IF EXISTS family_bans;
+DROP TABLE IF EXISTS families;
