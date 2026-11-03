@@ -32,12 +32,12 @@ func (m *Member) InFamily() bool { return m.FamilyID != nil }
 
 // Admin 对应 admins 表。管理员不属于任何家庭组。
 type Admin struct {
-	ID                 uint64    `db:"id"`
-	Username           string    `db:"username"`
-	PassHash           string    `db:"pass_hash"`
-	MustChangePassword bool      `db:"must_change_password"`
-	Disabled           bool      `db:"disabled"`
-	CreatedAt          time.Time `db:"created_at"`
+	ID                 uint64    `db:"id" json:"id"`
+	Username           string    `db:"username" json:"username"`
+	PassHash           string    `db:"pass_hash" json:"-"`
+	MustChangePassword bool      `db:"must_change_password" json:"must_change_password"`
+	Disabled           bool      `db:"disabled" json:"disabled"`
+	CreatedAt          time.Time `db:"created_at" json:"created_at"`
 }
 
 // Family 对应 families 表。

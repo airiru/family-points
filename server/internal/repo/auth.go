@@ -173,6 +173,27 @@ func (r *Auth) CreateAdmin(ctx context.Context, username, passHash string, mustC
 	return err
 }
 
+// ListAdmins 列出全部管理员（不含 pass_hash）。
+func (r *Auth) ListAdmins(ctx context.Context) ([]model.Admin, error) {
+	list := []model.Admin{}
+	err := r.db.SelectContext(ctx, &list,
+		`SELECT id, username, '' AS pass_hash, must_change_password, disabled, created_at
+		   FROM admins ORDER BY id`)
+	return list, err
+}
+
+// SetAdminDisabled 停用 / 启用管理员。
+func (r *Auth) SetAdminDisabled(ctx context.Context, id uint64, disabled bool) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE admins SET disabled = ? WHERE id = ?`, disabled, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // UpdateAdminPassword 改密码，并清掉「必须改密」标记。
 func (r *Auth) UpdateAdminPassword(ctx context.Context, id uint64, passHash string) error {
 	_, err := r.db.ExecContext(ctx,

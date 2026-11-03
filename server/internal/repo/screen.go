@@ -47,6 +47,21 @@ func (r *Screen) RuleByID(ctx context.Context, familyID, id uint64) (*model.Rule
 	return &it, nil
 }
 
+// RuleByFamily 取本组第一条规则（系统里每组只有一种规则：睡觉规则）。
+func (r *Screen) RuleByFamily(ctx context.Context, familyID uint64) (*model.Rule, error) {
+	var it model.Rule
+	err := r.db.GetContext(ctx, &it,
+		`SELECT id, family_id, name, points, streaks, member_ids, created_at
+		   FROM rules WHERE family_id = ? ORDER BY id LIMIT 1`, familyID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &it, nil
+}
+
 // SaveRule 新增或更新睡觉规则（id=0 表示新增）。
 func (r *Screen) SaveRule(ctx context.Context, familyID, id uint64, name string, points int, streaksJSON string) (*model.Rule, error) {
 	if id == 0 {

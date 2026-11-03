@@ -750,7 +750,7 @@ COMMIT;
 | 11.2.5 | 按成员 / 日期范围筛选 | ✅ `member_id` / `from` / `to`（含当天）/ `source` |
 | 11.2.6 | 记录搜索 | ✅ `keyword` 对标题模糊匹配 |
 | 11.2.7 | 积分趋势图 | ✅ 按天聚合，返回 `earned`（正分和）与 `net`（净变动） |
-| 11.2.8 | 数据导出 CSV | ⬜ 导出记录与成员积分 |
+| 11.2.8 | 数据导出 CSV | ✅ `GET /api/admin/export/records`，带 UTF-8 BOM（Excel 不乱码） |
 | 11.2.9 | 记录总量上限 | ✅ **无截断**（MySQL 无此约束，分页读） |
 
 **得分榜查询口径**：
@@ -1031,17 +1031,20 @@ rules.streaks = [
 |---|---|---|---|
 | 15.2.1 | `/api/admin/password` | POST | 改密码 |
 | 15.2.2 | `/api/admin/family` | GET/POST | 查看 / 改名 |
-| 15.2.3 | `/api/admin/member/invite` | POST | 邀请已注册用户加入家庭组 |
+| 15.2.3 | `/api/admin/family/:family_id/invite` | POST | 按用户名把已注册用户拉进该组 |
 | 15.2.4 | `/api/admin/family/transfer-admin` | POST | 移交管理员 |
-| 15.2.5 | `/api/admin/member/*` | POST | 邀请成员、踢出、隐藏、设组长 |
-| 15.2.6 | `/api/admin/rule/*` | POST | 睡觉规则与连续奖励档位配置 |
-| 15.2.7 | `/api/admin/item/*` | POST | 商品增删改、兑换撤销 |
+| 15.2.5 | `/api/admin/family/:family_id/member/kick` | POST | 踢出成员（组长不可直接踢，须先换组长） |
+| 15.2.22 | `/api/admin/family/:family_id/member/hidden` | POST | 隐藏 / 显示成员 |
+| 15.2.23 | `/api/admin/family/:family_id/member/leader` | POST | 后台指定新组长（同事务降旧升新） |
+| 15.2.24 | `/api/admin/family/:family_id/rename` | POST | 改家庭组名 |
+| 15.2.6 | `/api/admin/family/:family_id/rule/save` | POST | 睡觉规则与连续奖励档位（与组长同权） |
+| 15.2.7 | `/api/admin/family/:family_id/item/save` | POST | 商品增改（与组长同权；撤销兑换已按 9.4 移除） |
 | 15.2.8 | `/api/admin/task/*` | POST | 查看全部、代审核 |
 | 15.2.9 | `/api/admin/audit/list` | GET | 审计日志查询 |
 | 15.2.10 | `/api/admin/export/records` | GET | 导出 CSV |
 | 15.2.11 | `/api/admin/device/*` | POST | 设备生成 / 吊销 |
 | 15.2.12 | `/api/admin/state` | GET | 后台初始化数据 |
-| 15.2.13 | `/api/admin/accounts` | GET/POST | 管理员账号列表 / 新增 / 停用 |
+| 15.2.13 | `/api/admin/accounts` · `/api/admin/accounts/disable` | GET/POST | 管理员账号列表 / 新增 / 停用（不能停用自己） |
 | 15.2.14 | `/api/admin/families` | GET | 所有家庭组列表（运营方视角） |
 | 15.2.15 | `/api/admin/family/:family_id` | GET | 跨组查看单个家庭组（**family_id 只能走路径参数**） |
 | 15.2.16 | `/api/admin/family/:family_id/members` | GET | 跨组查看成员（含被隐藏的） |
@@ -1698,7 +1701,8 @@ FROM task_votes WHERE submission_id=?;
 **当前进度（2026-11-03）**：**P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / P5 ✅ / P6 ✅ / P7 ✅**
 （P1 19、P2 15、P3 33、P4 23、P5 37、P6 34、P7 25、P8a 19 项接口测试 + 计分单测全通过，
 脚本见 `server/scripts/`）。
-**P8 拆成两半**：P8a（审计 + 通知）✅ 已完成；**P8b（后台管理接口 + CSV 导出）未开始**。
+**P8 拆成两半**：P8a（审计 + 通知）✅、P8b（后台管理接口 + CSV 导出）✅ 均已完成
+（P8a 19 项、P8b 36 项）。服务端 P0–P8 全部完成，**P9 客户端未开始**。
 **撤销兑换 / 撤销赠送已按用户要求移除**（2026-11-03），接口返回 404，脚本里有断言兜住。
 P3 未做的部分：**按用户名邀请（5.2.3）**需要「待确认邀请」状态机 + 新表，单独排到 P3.1。
 

@@ -23,7 +23,8 @@ import (
 func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *handler.Family,
 	ledgerHandler *handler.Ledger, screenHandler *handler.Screen, taskHandler *handler.Task,
 	reportHandler *handler.Report, auditHandler *handler.Audit,
-	notifHandler *handler.Notification, mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
+	notifHandler *handler.Notification, adminHandler *handler.Admin,
+	mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -69,6 +70,23 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 
 		// 审计日志（append-only，只读查询）
 		admin.GET("/audit/list", auditHandler.AdminList)
+
+		// 全站视图与后台管理（family_id 只能走路径参数）
+		admin.GET("/families", adminHandler.Families)
+		admin.GET("/state", adminHandler.State)
+		admin.POST("/family/:family_id/invite", adminHandler.Invite)
+		admin.POST("/family/:family_id/member/kick", adminHandler.Kick)
+		admin.POST("/family/:family_id/member/hidden", adminHandler.SetHidden)
+		admin.POST("/family/:family_id/member/leader", adminHandler.TransferLeader)
+		admin.POST("/family/:family_id/rename", adminHandler.RenameFamily)
+		admin.POST("/family/:family_id/rule/save", adminHandler.SaveRule)
+		admin.POST("/family/:family_id/item/save", adminHandler.SaveItem)
+		admin.GET("/export/records", adminHandler.ExportRecords)
+
+		// 管理员账号
+		admin.GET("/accounts", adminHandler.ListAdmins)
+		admin.POST("/accounts", adminHandler.CreateAdmin)
+		admin.POST("/accounts/disable", adminHandler.DisableAdmin)
 	}
 
 	// 前台：只认 member token；组内接口额外要求已加入家庭组

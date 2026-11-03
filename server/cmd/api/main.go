@@ -72,12 +72,16 @@ func main() {
 	handler.SetAuditor(audit.New(auditRepo))
 	auditHandler := handler.NewAudit(auditRepo)
 
+	adminSvc := service.NewAdmin(familyRepo, authRepo, screenRepo, repo.NewLedger(conn), repo.NewReport(conn))
+	adminHandler := handler.NewAdmin(adminSvc)
+
 	notifRepo := repo.NewNotification(conn)
 	handler.SetNotifier(notifRepo)
 	notifHandler := handler.NewNotification(notifRepo)
 
 	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler,
-		screenHandler, taskHandler, reportHandler, auditHandler, notifHandler, authMW, deviceMW)
+		screenHandler, taskHandler, reportHandler, auditHandler, notifHandler,
+		adminHandler, authMW, deviceMW)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

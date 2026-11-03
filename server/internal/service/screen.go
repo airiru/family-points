@@ -50,12 +50,26 @@ func (s *Screen) SaveRule(ctx context.Context, me *model.Member, id uint64, name
 	if err := scoring.ValidateTiers(tiers); err != nil {
 		return nil, fmt.Errorf("%w：%v", ErrInvalidInput, err)
 	}
+	return s.saveRuleForFamily(ctx, *me.FamilyID, id, name, points, tiers)
+}
+
+// saveRuleForFamily 保存规则。**系统里每组只有一种规则**，所以 id=0 时先找已有的那条，
+// 找不到才新建——否则会出现「后台存了一条新规则，但成员的 night_rule_id 还指着旧规则」。
+func (s *Screen) saveRuleForFamily(ctx context.Context, familyID, id uint64, name string, points int, tiers []model.StreakTier) (*model.Rule, error) {
 	normalized := scoring.NormalizeTiers(tiers)
 	raw, err := json.Marshal(normalized)
 	if err != nil {
 		return nil, err
 	}
-	return s.screen.SaveRule(ctx, *me.FamilyID, id, name, points, string(raw))
+	if id == 0 {
+		existing, err := s.screen.RuleByFamily(ctx, familyID)
+		if err == nil {
+			id = existing.ID
+		} else if !errors.Is(err, repo.ErrNotFound) {
+			return nil, err
+		}
+	}
+	return s.screen.SaveRule(ctx, familyID, id, name, points, string(raw))
 }
 
 // Rules 列出本组规则。

@@ -56,6 +56,47 @@ func (r *Family) Members(ctx context.Context, familyID uint64, includeHidden boo
 	return list, nil
 }
 
+// FamilyRow 是家庭组列表的一行（后台用）。
+type FamilyRow struct {
+	ID          uint64    `db:"id" json:"id"`
+	Name        string    `db:"name" json:"name"`
+	InviteCode  string    `db:"invite_code" json:"invite_code"`
+	MemberCount int       `db:"member_count" json:"member_count"`
+	CreatedAt   time.Time `db:"created_at" json:"created_at"`
+}
+
+// AllWithCounts 列出所有家庭组及成员数。
+func (r *Family) AllWithCounts(ctx context.Context) ([]FamilyRow, error) {
+	list := []FamilyRow{}
+	err := r.db.SelectContext(ctx, &list,
+		`SELECT f.id, f.name, f.invite_code, f.created_at,
+		        (SELECT COUNT(*) FROM members m WHERE m.family_id = f.id) AS member_count
+		   FROM families f ORDER BY f.id DESC`)
+	return list, err
+}
+
+// AdminStats 全站统计（后台首页）。
+type AdminStats struct {
+	FamilyCount  int `db:"family_count" json:"family_count"`
+	MemberCount  int `db:"member_count" json:"member_count"`
+	RecordCount  int `db:"record_count" json:"record_count"`
+	PendingTasks int `db:"pending_tasks" json:"pending_tasks"`
+}
+
+// AdminStats 统计全站数据。
+func (r *Family) AdminStats(ctx context.Context) (*AdminStats, error) {
+	var out AdminStats
+	err := r.db.GetContext(ctx, &out, `
+		SELECT (SELECT COUNT(*) FROM families) AS family_count,
+		       (SELECT COUNT(*) FROM members WHERE family_id IS NOT NULL) AS member_count,
+		       (SELECT COUNT(*) FROM records) AS record_count,
+		       (SELECT COUNT(*) FROM task_submissions WHERE status = 'submitted') AS pending_tasks`)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // MemberInFamily 取组内某成员；**必须同时匹配 family_id**，否则就是跨组读取。
 func (r *Family) MemberInFamily(ctx context.Context, familyID, memberID uint64) (*model.Member, error) {
 	var m model.Member
