@@ -34,14 +34,16 @@ func fail(c *gin.Context, err error) {
 	case errors.Is(err, repo.ErrSelfTask),
 		errors.Is(err, repo.ErrNotPublisher),
 		errors.Is(err, repo.ErrNotAssignee),
-		errors.Is(err, repo.ErrPublisherNoVote):
+		errors.Is(err, repo.ErrPublisherNoVote),
+		errors.Is(err, repo.ErrForbidden):
 		httpx.Forbidden(c, err.Error())
 	case errors.Is(err, repo.ErrTaskNotOpen),
 		errors.Is(err, repo.ErrResubmitLimit),
 		errors.Is(err, repo.ErrAlreadySubmitted),
 		errors.Is(err, repo.ErrNotVotable),
 		errors.Is(err, repo.ErrVoteExpired),
-		errors.Is(err, repo.ErrAlreadyVoted):
+		errors.Is(err, repo.ErrAlreadyVoted),
+		errors.Is(err, repo.ErrCouponNotUsable):
 		httpx.Conflict(c, err.Error())
 	case errors.Is(err, service.ErrNotInFamily),
 		errors.Is(err, service.ErrNotLeader),

@@ -24,6 +24,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 	ledgerHandler *handler.Ledger, screenHandler *handler.Screen, taskHandler *handler.Task,
 	reportHandler *handler.Report, auditHandler *handler.Audit,
 	notifHandler *handler.Notification, adminHandler *handler.Admin,
+	couponHandler *handler.Coupon,
 	mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
@@ -151,6 +152,13 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		inFamily.POST("/task/close", taskHandler.AppCloseTask)
 		inFamily.POST("/task/submit", taskHandler.AppSubmitTask)
 		inFamily.POST("/task/vote", taskHandler.AppVoteTask)
+
+		// 商品券与核销投票（docs 9.6）
+		inFamily.GET("/coupons", couponHandler.AppList)
+		inFamily.GET("/coupons/pending", couponHandler.AppPending)
+		inFamily.GET("/coupon/detail", couponHandler.AppDetail)
+		inFamily.POST("/coupon/use", couponHandler.AppUse)
+		inFamily.POST("/coupon/vote", couponHandler.AppVote)
 
 		// 站内通知
 		inFamily.GET("/notification/list", notifHandler.AppList)

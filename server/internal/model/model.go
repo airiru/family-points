@@ -14,17 +14,17 @@ const (
 
 // Member 对应 members 表。family_id 可空：注册后未入组时为空。
 type Member struct {
-	ID           uint64     `db:"id"`
-	FamilyID     *uint64    `db:"family_id"`
-	Name         string     `db:"name"`
-	Score        int        `db:"score"`
-	FrozenScore  int        `db:"frozen_score"`
-	Hidden       bool       `db:"hidden"`
-	Avatar       *string    `db:"avatar"`
-	Username     string     `db:"username"`
-	PassHash     string     `db:"pass_hash"`
-	Role         string     `db:"role"`
-	CreatedAt    time.Time  `db:"created_at"`
+	ID          uint64    `db:"id"`
+	FamilyID    *uint64   `db:"family_id"`
+	Name        string    `db:"name"`
+	Score       int       `db:"score"`
+	FrozenScore int       `db:"frozen_score"`
+	Hidden      bool      `db:"hidden"`
+	Avatar      *string   `db:"avatar"`
+	Username    string    `db:"username"`
+	PassHash    string    `db:"pass_hash"`
+	Role        string    `db:"role"`
+	CreatedAt   time.Time `db:"created_at"`
 }
 
 // InFamily 表示该成员已加入某个家庭组。
@@ -42,11 +42,11 @@ type Admin struct {
 
 // Family 对应 families 表。
 type Family struct {
-	ID                 uint64     `db:"id"`
-	Name               string     `db:"name"`
-	InviteCode         string     `db:"invite_code"`
+	ID                  uint64     `db:"id"`
+	Name                string     `db:"name"`
+	InviteCode          string     `db:"invite_code"`
 	InviteCodeExpiresAt *time.Time `db:"invite_code_expires_at"`
-	CreatedAt          time.Time  `db:"created_at"`
+	CreatedAt           time.Time  `db:"created_at"`
 }
 
 // InviteCodeUsable 判断邀请码是否仍可用（7 天有效期，5.2.5）。
@@ -132,16 +132,16 @@ type StreakTier struct {
 
 // ScreenRule 是每成员一条的屏幕时间规则。
 type ScreenRule struct {
-	ID             uint64 `db:"id" json:"id"`
-	FamilyID       uint64 `db:"family_id" json:"family_id"`
-	MemberID       uint64 `db:"member_id" json:"member_id"`
-	ThresholdMin   int    `db:"threshold_min" json:"threshold_min"`
-	BonusPoints    int    `db:"bonus_points" json:"bonus_points"`
-	PenaltyPoints  int    `db:"penalty_points" json:"penalty_points"`
-	Enabled        bool   `db:"enabled" json:"enabled"`
-	NightStartHour *int   `db:"night_start_hour" json:"night_start_hour"`
-	NightEndHour   *int   `db:"night_end_hour" json:"night_end_hour"`
-	NightMaxMin    *int   `db:"night_max_min" json:"night_max_min"`
+	ID             uint64  `db:"id" json:"id"`
+	FamilyID       uint64  `db:"family_id" json:"family_id"`
+	MemberID       uint64  `db:"member_id" json:"member_id"`
+	ThresholdMin   int     `db:"threshold_min" json:"threshold_min"`
+	BonusPoints    int     `db:"bonus_points" json:"bonus_points"`
+	PenaltyPoints  int     `db:"penalty_points" json:"penalty_points"`
+	Enabled        bool    `db:"enabled" json:"enabled"`
+	NightStartHour *int    `db:"night_start_hour" json:"night_start_hour"`
+	NightEndHour   *int    `db:"night_end_hour" json:"night_end_hour"`
+	NightMaxMin    *int    `db:"night_max_min" json:"night_max_min"`
 	NightRuleID    *uint64 `db:"night_rule_id" json:"night_rule_id"`
 }
 
@@ -164,19 +164,19 @@ type Device struct {
 
 // ScreenReport 是一天的屏幕时间结算行（幂等载体）。
 type ScreenReport struct {
-	ID            uint64    `db:"id" json:"id"`
-	FamilyID      uint64    `db:"family_id" json:"-"`
-	MemberID      uint64    `db:"member_id" json:"member_id"`
-	ReportDate    time.Time `db:"report_date" json:"report_date"`
-	TotalMin      int       `db:"total_min" json:"total_min"`
-	NightMin      *int      `db:"night_min" json:"night_min"`
-	NightOK       *bool     `db:"night_ok" json:"night_ok"`
-	Points        int       `db:"points" json:"points"`
-	RecordID      *uint64   `db:"record_id" json:"record_id"`
-	NightRecordID *uint64   `db:"night_record_id" json:"night_record_id"`
-	Source        string    `db:"source" json:"source"`
-	Revision      int       `db:"revision" json:"revision"`
-	ReportedAt    time.Time `db:"reported_at" json:"reported_at"`
+	ID            uint64     `db:"id" json:"id"`
+	FamilyID      uint64     `db:"family_id" json:"-"`
+	MemberID      uint64     `db:"member_id" json:"member_id"`
+	ReportDate    time.Time  `db:"report_date" json:"report_date"`
+	TotalMin      int        `db:"total_min" json:"total_min"`
+	NightMin      *int       `db:"night_min" json:"night_min"`
+	NightOK       *bool      `db:"night_ok" json:"night_ok"`
+	Points        int        `db:"points" json:"points"`
+	RecordID      *uint64    `db:"record_id" json:"record_id"`
+	NightRecordID *uint64    `db:"night_record_id" json:"night_record_id"`
+	Source        string     `db:"source" json:"source"`
+	Revision      int        `db:"revision" json:"revision"`
+	ReportedAt    time.Time  `db:"reported_at" json:"reported_at"`
 	UpdatedAt     *time.Time `db:"updated_at" json:"updated_at"`
 }
 
@@ -238,17 +238,17 @@ type TaskVote struct {
 
 // AuditLog 是审计日志（append-only）。
 type AuditLog struct {
-	ID           uint64     `db:"id" json:"id"`
-	FamilyID     *uint64    `db:"family_id" json:"family_id"`
-	OperatorID   *uint64    `db:"operator_id" json:"operator_id"`
-	OperatorType string     `db:"operator_type" json:"operator_type"`
-	Action       string     `db:"action" json:"action"`
-	TargetType   *string    `db:"target_type" json:"target_type"`
-	TargetID     *uint64    `db:"target_id" json:"target_id"`
-	BeforeJSON   *string    `db:"before_json" json:"before"`
-	AfterJSON    *string    `db:"after_json" json:"after"`
-	IP           *string    `db:"ip" json:"ip"`
-	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
+	ID           uint64    `db:"id" json:"id"`
+	FamilyID     *uint64   `db:"family_id" json:"family_id"`
+	OperatorID   *uint64   `db:"operator_id" json:"operator_id"`
+	OperatorType string    `db:"operator_type" json:"operator_type"`
+	Action       string    `db:"action" json:"action"`
+	TargetType   *string   `db:"target_type" json:"target_type"`
+	TargetID     *uint64   `db:"target_id" json:"target_id"`
+	BeforeJSON   *string   `db:"before_json" json:"before"`
+	AfterJSON    *string   `db:"after_json" json:"after"`
+	IP           *string   `db:"ip" json:"ip"`
+	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 }
 
 // Notification 是站内通知。
@@ -267,17 +267,54 @@ type Notification struct {
 
 // RefreshToken 对应 refresh_tokens 表（只存哈希）。
 type RefreshToken struct {
-	ID            uint64     `db:"id"`
-	SubjectType   string     `db:"subject_type"`
-	SubjectID     uint64     `db:"subject_id"`
-	TokenHash     string     `db:"token_hash"`
-	ExpiresAt     time.Time  `db:"expires_at"`
-	RevokedAt     *time.Time `db:"revoked_at"`
-	ReplacedByHash *string   `db:"replaced_by_hash"`
-	CreatedAt     time.Time  `db:"created_at"`
+	ID             uint64     `db:"id"`
+	SubjectType    string     `db:"subject_type"`
+	SubjectID      uint64     `db:"subject_id"`
+	TokenHash      string     `db:"token_hash"`
+	ExpiresAt      time.Time  `db:"expires_at"`
+	RevokedAt      *time.Time `db:"revoked_at"`
+	ReplacedByHash *string    `db:"replaced_by_hash"`
+	CreatedAt      time.Time  `db:"created_at"`
 }
 
 // Valid 判断 token 是否仍可用（未吊销且未过期）。
 func (t *RefreshToken) Valid(now time.Time) bool {
 	return t.RevokedAt == nil && now.Before(t.ExpiresAt)
+}
+
+// Coupon 对应 coupons 表：兑换后发出的商品券（docs 9.6）。
+//
+// 状态机：unused --使用--> pending --通过--> redeemed
+//
+//	↑                │
+//	└──驳回 / 超时────┘
+type Coupon struct {
+	ID           uint64     `db:"id" json:"id"`
+	FamilyID     uint64     `db:"family_id" json:"-"`
+	MemberID     uint64     `db:"member_id" json:"member_id"`
+	RedemptionID uint64     `db:"redemption_id" json:"redemption_id"`
+	ItemName     string     `db:"item_name" json:"item_name"`
+	Cost         int        `db:"cost" json:"cost"`
+	Status       string     `db:"status" json:"status"`
+	RejectCount  int        `db:"reject_count" json:"reject_count"`
+	VoteDeadline *time.Time `db:"vote_deadline" json:"vote_deadline"`
+	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
+	SettledAt    *time.Time `db:"settled_at" json:"settled_at"`
+}
+
+// 券状态常量。
+const (
+	CouponUnused   = "unused"
+	CouponPending  = "pending"
+	CouponRedeemed = "redeemed"
+)
+
+// CouponVote 对应 coupon_votes 表：核销投票，一人一票。
+type CouponVote struct {
+	ID        uint64    `db:"id" json:"id"`
+	FamilyID  uint64    `db:"family_id" json:"-"`
+	CouponID  uint64    `db:"coupon_id" json:"coupon_id"`
+	VoterID   uint64    `db:"voter_id" json:"voter_id"`
+	Vote      string    `db:"vote" json:"vote"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }

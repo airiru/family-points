@@ -147,6 +147,14 @@ func (r *Ledger) Redeem(ctx context.Context, familyID, memberID uint64, item *mo
 		return nil, err
 	}
 
+	// 6. 发券（docs 9.6）：与扣分同事务，避免「扣了分却没有券」
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO coupons (family_id, member_id, redemption_id, item_name, cost)
+		 VALUES (?, ?, ?, ?, ?)`,
+		familyID, memberID, redemptionID, item.Name, item.Cost); err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
