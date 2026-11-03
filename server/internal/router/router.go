@@ -59,10 +59,6 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		// 管理员跨组：family_id 只能走路径参数（4.3 第 3 条）
 		admin.GET("/family/:family_id", familyHandler.AdminInfo)
 		admin.GET("/family/:family_id/members", familyHandler.AdminMembers)
-
-		// 撤销类操作仅管理员（9.4 / 10.2.6），family_id 走路径参数
-		admin.POST("/family/:family_id/item/redeem/revoke", ledgerHandler.AdminRevokeRedemption)
-		admin.POST("/family/:family_id/transfer/revoke", ledgerHandler.AdminRevokeTransfer)
 	}
 
 	// 前台：只认 member token；组内接口额外要求已加入家庭组

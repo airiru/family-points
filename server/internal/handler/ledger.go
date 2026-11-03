@@ -106,27 +106,6 @@ func (h *Ledger) AppRedeem(c *gin.Context) {
 	})
 }
 
-// AdminRevokeRedemption POST /api/admin/family/:family_id/item/redeem/revoke —— 仅管理员（9.4）。
-func (h *Ledger) AdminRevokeRedemption(c *gin.Context) {
-	fid, ok := pathFamilyID(c)
-	if !ok {
-		return
-	}
-	var in struct {
-		RedemptionID uint64 `json:"redemption_id"`
-	}
-	if err := c.ShouldBindJSON(&in); err != nil {
-		httpx.BadRequest(c, "请求体格式不正确")
-		return
-	}
-	if err := h.svc.RevokeRedemption(c.Request.Context(), fid, in.RedemptionID); err != nil {
-		fail(c, err)
-		return
-	}
-	auditCrossFamily(c, "admin.redeem.revoke", fid)
-	httpx.OK(c, gin.H{"revoked": true, "redemption_id": in.RedemptionID})
-}
-
 // ---------- 赠送 ----------
 
 // AppSendTransfer POST /api/app/transfer/send
@@ -171,27 +150,6 @@ func (h *Ledger) AppTransfers(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, gin.H{"transfers": list})
-}
-
-// AdminRevokeTransfer POST /api/admin/family/:family_id/transfer/revoke —— 仅管理员。
-func (h *Ledger) AdminRevokeTransfer(c *gin.Context) {
-	fid, ok := pathFamilyID(c)
-	if !ok {
-		return
-	}
-	var in struct {
-		TransferID uint64 `json:"transfer_id"`
-	}
-	if err := c.ShouldBindJSON(&in); err != nil {
-		httpx.BadRequest(c, "请求体格式不正确")
-		return
-	}
-	if err := h.svc.RevokeTransfer(c.Request.Context(), fid, in.TransferID); err != nil {
-		fail(c, err)
-		return
-	}
-	auditCrossFamily(c, "admin.transfer.revoke", fid)
-	httpx.OK(c, gin.H{"revoked": true, "transfer_id": in.TransferID})
 }
 
 // ---------- 流水 ----------

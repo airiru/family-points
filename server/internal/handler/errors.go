@@ -41,8 +41,6 @@ func fail(c *gin.Context, err error) {
 		errors.Is(err, service.ErrSameMember),
 		errors.Is(err, service.ErrNotEnoughScore):
 		httpx.BadRequest(c, err.Error())
-	case errors.Is(err, service.ErrAlreadyRevoked):
-		httpx.Conflict(c, err.Error())
 	default:
 		httpx.Internal(c, "服务器内部错误")
 	}

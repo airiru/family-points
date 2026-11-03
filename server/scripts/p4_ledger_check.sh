@@ -66,23 +66,16 @@ TID=$(curl -s "$B/api/app/transfer/list" -H "Authorization: Bearer $M1_AT" | jge
 TCOUNT=$(curl -s "$B/api/app/records?limit=200" -H "Authorization: Bearer $M1_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['transfer_id']==$TID))")
 chk "一次赠送产生 2 条流水" "2" "$TCOUNT"
 
-echo "== 7. 撤销（仅管理员）=="
-chk "成员撤销兑换 → 401" "401" "$(code -X POST $B/api/admin/family/1/item/redeem/revoke -H "Authorization: Bearer $M1_AT" -H 'Content-Type: application/json' -d "{\"redemption_id\":$RID}")"
-A_AT=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d '{"username":"admins","password":"admins123"}' | jget "['data']['token']['access_token']")
-FID=$(curl -s $B/api/app/family -H "Authorization: Bearer $L_AT" | jget "['data']['id']")
-chk "管理员撤销兑换 → 200" "200" "$(code -X POST $B/api/admin/family/$FID/item/redeem/revoke -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"redemption_id\":$RID}")"
-chk "M1 余额 10→40（退回 30）" "40" "$(score "$M1_AT")"
-chk "重复撤销 → 409" "409" "$(code -X POST $B/api/admin/family/$FID/item/redeem/revoke -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"redemption_id\":$RID}")"
-chk "撤销后流水 +30 且 source=redeem" "30" "$(curl -s "$B/api/app/records?limit=1" -H "Authorization: Bearer $M1_AT" | jget "['data']['items'][0]['points']")"
-chk "管理员撤销赠送 → 200" "200" "$(code -X POST $B/api/admin/family/$FID/transfer/revoke -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"transfer_id\":$TID}")"
-chk "M1 收回 10 分 → 50" "50" "$(score "$M1_AT")"
-chk "M2 退回 10 分 → 20" "20" "$(score "$M2_AT")"
-chk "重复撤销赠送 → 409" "409" "$(code -X POST $B/api/admin/family/$FID/transfer/revoke -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"transfer_id\":$TID}")"
-
-echo "== 8. 流水完整性：每条都在，且不删原记录 =="
+echo "== 7. 流水完整性：每条都在，且不删原记录 =="
 TOTAL=$(curl -s "$B/api/app/records?limit=200" -H "Authorization: Bearer $M1_AT" | jget "['data']['total']")
-echo "  M1 可见流水共 $TOTAL 条"
-chk "流水 ≥5 条（兑换1 + 赠送2 + 撤销2）" "True" "$([ "$TOTAL" -ge 5 ] && echo True || echo False)"
+echo "  M1 可见流水共 $TOTAL 条（兑换 1 + 赠送 2）"
+chk "流水正好 3 条" "3" "$TOTAL"
+
+echo "== 8. 撤销功能暂不做：接口必须不存在 =="
+FID=$(curl -s $B/api/app/family -H "Authorization: Bearer $L_AT" | jget "['data']['id']")
+A_AT=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d '{"username":"admins","password":"admins123"}' | jget "['data']['token']['access_token']")
+chk "撤销兑换接口 → 404" "404" "$(code -X POST $B/api/admin/family/$FID/item/redeem/revoke -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d '{"redemption_id":1}')"
+chk "撤销赠送接口 → 404" "404" "$(code -X POST $B/api/admin/family/$FID/transfer/revoke -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d '{"transfer_id":1}')"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"

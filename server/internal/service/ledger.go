@@ -14,9 +14,8 @@ import (
 
 // 账目相关业务错误。
 var (
-	ErrInsufficient  = errors.New("积分不足")
-	ErrAlreadyRevoked = errors.New("该记录已撤销")
-	ErrSameMember    = errors.New("不能赠送给自己")
+	ErrInsufficient   = errors.New("积分不足")
+	ErrSameMember     = errors.New("不能赠送给自己")
 	ErrNotEnoughScore = errors.New("可用余额不足")
 )
 
@@ -79,18 +78,6 @@ func (s *Ledger) Redeem(ctx context.Context, me *model.Member, itemID uint64) (*
 	return rd, nil
 }
 
-// RevokeRedemption 撤销兑换（**仅管理员**，9.4）。
-//
-// 这里不校验角色——调用方是 admin handler，管理员本身不属于任何家庭组，
-// 但可以跨组操作（4.3 第 3 条）。family_id 由路径参数显式传入。
-func (s *Ledger) RevokeRedemption(ctx context.Context, familyID, redemptionID uint64) error {
-	err := s.ledger.RevokeRedemption(ctx, familyID, redemptionID)
-	if errors.Is(err, repo.ErrAlreadyRevoked) {
-		return ErrAlreadyRevoked
-	}
-	return err
-}
-
 // ---------- 赠送 ----------
 
 // Send 成员赠送积分：只受转出方余额约束，不设单笔/每日上限（19.10）。
@@ -121,18 +108,6 @@ func (s *Ledger) Transfers(ctx context.Context, familyID uint64, limit int) ([]m
 		limit = 50
 	}
 	return s.ledger.Transfers(ctx, familyID, limit)
-}
-
-// RevokeTransfer 撤销赠送（**仅管理员**）。受赠方余额不足时拒绝。
-func (s *Ledger) RevokeTransfer(ctx context.Context, familyID, transferID uint64) error {
-	err := s.ledger.RevokeTransfer(ctx, familyID, transferID)
-	switch {
-	case errors.Is(err, repo.ErrAlreadyRevoked):
-		return ErrAlreadyRevoked
-	case errors.Is(err, repo.ErrInsufficient):
-		return fmt.Errorf("%w：受赠方已花掉这部分积分，无法回滚", ErrNotEnoughScore)
-	}
-	return err
 }
 
 // ---------- 流水 ----------
