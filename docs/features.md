@@ -1040,6 +1040,7 @@ rules.streaks = [
 | 15.2.16 | `/api/admin/family/:family_id/members` | GET | 跨组查看成员（含被隐藏的） |
 | 15.2.17 | `/api/admin/family/:family_id/item/redeem/revoke` | POST | 撤销兑换（写反向流水） |
 | 15.2.18 | `/api/admin/family/:family_id/transfer/revoke` | POST | 撤销赠送（写反向流水） |
+| 15.2.19 | `/api/admin/me` | GET | 当前管理员信息（含 `must_change_password`） |
 
 > **已移除**：`/api/admin/score/*`（记一笔）、`/api/admin/screen/report-manual`（手动录入）。
 > 接口层**直接删除，返回 404**，不是隐藏。
@@ -1086,6 +1087,7 @@ rules.streaks = [
 | 15.3.32 | `/api/app/family/transfer-leader` | POST | **组长转让**（同事务降旧升新） |
 | 15.3.33 | `/api/app/item/save` · `/api/app/item/delete` | POST | 商品增改 / 删除（**组长**） |
 | 15.3.34 | `/api/app/records` | GET | 本组流水分页（`limit` / `offset`） |
+| 15.3.35 | `/api/app/me` | GET | 当前成员信息（`score` / `frozen_score` / `role` / `family_id`） |
 | 15.3.23 | `/api/app/family/invite-code` | GET/POST | 查看 / 重置邀请码 |
 | 15.3.24 | `/api/app/rule/save` | POST | 睡觉时间点与连续奖励档位 |
 | 15.3.25 | `/api/app/item/save` | POST | 商品增删改 |
