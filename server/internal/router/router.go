@@ -21,7 +21,7 @@ import (
 
 // Build 组装 gin 引擎。
 func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *handler.Family,
-	ledgerHandler *handler.Ledger, screenHandler *handler.Screen,
+	ledgerHandler *handler.Ledger, screenHandler *handler.Screen, taskHandler *handler.Task,
 	mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
@@ -116,6 +116,16 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		inFamily.GET("/screen-rule", screenHandler.AppScreenRules)
 		inFamily.POST("/screen-rule/save", screenHandler.AppSaveScreenRule)
 		inFamily.GET("/screen/reports", screenHandler.AppScreenReports)
+
+		// 任务：发布（冻结）→ 接取 → 提交 → 全员投票
+		inFamily.POST("/task/create", taskHandler.AppCreateTask)
+		inFamily.GET("/task/list", taskHandler.AppTasks)
+		inFamily.GET("/task/detail", taskHandler.AppTaskDetail)
+		inFamily.POST("/task/claim", taskHandler.AppClaimTask)
+		inFamily.POST("/task/abandon", taskHandler.AppAbandonTask)
+		inFamily.POST("/task/close", taskHandler.AppCloseTask)
+		inFamily.POST("/task/submit", taskHandler.AppSubmitTask)
+		inFamily.POST("/task/vote", taskHandler.AppVoteTask)
 	}
 
 	// 设备上报：只认 X-Device-Token（19 条：屏幕时间唯一写入路径）

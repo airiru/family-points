@@ -28,6 +28,21 @@ func fail(c *gin.Context, err error) {
 		httpx.BadRequest(c, err.Error())
 	case errors.Is(err, repo.ErrNotFound):
 		httpx.NotFound(c, "资源不存在")
+	case errors.Is(err, repo.ErrInsufficient),
+		errors.Is(err, repo.ErrTooFewMembers):
+		httpx.BadRequest(c, err.Error())
+	case errors.Is(err, repo.ErrSelfTask),
+		errors.Is(err, repo.ErrNotPublisher),
+		errors.Is(err, repo.ErrNotAssignee),
+		errors.Is(err, repo.ErrPublisherNoVote):
+		httpx.Forbidden(c, err.Error())
+	case errors.Is(err, repo.ErrTaskNotOpen),
+		errors.Is(err, repo.ErrResubmitLimit),
+		errors.Is(err, repo.ErrAlreadySubmitted),
+		errors.Is(err, repo.ErrNotVotable),
+		errors.Is(err, repo.ErrVoteExpired),
+		errors.Is(err, repo.ErrAlreadyVoted):
+		httpx.Conflict(c, err.Error())
 	case errors.Is(err, service.ErrNotInFamily),
 		errors.Is(err, service.ErrNotLeader),
 		errors.Is(err, service.ErrBanned):

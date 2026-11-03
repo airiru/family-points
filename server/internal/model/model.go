@@ -180,6 +180,62 @@ type ScreenReport struct {
 	UpdatedAt     *time.Time `db:"updated_at" json:"updated_at"`
 }
 
+// Task 是悬赏任务。积分从发布者冻结后转给完成者（转移，不是生成）。
+type Task struct {
+	ID           uint64     `db:"id" json:"id"`
+	FamilyID     uint64     `db:"family_id" json:"-"`
+	Title        string     `db:"title" json:"title"`
+	Points       int        `db:"points" json:"points"`
+	PublisherID  uint64     `db:"publisher_id" json:"publisher_id"`
+	EscrowPoints int        `db:"escrow_points" json:"escrow_points"`
+	AssigneeID   *uint64    `db:"assignee_id" json:"assignee_id"`
+	CompletedBy  *uint64    `db:"completed_by" json:"completed_by"`
+	DueAt        *time.Time `db:"due_at" json:"due_at"`
+	RepeatRule   *string    `db:"repeat_rule" json:"repeat_rule"`
+	Status       string     `db:"status" json:"status"`
+	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
+}
+
+// 任务状态
+const (
+	TaskOpen   = "open"
+	TaskTaken  = "taken"
+	TaskClosed = "closed"
+)
+
+// TaskSubmission 是一次完成提交。
+type TaskSubmission struct {
+	ID           uint64     `db:"id" json:"id"`
+	FamilyID     uint64     `db:"family_id" json:"-"`
+	TaskID       uint64     `db:"task_id" json:"task_id"`
+	MemberID     uint64     `db:"member_id" json:"member_id"`
+	Note         string     `db:"note" json:"note"`
+	Status       string     `db:"status" json:"status"`
+	VoteDeadline *time.Time `db:"vote_deadline" json:"vote_deadline"`
+	ReviewNote   *string    `db:"review_note" json:"review_note"`
+	ReviewedAt   *time.Time `db:"reviewed_at" json:"reviewed_at"`
+	RecordID     *uint64    `db:"record_id" json:"record_id"`
+	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
+}
+
+// 提交状态
+const (
+	SubmissionSubmitted = "submitted"
+	SubmissionApproved  = "approved"
+	SubmissionRejected  = "rejected"
+	SubmissionExpired   = "expired"
+)
+
+// TaskVote 是一张审核票（一人一票，不可改）。
+type TaskVote struct {
+	ID           uint64    `db:"id" json:"id"`
+	FamilyID     uint64    `db:"family_id" json:"-"`
+	SubmissionID uint64    `db:"submission_id" json:"submission_id"`
+	VoterID      uint64    `db:"voter_id" json:"voter_id"`
+	Vote         string    `db:"vote" json:"vote"`
+	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+}
+
 // RefreshToken 对应 refresh_tokens 表（只存哈希）。
 type RefreshToken struct {
 	ID            uint64     `db:"id"`

@@ -61,8 +61,11 @@ func main() {
 	screenHandler := handler.NewScreen(screenSvc)
 	deviceMW := middleware.NewDevice(screenRepo)
 
+	taskSvc := service.NewTask(repo.NewTask(conn))
+	taskHandler := handler.NewTask(taskSvc)
+
 	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler,
-		screenHandler, authMW, deviceMW)
+		screenHandler, taskHandler, authMW, deviceMW)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
