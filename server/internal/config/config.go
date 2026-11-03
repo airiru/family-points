@@ -28,6 +28,14 @@ type Config struct {
 	Addr      string
 	JWTSecret string
 	DB        DB
+
+	// 默认管理员（初始化时使用，见 5.4.1）
+	AdminUsername string
+	AdminPassword string
+
+	// Token 有效期：Access 2h + Refresh 30d（5.4.6）
+	AccessTTL  time.Duration
+	RefreshTTL time.Duration
 }
 
 // Load 读取 .env（存在则加载，不存在不算错误）后从环境变量组装配置。
@@ -45,10 +53,23 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DB_PORT 不是合法数字: %w", err)
 	}
 
+	accessTTL, err := parseDuration("ACCESS_TTL", "2h")
+	if err != nil {
+		return Config{}, err
+	}
+	refreshTTL, err := parseDuration("REFRESH_TTL", "720h") // 30 天
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
-		Env:       getEnv("APP_ENV", "dev"),
-		Addr:      getEnv("HTTP_ADDR", ":8080"),
-		JWTSecret: os.Getenv("JWT_SECRET"),
+		Env:           getEnv("APP_ENV", "dev"),
+		Addr:          getEnv("HTTP_ADDR", ":8080"),
+		JWTSecret:     os.Getenv("JWT_SECRET"),
+		AdminUsername: getEnv("ADMIN_USERNAME", "admins"),
+		AdminPassword: getEnv("ADMIN_PASSWORD", "admins"),
+		AccessTTL:     accessTTL,
+		RefreshTTL:    refreshTTL,
 		DB: DB{
 			Host:     os.Getenv("DB_HOST"),
 			Port:     port,
@@ -80,6 +101,14 @@ func (d DB) DSN(dbName string) string {
 	c.WriteTimeout = 30 * time.Second
 	c.AllowNativePasswords = true
 	return c.FormatDSN()
+}
+
+func parseDuration(key, def string) (time.Duration, error) {
+	d, err := time.ParseDuration(getEnv(key, def))
+	if err != nil {
+		return 0, fmt.Errorf("%s 不是合法时长（如 2h / 720h）: %w", key, err)
+	}
+	return d, nil
 }
 
 func getEnv(key, def string) string {

@@ -10,6 +10,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"flag"
@@ -23,8 +24,11 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/mysql" // 注册 mysql:// 驱动
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jmoiron/sqlx"
+	"golang.org/x/crypto/bcrypt"
 
 	"familypoints/server/internal/config"
+	"familypoints/server/internal/repo"
 	"familypoints/server/migrations"
 )
 
@@ -33,11 +37,46 @@ func main() {
 	version := flag.Bool("version", false, "只打印当前版本")
 	list := flag.Bool("list", false, "打印当前账号可访问的数据库后退出")
 	verify := flag.Bool("verify", false, "迁移后核对表结构关键约束")
+	seedAdmin := flag.Bool("seed-admin", false, "初始化默认管理员（已有管理员则跳过）")
+	grants := flag.Bool("grants", false, "打印当前账号的授权（排查权限问题）")
+	force := flag.Int("force", 0, "把迁移版本强制设为 N（N=-1 表示清空），用于修复 dirty 状态")
+	reset := flag.Bool("reset", false, "【仅 dev】删除全部表与迁移记录，从零重建")
 	flag.Parse()
 
 	cfg, err := config.Load()
 	if err != nil {
 		fail("配置加载失败", err)
+	}
+
+	if *reset {
+		if cfg.Env != "dev" {
+			fail("拒绝执行", fmt.Errorf("-reset 只允许在 APP_ENV=dev 下使用，当前为 %q", cfg.Env))
+		}
+		if err := resetAll(cfg.DB); err != nil {
+			fail("重置失败", err)
+		}
+		return
+	}
+
+	if *grants {
+		if err := showGrants(cfg.DB); err != nil {
+			fail("读取授权失败", err)
+		}
+		return
+	}
+
+	if *force != 0 {
+		if err := forceVersion(cfg.DB, *force); err != nil {
+			fail("设置版本失败", err)
+		}
+		return
+	}
+
+	if *seedAdmin {
+		if err := seedDefaultAdmin(cfg); err != nil {
+			fail("初始化管理员失败", err)
+		}
+		return
 	}
 
 	if *list {
@@ -180,6 +219,7 @@ var expectedTables = []string{
 	"families", "family_bans", "admins", "members", "rules", "items",
 	"records", "transfers", "tasks", "task_submissions", "task_votes",
 	"audit_logs", "notifications", "screen_rules", "screen_reports", "devices",
+	"refresh_tokens",
 }
 
 // verifySchema 核对 P0 的完成判据：表齐全 + 几条关键约束真的生效。
@@ -271,7 +311,115 @@ func verifySchema(cfg config.DB) error {
 	}
 	fmt.Println("✅ 幂等唯一键齐全（screen_reports / task_votes / family_bans）")
 
+	// 5. families.invite_code_expires_at（邀请码 7 天有效期）
+	var cnt int
+	if err := conn.QueryRow(
+		`SELECT COUNT(*) FROM information_schema.columns
+		 WHERE table_schema = ? AND table_name = 'families' AND column_name = 'invite_code_expires_at'`,
+		cfg.Name).Scan(&cnt); err != nil {
+		return err
+	}
+	if cnt == 0 {
+		return fmt.Errorf("families 缺少 invite_code_expires_at")
+	}
+	fmt.Println("✅ families.invite_code_expires_at 存在")
+
 	fmt.Println("\n结构核对全部通过")
+	return nil
+}
+
+// resetAll 删除全部业务表与 schema_migrations。
+//
+// 用途：开发库账号没有 ALTER 权限（只有 CREATE/DROP），
+// 因此「给已有表加字段」只能靠「全删重建」。**仅限 dev**。
+func resetAll(cfg config.DB) error {
+	conn, err := sql.Open("mysql", cfg.DSN(cfg.Name))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// 先关外键检查，避免将来加了外键后顺序问题
+	if _, err := conn.Exec("SET FOREIGN_KEY_CHECKS = 0"); err != nil {
+		return err
+	}
+	tables := append([]string{}, expectedTables...)
+	tables = append(tables, "schema_migrations")
+	for _, t := range tables {
+		if _, err := conn.Exec("DROP TABLE IF EXISTS `" + t + "`"); err != nil {
+			return fmt.Errorf("删除表 %s: %w", t, err)
+		}
+	}
+	slog.Info("已删除全部表，可重新执行迁移", "tables", len(tables))
+	return nil
+}
+
+// showGrants 打印当前账号的授权，用于判断「是权限不足还是口令/主机问题」。
+func showGrants(cfg config.DB) error {
+	conn, err := sql.Open("mysql", cfg.DSN(""))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	rows, err := conn.Query("SHOW GRANTS FOR CURRENT_USER()")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var g string
+		if err := rows.Scan(&g); err != nil {
+			return err
+		}
+		fmt.Println(g)
+	}
+	return rows.Err()
+}
+
+// forceVersion 修复 dirty 状态：把 schema_migrations 的版本强制设回 N。
+func forceVersion(cfg config.DB, n int) error {
+	m, err := newMigrator(cfg)
+	if err != nil {
+		return err
+	}
+	defer m.Close()
+	if err := m.Force(n); err != nil {
+		return err
+	}
+	slog.Info("版本已强制设置", "version", n)
+	return nil
+}
+
+// seedDefaultAdmin 初始化默认管理员（5.4.1）。
+//
+// 幂等：已有任何管理员就直接跳过——避免重复部署时把密码重置回默认值。
+// 新账号一律 must_change_password=1，首次登录必须先改密（5.4.2）。
+func seedDefaultAdmin(cfg config.Config) error {
+	conn, err := sqlx.Connect("mysql", cfg.DB.DSN(cfg.DB.Name))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	r := repo.NewAuth(conn)
+	n, err := r.CountAdmins(context.Background())
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		slog.Info("已存在管理员，跳过初始化", "count", n)
+		return nil
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	if err := r.CreateAdmin(context.Background(), cfg.AdminUsername, string(hash), true); err != nil {
+		return err
+	}
+	slog.Info("默认管理员已创建，请登录后立即改密", "username", cfg.AdminUsername)
 	return nil
 }
 

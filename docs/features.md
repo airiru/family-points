@@ -91,6 +91,7 @@ CREATE TABLE families (
   id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name            VARCHAR(64)  NOT NULL,
   invite_code     CHAR(8)      NOT NULL UNIQUE,
+  invite_code_expires_at DATETIME(3) NULL,    -- 邀请码 7 天有效期（5.2.5），重置即改写
   -- 不设 owner_member_id：组长身份唯一来源是 members.role='leader'（见设计要点 6），
   -- 两处都存必然分叉
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
@@ -319,6 +320,20 @@ CREATE TABLE devices (
   KEY idx_token (token_hash),
   KEY idx_family (family_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Refresh Token（可吊销；原文不落库，只存 SHA-256）
+CREATE TABLE refresh_tokens (
+  id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  subject_type     ENUM('admin','member') NOT NULL,  -- 两套账号体系共用一张表
+  subject_id       BIGINT UNSIGNED NOT NULL,
+  token_hash       CHAR(64)     NOT NULL UNIQUE,     -- sha256 hex
+  expires_at       DATETIME(3)  NOT NULL,
+  revoked_at       DATETIME(3)  NULL,                -- 轮换/改密/登出后置位
+  replaced_by_hash CHAR(64)     NULL,                -- 轮换出的新 token，便于追溯
+  created_at       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_subject (subject_type, subject_id),
+  KEY idx_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
 **设计要点（2026-11-03 随 P0 建表校正）：**
@@ -416,6 +431,8 @@ CREATE TABLE devices (
 | 5.1.1 | 注册账号（用户名、密码、昵称） | ⬜ 用户名全局唯一 |
 | 5.1.2 | 注册时可选**创建家庭组**（成为该组组长） | ⬜ **仅获得前台组长身份，不获得任何后台权限** |
 | 5.1.3 | 一个账号只能属于一个家庭组 | ⬜ `members.username` 全局唯一保证 |
+| 5.1.4 | 用户名规则 | ✅ 3–20 位，仅字母 / 数字 / 下划线 |
+| 5.1.5 | 密码规则 | ✅ 至少 8 位、最多 72 字节（bcrypt 上限），**不要求复杂度** |
 
 > ⚠️ **创建家庭组 ≠ 获得后台管理员**。后台是给**网站运营者**用的，
 > 家庭用户（包括组长）**永远没有后台账号**，也没有任何后台入口。
@@ -451,7 +468,7 @@ CREATE TABLE devices (
 
 | # | 功能 | 状态 |
 |---|---|---|
-| 5.4.1 | **系统自带一个默认管理员账号** | ⬜ 部署时由初始化脚本生成，账号密码写入环境变量 |
+| 5.4.1 | **系统自带一个默认管理员账号** | ✅ `go run ./cmd/migrate -seed-admin`，取 `ADMIN_USERNAME`/`ADMIN_PASSWORD`（开发库为 `admins`/`admins`）；**已有管理员则跳过**，幂等 |
 | 5.4.2 | **默认账号首次登录强制改密** | ⬜ 未改密前除改密接口外全部拒绝 |
 | 5.4.3 | 运营方可在后台新增 / 停用管理员账号 | ⬜ 账号管理本身也是后台功能 |
 | 5.4.4 | 后台登录 / 退出 | ⬜ `/api/admin/login` |
@@ -1638,6 +1655,9 @@ FROM task_votes WHERE submission_id=?;
 | **P8 后台 + 审计 + 通知** | 管理员全量接口、审计 append-only（剔除 `pass_hash`、失败不阻断）、180 天清理、站内通知、预设头像 | 84–86、98–101 |
 | **P9 客户端** | Android 15 界面（3 个组长专属）、Web 后台前端 | 92–94 及全部界面条目 |
 
+**当前进度（2026-11-03）**：**P0 ✅ / P1 ✅**（19 项接口测试全通过，脚本 `server/scripts/p1_auth_check.sh`）/
+P2 未开始。
+
 **顺序理由**：P1/P2 是**所有接口的前置**，晚做就要回头改每个 handler；
 P4 的账目模型定不下来，P5–P7 全部无法结算；审计（P8）放最后是因为它**旁路**，
 不影响主流程正确性。
@@ -1663,3 +1683,15 @@ P4 的账目模型定不下来，P5–P7 全部无法结算；审计（P8）放�
 - `.env` 已在 `.gitignore` 中，**绝不提交**；仓库只提交 `.env.example`（占位符）
 - 敏感值（主机、账号、口令）**不得**出现在 `docs/`、`.memory/`、提交信息里
 - 建库与建表由 `server/cmd/migrate` 执行，**不要手工建表**（保证与 3 节一致）
+
+**⚠️ 开发库账号权限受限**（2026-11-03 实测 `SHOW GRANTS`）：
+
+```
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP ON `aabb`.* TO `abc`@`%`
+```
+
+- **没有 `ALTER` / `INDEX`** ⇒ 给**已有表**加字段、加索引都会 `Error 1142`
+- 因此开发期改表只有两条路：
+  1. `go run ./cmd/migrate -reset` 全删重建（**仅 dev，会清空数据**），再把字段并入 `0001`；
+  2. 让 DBA 给 `abc` 补 `ALTER, INDEX` 权限（**上线前必须补**，否则迁移无法演进）
+- 已有表结构变更**优先走方案 2**；`-reset` 只在「还没有任何真实数据」时用

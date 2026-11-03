@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS families (
   id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name            VARCHAR(64)  NOT NULL,
   invite_code     CHAR(8)      NOT NULL UNIQUE,
+  invite_code_expires_at DATETIME(3) NULL,    -- 邀请码 7 天有效期（5.2.5）
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
