@@ -195,6 +195,7 @@ func (h *Family) AppLeave(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "member.leave", "member", &m.ID, gin.H{"score": m.Score, "frozen": m.FrozenScore}, gin.H{"score": 0, "frozen": 0})
 	httpx.OK(c, gin.H{"left": true, "score_reset": true})
 }
 
@@ -217,6 +218,7 @@ func (h *Family) AppKick(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "member.kick", "member", &in.MemberID, nil, gin.H{"removed": true})
 	httpx.OK(c, gin.H{"removed": true, "member_id": in.MemberID})
 }
 
@@ -240,6 +242,7 @@ func (h *Family) AppTransferLeader(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "leader.transfer", "member", &in.MemberID, gin.H{"leader_id": m.ID}, gin.H{"leader_id": in.MemberID})
 	httpx.OK(c, gin.H{"leader_id": in.MemberID})
 }
 
@@ -262,6 +265,7 @@ func (h *Family) AppSetHidden(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "member.hidden", "member", &in.MemberID, nil, gin.H{"hidden": in.Hidden})
 	httpx.OK(c, gin.H{"member_id": in.MemberID, "hidden": in.Hidden})
 }
 
@@ -284,6 +288,7 @@ func (h *Family) AppRenameFamily(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "family.rename", "family", m.FamilyID, nil, gin.H{"name": name})
 	httpx.OK(c, gin.H{"name": name})
 }
 

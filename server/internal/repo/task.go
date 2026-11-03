@@ -361,11 +361,13 @@ func (r *Task) Votes(ctx context.Context, familyID, submissionID uint64) ([]mode
 
 // VoteResult 是一次投票后的状态。
 type VoteResult struct {
-	Status   string // submitted / approved / rejected / expired
-	Approve  int
-	Reject   int
-	Voters   int // 有投票权人数（成员数 − 发布者）
+	Status      string // submitted / approved / rejected / expired
+	Approve     int
+	Reject      int
+	Voters      int // 有投票权人数（成员数 − 发布者）
 	Transferred bool
+	TaskID      uint64 // 便于上层发通知
+	CompleterID uint64
 }
 
 // Vote 投票并即时判定（过半即通过，反对足以否决即驳回）。
@@ -455,7 +457,10 @@ func (r *Task) Vote(ctx context.Context, familyID, submissionID, voterID uint64,
 	if voters < 1 {
 		voters = 1
 	}
-	result := &VoteResult{Status: model.SubmissionSubmitted, Approve: approve, Reject: reject, Voters: voters}
+	result := &VoteResult{
+		Status: model.SubmissionSubmitted, Approve: approve, Reject: reject,
+		Voters: voters, TaskID: s.TaskID, CompleterID: s.MemberID,
+	}
 
 	// 通过：同意票 > 半数
 	if approve*2 > voters {

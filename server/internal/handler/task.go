@@ -37,6 +37,9 @@ func (h *Task) AppCreateTask(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "task.create", "task", &t.ID, nil, gin.H{
+		"title": t.Title, "points": t.Points, "publisher_id": t.PublisherID,
+	})
 	httpx.OK(c, t)
 }
 
@@ -127,6 +130,7 @@ func (h *Task) AppCloseTask(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "task.close", "task", &t.ID, nil, gin.H{"escrow_returned": true})
 	httpx.OK(c, t)
 }
 
@@ -154,6 +158,9 @@ func (h *Task) AppSubmitTask(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "task.submit", "submission", &sub.ID, nil, gin.H{
+		"task_id": sub.TaskID, "member_id": sub.MemberID,
+	})
 	httpx.OK(c, sub)
 }
 
@@ -180,6 +187,18 @@ func (h *Task) AppVoteTask(c *gin.Context) {
 	if err != nil {
 		fail(c, err)
 		return
+	}
+	recordAudit(c, "task.vote", "submission", &in.SubmissionID, nil, gin.H{
+		"vote": in.Vote, "status": res.Status, "approve": res.Approve, "reject": res.Reject,
+	})
+	if res.Status == "approved" || res.Status == "rejected" {
+		title := "任务审核通过"
+		if res.Status == "rejected" {
+			title = "任务被驳回"
+		}
+		notify(c, *m.FamilyID, res.CompleterID, "task_review", title,
+			"任务 #"+itoa(int(res.TaskID))+" 的提交已"+map[string]string{"approved": "通过", "rejected": "被驳回"}[res.Status],
+			"task", &res.TaskID)
 	}
 	httpx.OK(c, gin.H{
 		"status":      res.Status,

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"familypoints/server/internal/audit"
 	"familypoints/server/internal/auth"
 	"familypoints/server/internal/config"
 	"familypoints/server/internal/db"
@@ -67,8 +68,16 @@ func main() {
 	reportSvc := service.NewReport(repo.NewReport(conn), familyRepo)
 	reportHandler := handler.NewReport(reportSvc)
 
+	auditRepo := repo.NewAudit(conn)
+	handler.SetAuditor(audit.New(auditRepo))
+	auditHandler := handler.NewAudit(auditRepo)
+
+	notifRepo := repo.NewNotification(conn)
+	handler.SetNotifier(notifRepo)
+	notifHandler := handler.NewNotification(notifRepo)
+
 	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler,
-		screenHandler, taskHandler, reportHandler, authMW, deviceMW)
+		screenHandler, taskHandler, reportHandler, auditHandler, notifHandler, authMW, deviceMW)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

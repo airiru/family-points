@@ -54,6 +54,7 @@ func (h *Ledger) AppSaveItem(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "item.save", "item", &item.ID, nil, gin.H{"name": item.Name, "cost": item.Cost})
 	httpx.OK(c, item)
 }
 
@@ -75,6 +76,7 @@ func (h *Ledger) AppDeleteItem(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "item.delete", "item", &in.ID, nil, nil)
 	httpx.OK(c, gin.H{"deleted": true, "id": in.ID})
 }
 
@@ -99,6 +101,10 @@ func (h *Ledger) AppRedeem(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	rid := rd.ID
+	recordAudit(c, "item.redeem", "redemption", &rid, nil, gin.H{
+		"item_name": rd.ItemName, "cost": rd.Cost, "member_id": m.ID,
+	})
 	httpx.OK(c, gin.H{
 		"redemption_id": rd.ID,
 		"item_name":     rd.ItemName,
@@ -129,6 +135,12 @@ func (h *Ledger) AppSendTransfer(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	tid := t.ID
+	recordAudit(c, "transfer.send", "transfer", &tid, nil, gin.H{
+		"from": t.FromMemberID, "to": t.ToMemberID, "amount": t.Amount,
+	})
+	notify(c, *m.FamilyID, t.ToMemberID, "transfer",
+		"收到一笔赠送", m.Name+" 赠送了你 "+itoa(t.Amount)+" 分", "transfer", &tid)
 	httpx.OK(c, gin.H{
 		"transfer_id": t.ID,
 		"to_member_id": t.ToMemberID,

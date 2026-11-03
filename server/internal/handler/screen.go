@@ -57,6 +57,9 @@ func (h *Screen) AppSaveRule(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "rule.save", "rule", &rule.ID, nil, gin.H{
+		"name": rule.Name, "points": rule.Points, "streaks": in.Streaks,
+	})
 	httpx.OK(c, rule)
 }
 
@@ -92,6 +95,10 @@ func (h *Screen) AppSaveScreenRule(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	recordAudit(c, "screen_rule.save", "member", &in.MemberID, nil, gin.H{
+		"threshold_min": in.ThresholdMin, "night_start": in.NightStartHour,
+		"night_end": in.NightEndHour, "night_max_min": in.NightMaxMin,
+	})
 	httpx.OK(c, rule)
 }
 
@@ -145,6 +152,8 @@ func (h *Screen) AdminCreateDevice(c *gin.Context) {
 		return
 	}
 	auditCrossFamily(c, "admin.device.create", fid)
+	c.Set("audit_family_id", fid)
+	recordAudit(c, "device.create", "device", &dev.ID, nil, gin.H{"member_id": dev.MemberID})
 	httpx.OK(c, gin.H{
 		"device_id": dev.ID,
 		"member_id": dev.MemberID,
@@ -185,6 +194,8 @@ func (h *Screen) AdminRevokeDevice(c *gin.Context) {
 		return
 	}
 	auditCrossFamily(c, "admin.device.revoke", fid)
+	c.Set("audit_family_id", fid)
+	recordAudit(c, "device.revoke", "device", &in.DeviceID, nil, nil)
 	httpx.OK(c, gin.H{"revoked": true, "device_id": in.DeviceID})
 }
 

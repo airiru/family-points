@@ -8,6 +8,9 @@ import (
 	"familypoints/server/internal/httpx"
 )
 
+// itoa 是 strconv.Itoa 的短别名，handler 里拼文案用。
+func itoa(n int) string { return strconv.Itoa(n) }
+
 // queryID 从 query 里取正整数 id；缺失或非法按「资源不存在」返回 404。
 func queryID(c *gin.Context, key string) (uint64, bool) {
 	raw := c.Query(key)

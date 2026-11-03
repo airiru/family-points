@@ -236,6 +236,35 @@ type TaskVote struct {
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 }
 
+// AuditLog 是审计日志（append-only）。
+type AuditLog struct {
+	ID           uint64     `db:"id" json:"id"`
+	FamilyID     *uint64    `db:"family_id" json:"family_id"`
+	OperatorID   *uint64    `db:"operator_id" json:"operator_id"`
+	OperatorType string     `db:"operator_type" json:"operator_type"`
+	Action       string     `db:"action" json:"action"`
+	TargetType   *string    `db:"target_type" json:"target_type"`
+	TargetID     *uint64    `db:"target_id" json:"target_id"`
+	BeforeJSON   *string    `db:"before_json" json:"before"`
+	AfterJSON    *string    `db:"after_json" json:"after"`
+	IP           *string    `db:"ip" json:"ip"`
+	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
+}
+
+// Notification 是站内通知。
+type Notification struct {
+	ID        uint64     `db:"id" json:"id"`
+	FamilyID  uint64     `db:"family_id" json:"-"`
+	MemberID  uint64     `db:"member_id" json:"member_id"`
+	Type      string     `db:"type" json:"type"`
+	Title     string     `db:"title" json:"title"`
+	Body      *string    `db:"body" json:"body"`
+	RefType   *string    `db:"ref_type" json:"ref_type"`
+	RefID     *uint64    `db:"ref_id" json:"ref_id"`
+	ReadAt    *time.Time `db:"read_at" json:"read_at"`
+	CreatedAt time.Time  `db:"created_at" json:"created_at"`
+}
+
 // RefreshToken 对应 refresh_tokens 表（只存哈希）。
 type RefreshToken struct {
 	ID            uint64     `db:"id"`

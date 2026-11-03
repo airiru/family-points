@@ -22,7 +22,8 @@ import (
 // Build 组装 gin 引擎。
 func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *handler.Family,
 	ledgerHandler *handler.Ledger, screenHandler *handler.Screen, taskHandler *handler.Task,
-	reportHandler *handler.Report, mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
+	reportHandler *handler.Report, auditHandler *handler.Audit,
+	notifHandler *handler.Notification, mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -65,6 +66,9 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.POST("/family/:family_id/device", screenHandler.AdminCreateDevice)
 		admin.GET("/family/:family_id/device", screenHandler.AdminDevices)
 		admin.POST("/family/:family_id/device/revoke", screenHandler.AdminRevokeDevice)
+
+		// 审计日志（append-only，只读查询）
+		admin.GET("/audit/list", auditHandler.AdminList)
 	}
 
 	// 前台：只认 member token；组内接口额外要求已加入家庭组
@@ -129,6 +133,10 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		inFamily.POST("/task/close", taskHandler.AppCloseTask)
 		inFamily.POST("/task/submit", taskHandler.AppSubmitTask)
 		inFamily.POST("/task/vote", taskHandler.AppVoteTask)
+
+		// 站内通知
+		inFamily.GET("/notification/list", notifHandler.AppList)
+		inFamily.POST("/notification/read", notifHandler.AppRead)
 	}
 
 	// 设备上报：只认 X-Device-Token（19 条：屏幕时间唯一写入路径）
