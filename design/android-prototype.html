@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>家庭积分 · Android 原型（15 界面）</title>
+<style>
+:root{
+  --page:#EEF0F5;
+  --ink:#141821;
+  --sub:#6B7280;
+  --line:#E9ECF3;
+  --card:#FFFFFF;
+  --primary:#FF7A3D;
+  --primary-2:#FF9F5A;
+  --primary-soft:#FFF1E9;
+  --green:#16A34A;
+  --green-soft:#E8F7EE;
+  --red:#E5484D;
+  --red-soft:#FDECEC;
+  --gold:#F5A524;
+  --violet:#7C5CFF;
+  --blue:#3B82F6;
+  --app-bg:#F6F7FB;
+}
+*{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+html,body{margin:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  background:
+    radial-gradient(1200px 600px at 12% -10%, #FFF3EA 0%, transparent 55%),
+    radial-gradient(900px 500px at 92% 0%, #EAF0FF 0%, transparent 50%),
+    var(--page);
+  color:var(--ink);
+  padding:0 0 80px;
+}
+
+/* ---------- 页面头 ---------- */
+.page-head{max-width:1440px;margin:0 auto;padding:56px 40px 12px}
+.brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:34px;letter-spacing:-.6px;font-weight:750}
+.brand .tag{
+  font-size:13px;font-weight:600;color:var(--primary);
+  background:#fff;border:1px solid #FFDCC8;border-radius:999px;padding:5px 12px;
+  box-shadow:0 1px 2px rgba(20,24,33,.04)
+}
+.lead{margin:14px 0 0;color:var(--sub);font-size:15px;line-height:1.7;max-width:760px}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+.meta span{
+  font-size:12.5px;color:#4B5563;background:#fff;border:1px solid var(--line);
+  border-radius:8px;padding:6px 11px;font-variant-numeric:tabular-nums
+}
+
+/* ---------- 网格 ---------- */
+.grid{
+  max-width:1440px;margin:34px auto 0;padding:0 40px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(322px,1fr));
+  gap:46px 34px;justify-items:center
+}
+figure{margin:0;width:320px;position:relative}
+.cap{display:flex;align-items:center;gap:8px;margin-bottom:14px;min-height:26px}
+.cap .no{
+  font-size:12px;font-weight:700;color:#fff;background:#20242E;
+  border-radius:7px;padding:3px 7px;font-variant-numeric:tabular-nums;letter-spacing:.2px
+}
+.cap .nm{font-size:15px;font-weight:650;letter-spacing:-.2px}
+.cap .only{
+  margin-left:auto;font-size:11px;font-weight:600;color:var(--violet);
+  background:#F2EFFF;border:1px solid #DED6FF;border-radius:999px;padding:3px 9px;white-space:nowrap
+}
+figcaption{margin-top:14px;font-size:12.5px;line-height:1.65;color:#7A8091}
+
+/* ---------- 手机外壳 ---------- */
+.phone{
+  width:320px;height:693px;border-radius:38px;background:#111318;
+  padding:9px;box-shadow:
+    0 2px 4px rgba(16,20,30,.10),
+    0 18px 40px -12px rgba(16,20,30,.28),
+    0 40px 80px -30px rgba(16,20,30,.22);
+  cursor:zoom-in;transition:transform .22s ease, box-shadow .22s ease;
+  position:relative
+}
+.phone:hover{transform:translateY(-4px);box-shadow:0 4px 8px rgba(16,20,30,.12),0 26px 54px -14px rgba(16,20,30,.32),0 50px 90px -30px rgba(16,20,30,.26)}
+.viewport{width:302px;height:675px;border-radius:30px;overflow:hidden;background:var(--app-bg);position:relative}
+.screen{
+  width:375px;height:812px;transform:scale(.80533);transform-origin:top left;
+  background:var(--app-bg);display:flex;flex-direction:column;position:relative;overflow:hidden
+}
+.notch{
+  position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:104px;height:22px;background:#111318;border-radius:0 0 14px 14px;z-index:60
+}
+
+/* ---------- 状态栏 / 导航 ---------- */
+.status{
+  height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px 0 26px;font-size:12.5px;font-weight:650;letter-spacing:.2px;color:#141821
+}
+.status .right{display:flex;align-items:center;gap:5px}
+.sig{display:flex;align-items:flex-end;gap:1.5px;height:9px}
+.sig i{width:2.5px;background:#141821;border-radius:1px;display:block}
+.sig i:nth-child(1){height:3px}.sig i:nth-child(2){height:5px}
+.sig i:nth-child(3){height:7px}.sig i:nth-child(4){height:9px}
+.bat{width:20px;height:10px;border:1.2px solid #141821;border-radius:3px;position:relative}
+.bat::after{content:"";position:absolute;right:-3px;top:2.5px;width:2px;height:4px;background:#141821;border-radius:0 1px 1px 0}
+.bat i{position:absolute;inset:1.4px;width:70%;background:#141821;border-radius:1px;display:block}
+
+.appbar{
+  flex:0 0 auto;padding:4px 20px 12px;display:flex;align-items:center;gap:12px;
+  background:transparent
+}
+.appbar h2{margin:0;font-size:21px;font-weight:700;letter-spacing:-.4px}
+.appbar .sp{flex:1}
+.iconbtn{
+  width:36px;height:36px;border-radius:12px;background:#fff;border:1px solid var(--line);
+  display:grid;place-items:center;color:#2A2F3A;position:relative
+}
+.iconbtn.dot::after{
+  content:"";position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;
+  background:var(--red);border:2px solid #fff
+}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ic.sm{width:15px;height:15px}
+.ic.lg{width:22px;height:22px}
+
+.body{flex:1;min-height:0;padding:0 18px 12px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+
+/* ---------- 底部 tab ---------- */
+.tabbar{
+  flex:0 0 68px;display:flex;align-items:flex-start;justify-content:space-around;
+  background:rgba(255,255,255,.94);border-top:1px solid #EDEFF5;padding-top:9px;
+  backdrop-filter:blur(8px)
+}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;color:#A2A8B6;font-size:10.5px;font-weight:600}
+.tab.on{color:var(--primary)}
+.tab .ic{width:21px;height:21px;stroke-width:1.9}
+
+/* ---------- 通用组件 ---------- */
+.card{background:var(--card);border-radius:18px;border:1px solid var(--line);overflow:hidden}
+.pad{padding:14px}
+.seg{display:flex;background:#EBEEF5;border-radius:12px;padding:3px;gap:3px}
+.seg b{
+  flex:1;text-align:center;font-size:13.5px;font-weight:650;color:#6B7280;
+  padding:7px 0;border-radius:9px
+}
+.seg b.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(20,24,33,.10)}
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chip{
+  font-size:12px;font-weight:600;color:#5B6472;background:#fff;border:1px solid var(--line);
+  border-radius:999px;padding:5px 11px
+}
+.chip.on{background:#20242E;border-color:#20242E;color:#fff}
+.row{display:flex;align-items:center;gap:11px;padding:11px 13px;background:#fff;border-radius:16px;border:1px solid var(--line)}
+.grow{flex:1;min-width:0}
+.t1{font-size:14px;font-weight:640;letter-spacing:-.1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t2{font-size:11.5px;color:#8A909E;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.av{
+  width:40px;height:40px;border-radius:13px;display:grid;place-items:center;font-size:19px;
+  background:linear-gradient(140deg,#FFE7D6,#FFD2B4);flex:0 0 auto
+}
+.av.lg{width:58px;height:58px;border-radius:19px;font-size:27px}
+.av.sm{width:32px;height:32px;border-radius:11px;font-size:15px}
+.av.b{background:linear-gradient(140deg,#E4ECFF,#CBD9FF)}
+.av.g{background:linear-gradient(140deg,#DFF5E5,#BFEACD)}
+.av.y{background:linear-gradient(140deg,#FFF3D6,#FFE3A8)}
+.av.p{background:linear-gradient(140deg,#EFE7FF,#DCCDFF)}
+.tag{font-size:10px;font-weight:700;padding:2px 6px;border-radius:6px;letter-spacing:.2px}
+.tag.lead{background:#F2EFFF;color:var(--violet)}
+.tag.me{background:#FFF1E9;color:var(--primary)}
+.num{font-size:16px;font-weight:750;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+.num.up{color:var(--green)}
+.num.dn{color:var(--red)}
+.muted{color:#8A909E}
+.hint{font-size:11.5px;color:#8A909E;line-height:1.6}
+.btn{
+  display:block;width:100%;text-align:center;border:0;border-radius:14px;
+  padding:13px 0;font-size:15px;font-weight:700;font-family:inherit;
+  background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;
+  box-shadow:0 8px 18px -8px rgba(255,122,61,.75)
+}
+.btn.ghost{background:#fff;color:#3A4150;border:1px solid var(--line);box-shadow:none}
+.btn.danger{background:#fff;color:var(--red);border:1px solid #F8D7D8;box-shadow:none}
+.btn.sm{padding:8px 0;font-size:13px;border-radius:11px;box-shadow:none;width:auto;padding-left:14px;padding-right:14px}
+.sec-title{font-size:12px;font-weight:700;color:#8A909E;letter-spacing:.6px;padding:0 2px}
+
+/* ---------- 启动页 ---------- */
+.splash{
+  background:linear-gradient(165deg,#FF8A4C 0%,#FF6B35 46%,#F2542D 100%);
+  align-items:center;justify-content:center;color:#fff
+}
+.splash .logo{
+  width:88px;height:88px;border-radius:26px;background:rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.35);display:grid;place-items:center;
+  box-shadow:0 20px 40px -16px rgba(120,30,0,.55)
+}
+.splash h1{margin:22px 0 6px;font-size:27px;font-weight:750;letter-spacing:1px}
+.splash p{margin:0;font-size:13px;opacity:.85;letter-spacing:.4px}
+.splash .foot{position:absolute;bottom:56px;left:0;right:0;text-align:center;font-size:12px;opacity:.8}
+.dots{display:inline-flex;gap:5px;margin-right:7px;vertical-align:middle}
+.dots i{width:5px;height:5px;border-radius:50%;background:#fff;opacity:.45;animation:bl 1.1s infinite}
+.dots i:nth-child(2){animation-delay:.16s}.dots i:nth-child(3){animation-delay:.32s}
+@keyframes bl{0%,100%{opacity:.25}50%{opacity:1}}
+
+/* ---------- 榜单 ---------- */
+.rank{display:flex;align-items:center;gap:11px;padding:11px 12px;background:#fff;border-radius:16px;border:1px solid var(--line)}
+.rank .no{
+  width:24px;text-align:center;font-size:14px;font-weight:800;color:#B4BAC7;
+  font-variant-numeric:tabular-nums;flex:0 0 auto
+}
+.rank.p1{border-color:#FFE0C4;background:linear-gradient(120deg,#FFF9F4,#fff)}
+.rank.p1 .no{color:#F59E0B}
+.rank.p2 .no{color:#94A3B8}
+.rank.p3 .no{color:#C08457}
+.frozen{font-size:10px;color:#B0824A;background:#FFF6E8;border-radius:5px;padding:1px 5px;margin-left:4px}
+.fire{font-size:10.5px;color:#F97316;font-weight:700}
+
+/* ---------- 记录 ---------- */
+.src{
+  width:34px;height:34px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;
+  background:#F3F5FA;font-size:15px
+}
+.src.screen{background:#EAF1FF;color:#3B82F6}
+.src.night{background:#EFE9FF;color:#7C5CFF}
+.src.task{background:#FFF1E6;color:#F97316}
+.src.transfer{background:#E9F8EE;color:#16A34A}
+.src.redeem{background:#FDEDEE;color:#E5484D}
+.date-sep{font-size:11.5px;font-weight:700;color:#9AA0AE;padding:2px 4px}
+
+/* ---------- 商城 ---------- */
+.goods{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.good{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:7px}
+.good .emo{font-size:26px;line-height:1}
+.good .nm{font-size:13.5px;font-weight:650}
+.good .cost{font-size:12px;color:var(--primary);font-weight:750;font-variant-numeric:tabular-nums}
+.good .btn{padding:7px 0;font-size:12.5px;border-radius:10px}
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:24px 24px 0 0;
+  padding:18px 20px 26px;box-shadow:0 -12px 40px -12px rgba(20,24,33,.28);z-index:30
+}
+.sheet .bar{width:38px;height:4px;border-radius:2px;background:#E2E6EE;margin:0 auto 16px}
+.scrim{position:absolute;inset:0;background:rgba(16,20,30,.35);z-index:20}
+
+/* ---------- 屏幕时间 ---------- */
+.ring{display:grid;place-items:center;position:relative;margin:2px 0 4px}
+.ring .center{position:absolute;text-align:center}
+.ring .big{font-size:30px;font-weight:750;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.ring .cap2{font-size:11px;color:#8A909E;margin-top:1px}
+.stat{display:flex;align-items:center;gap:10px;padding:10px 13px;background:#fff;border-radius:14px;border:1px solid var(--line)}
+.ok{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:var(--green-soft);color:var(--green);flex:0 0 auto}
+.warn{background:#FFF6E8;color:#D97706}
+
+/* ---------- 设置 ---------- */
+.list{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.li{display:flex;align-items:center;gap:11px;padding:13px 14px;border-bottom:1px solid #F1F3F8}
+.li:last-child{border-bottom:0}
+.li .chev{color:#C3C8D4}
+.li.danger .t1{color:var(--red)}
+
+/* ---------- 任务 ---------- */
+.task{background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px}
+.task .top{display:flex;align-items:flex-start;gap:8px}
+.task .tt{font-size:14.5px;font-weight:680;flex:1;letter-spacing:-.1px}
+.task .pts{font-size:15px;font-weight:800;color:var(--primary);font-variant-numeric:tabular-nums;white-space:nowrap}
+.task .meta2{display:flex;gap:10px;font-size:11.5px;color:#8A909E;margin-top:8px}
+.task .acts{display:flex;gap:8px;margin-top:11px}
+.progress{height:7px;border-radius:4px;background:#EFF1F6;overflow:hidden;margin-top:10px}
+.progress i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,#FF9F5A,#FF7A3D)}
+
+/* ---------- 通知 ---------- */
+.notif{display:flex;gap:11px;padding:12px 13px;background:#fff;border:1px solid var(--line);border-radius:16px;position:relative}
+.notif.unread{border-color:#FFE0CC;background:linear-gradient(120deg,#FFFBF7,#fff)}
+.notif .udot{position:absolute;top:13px;right:12px;width:7px;height:7px;border-radius:50%;background:var(--primary)}
+.notif.read .t1{color:#6B7280;font-weight:600}
+.notif.read .src{opacity:.55}
+
+/* ---------- 放大层 ---------- */
+.lightbox{
+  position:fixed;inset:0;background:rgba(12,15,22,.86);backdrop-filter:blur(6px);
+  display:none;place-items:center;z-index:200;padding:24px;cursor:zoom-out
+}
+.lightbox.on{display:grid}
+.lightbox .phone{cursor:zoom-out;transform:none!important}
+.lightbox .phone .screen{transform:scale(1)}
+.lightbox .phone{width:397px;height:842px}
+.lightbox .phone .viewport{width:379px;height:824px}
+.foot-note{max-width:1440px;margin:56px auto 0;padding:0 40px;color:#8A909E;font-size:12.5px;line-height:1.9}
+.foot-note b{color:#4B5563}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-task" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.2l2.4 2.4 4.6-4.8"/></symbol>
+  <symbol id="i-shop" viewBox="0 0 24 24"><path d="M5 8h14l-1.2 11a1 1 0 0 1-1 .9H7.2a1 1 0 0 1-1-.9z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6.5 17h11l-1.2-2.2V11a4.3 4.3 0 1 0-8.6 0v3.8z"/><path d="M10.2 19.5a2 2 0 0 0 3.6 0"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M5.5 19.5c.6-3.3 3.3-5 6.5-5s5.9 1.7 6.5 5"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 6.5h16M7 12h10M10 17.5h4"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5.5 12.5l4.2 4.2L18.5 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="10" height="10" rx="2.5"/><path d="M15 6.5A2.5 2.5 0 0 0 12.5 4H6.5A2.5 2.5 0 0 0 4 6.5v6A2.5 2.5 0 0 0 6.5 15"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.2 8.2 0 1 0 10.5 10.5z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="11" rx="2"/><path d="M4 13h16M12 9v11M8.5 9a2.5 2.5 0 1 1 0-5C10.8 4 12 9 12 9s1.2-5 3.5-5a2.5 2.5 0 1 1 0 5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></symbol>
+</svg>
+
+<div class="page-head">
+  <div class="brand">
+    <h1>家庭积分 · Android 原型</h1>
+    <span class="tag">15 个界面</span>
+  </div>
+  <p class="lead">
+    严格对应 <b>docs/features.md 第 13 节</b>的界面清单，按已冻结的数据模型与接口口径绘制：
+    积分榜看「余额（含冻结）」、得分榜看「区间正分」、任务走「冻结 → 投票过半 → 转移」、
+    头像只用预设标识、屏幕时间仅设备自动上报（无手动入口）。
+  </p>
+  <div class="meta">
+    <span>Kotlin + Jetpack Compose</span>
+    <span>375 × 812 @ 基准</span>
+    <span>5 个主 Tab：首页 / 任务 / 商城 / 通知 / 我的</span>
+    <span>紫色角标 = 仅组长可见</span>
+    <span>点击任一屏幕可放大</span>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- ========== 13.1 启动页 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.1</span><span class="nm">启动页</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen splash">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div class="logo">
+            <svg class="ic" style="width:44px;height:44px;stroke:#fff;stroke-width:1.6"><use href="#i-home"/></svg>
+          </div>
+          <h1>家庭积分</h1>
+          <p>让每一分努力，都被看见</p>
+        </div>
+        <div class="foot"><span class="dots"><i></i><i></i><i></i></span>正在检查登录状态…</div>
+      </div>
+    </div></div>
+    <figcaption>本地校验 Access Token：有效 → 直进首页；过期 → 静默用 Refresh 换新；失败才落到登录页。不出现白屏。</figcaption>
+  </figure>
+
+  <!-- ========== 13.2 登录 / 注册 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.2</span><span class="nm">登录 / 注册</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div style="padding:26px 24px 0">
+          <h1 style="margin:0;font-size:27px;letter-spacing:-.6px">欢迎回来</h1>
+          <p style="margin:8px 0 0;font-size:13px;color:#8A909E">登录后查看家里的积分榜</p>
+        </div>
+        <div class="body" style="padding:22px 24px 0;gap:14px">
+          <div class="seg"><b class="on">登录</b><b>注册</b></div>
+          <div class="card pad" style="display:flex;flex-direction:column;gap:12px">
+            <div>
+              <div style="font-size:11.5px;color:#8A909E;margin-bottom:6px">用户名</div>
+              <div style="background:#F5F7FB;border-radius:12px;padding:12px 13px;font-size:14px;color:#20242E">xiaoxing</div>
+            </div>
+            <div>
+              <div style="font-size:11.5px;color:#8A909E;margin-bottom:6px">密码</div>
+              <div style="background:#F5F7FB;border-radius:12px;padding:12px 13px;font-size:14px;color:#20242E;letter-spacing:3px">••••••••</div>
+            </div>
+          </div>
+          <button class="btn">登录</button>
+          <div class="card pad" style="display:flex;gap:10px;align-items:center;background:#FFFCF9;border-color:#FFE7D6">
+            <div class="src" style="background:#FFF1E9;color:#FF7A3D;font-size:15px">＋</div>
+            <div class="grow">
+              <div class="t1" style="font-size:13px">还没有账号？</div>
+              <div class="t2">注册时可顺带创建家庭组，成为组长</div>
+            </div>
+            <svg class="ic sm" style="color:#C3C8D4"><use href="#i-chev"/></svg>
+          </div>
+          <div class="hint" style="text-align:center">管理员账号不走这里 · 后台登录在 Web 端</div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>同一页面切换「注册」：多出昵称与「创建家庭组」开关。管理员无法通过此页产生（决策 24）。</figcaption>
+  </figure>
+
+  <!-- ========== 13.3 积分榜 / 得分榜 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.3</span><span class="nm">积分榜 / 得分榜</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar">
+          <h2>星星之家</h2><span class="sp"></span>
+          <div class="iconbtn dot"><svg class="ic"><use href="#i-bell"/></svg></div>
+        </div>
+        <div class="body">
+          <div class="seg"><b class="on">积分榜</b><b>得分榜</b></div>
+          <div class="chips">
+            <span class="chip on">全部成员</span>
+            <span class="chip">只看孩子</span>
+          </div>
+          <div class="rank p1">
+            <span class="no">1</span>
+            <div class="av y">🐻</div>
+            <div class="grow">
+              <div class="t1">妈妈 <span class="tag lead">组长</span></div>
+              <div class="t2">可用 180 · <span class="fire">🔥 连续 12 天</span></div>
+            </div>
+            <div style="text-align:right">
+              <div class="num">210</div>
+              <div class="t2" style="font-size:10.5px">分</div>
+            </div>
+          </div>
+          <div class="rank p2">
+            <span class="no">2</span>
+            <div class="av b">🦊</div>
+            <div class="grow">
+              <div class="t1">爸爸</div>
+              <div class="t2">可用 155 · <span class="fire">🔥 连续 4 天</span></div>
+            </div>
+            <div style="text-align:right"><div class="num">155</div><div class="t2" style="font-size:10.5px">分</div></div>
+          </div>
+          <div class="rank p3">
+            <span class="no">3</span>
+            <div class="av">🐰</div>
+            <div class="grow">
+              <div class="t1">小星 <span class="tag me">我</span></div>
+              <div class="t2">可用 98 <span class="frozen">30 冻结中</span> · <span class="fire">🔥 5 天</span></div>
+            </div>
+            <div style="text-align:right"><div class="num">128</div><div class="t2" style="font-size:10.5px">分</div></div>
+          </div>
+          <div class="rank">
+            <span class="no">4</span>
+            <div class="av g">🐼</div>
+            <div class="grow">
+              <div class="t1">小月</div>
+              <div class="t2">可用 68 · <span class="fire">🔥 连续 1 天</span></div>
+            </div>
+            <div style="text-align:right"><div class="num">68</div><div class="t2" style="font-size:10.5px">分</div></div>
+          </div>
+          <div class="hint">积分榜 = 可用 + 冻结（钱还是你的，只是动不了）<br>得分榜 = 本周/本月赚到的正分，兑换不扣它</div>
+        </div>
+        <div class="tabbar">
+          <div class="tab on"><svg class="ic"><use href="#i-home"/></svg><span>首页</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-task"/></svg><span>任务</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-shop"/></svg><span>商城</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-bell"/></svg><span>通知</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-user"/></svg><span>我的</span></div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>切「得分榜」后出现 本周 / 本月 切换（周一起算）。两个榜名次可以不同，是设计意图。</figcaption>
+  </figure>
+
+  <!-- ========== 13.4 成员详情 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.4</span><span class="nm">成员详情</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar">
+          <div class="iconbtn"><svg class="ic"><use href="#i-back"/></svg></div>
+          <h2 style="font-size:17px">成员详情</h2>
+        </div>
+        <div class="body">
+          <div class="card pad" style="display:flex;gap:14px;align-items:center">
+            <div class="av lg">🐰</div>
+            <div class="grow">
+              <div style="font-size:18px;font-weight:720;letter-spacing:-.3px">小星</div>
+              <div class="t2">@xiaoxing · 加入于 9 月 12 日</div>
+              <div style="margin-top:7px"><span class="fire">🔥 连续达标 5 天</span></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px">
+            <div class="card pad" style="text-align:center;padding:12px 6px">
+              <div class="num" style="color:#FF7A3D">128</div><div class="t2" style="font-size:10.5px">总积分</div>
+            </div>
+            <div class="card pad" style="text-align:center;padding:12px 6px">
+              <div class="num">98</div><div class="t2" style="font-size:10.5px">可用</div>
+            </div>
+            <div class="card pad" style="text-align:center;padding:12px 6px">
+              <div class="num" style="color:#B0824A">30</div><div class="t2" style="font-size:10.5px">冻结</div>
+            </div>
+          </div>
+          <div class="sec-title">最近记录</div>
+          <div class="row">
+            <div class="src night">🌙</div>
+            <div class="grow"><div class="t1">按时睡觉 · 连续 5 天</div><div class="t2">今天 07:02 · 含档位 +5</div></div>
+            <div class="num up">+7</div>
+          </div>
+          <div class="row">
+            <div class="src screen">📱</div>
+            <div class="grow"><div class="t1">屏幕时间 86 分钟（阈值 120）</div><div class="t2">今天 07:02</div></div>
+            <div class="num up">+2</div>
+          </div>
+          <div class="row">
+            <div class="src redeem">🍦</div>
+            <div class="grow"><div class="t1">兑换：冰淇淋</div><div class="t2">昨天 18:30</div></div>
+            <div class="num dn">-30</div>
+          </div>
+          <div class="hint" style="text-align:center">上拉加载更多 · 服务端分页 50/页</div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>只读视图：别人看得到积分与流水，看不到「我的兑换」操作按钮。记录按 occurred_at 倒序。</figcaption>
+  </figure>
+
+  <!-- ========== 13.5 最近记录 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.5</span><span class="nm">最近记录</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar">
+          <h2>最近记录</h2><span class="sp"></span>
+          <div class="iconbtn"><svg class="ic"><use href="#i-filter"/></svg></div>
+        </div>
+        <div class="body">
+          <div class="chips">
+            <span class="chip on">全部成员</span><span class="chip">小星</span>
+            <span class="chip">小月</span><span class="chip">爸爸</span><span class="chip">妈妈</span>
+          </div>
+          <div class="chips">
+            <span class="chip">全部类型</span><span class="chip on">仅加分</span><span class="chip">仅扣分</span>
+          </div>
+          <div class="date-sep">今天</div>
+          <div class="row">
+            <div class="src night">🌙</div>
+            <div class="grow"><div class="t1">小星 · 按时睡觉</div><div class="t2">07:02 · 连续 5 天，含档位 +5</div></div>
+            <div class="num up">+7</div>
+          </div>
+          <div class="row">
+            <div class="src task">🎯</div>
+            <div class="grow"><div class="t1">妈妈 → 小星 · 任务「倒垃圾」</div><div class="t2">06:40 · 全员投票通过</div></div>
+            <div class="num up">+10</div>
+          </div>
+          <div class="row">
+            <div class="src transfer">🎁</div>
+            <div class="grow"><div class="t1">妈妈 → 小星 · 赠送</div><div class="t2">昨天 21:10 · 生日快乐</div></div>
+            <div class="num up">+20</div>
+          </div>
+          <div class="date-sep">昨天</div>
+          <div class="row">
+            <div class="src redeem">🍦</div>
+            <div class="grow"><div class="t1">小星 · 兑换冰淇淋</div><div class="t2">18:30</div></div>
+            <div class="num dn">-30</div>
+          </div>
+          <div class="row">
+            <div class="src screen">📱</div>
+            <div class="grow"><div class="t1">小星 · 屏幕时间 132 分钟（超 12）</div><div class="t2">07:01</div></div>
+            <div class="num dn">-3</div>
+          </div>
+          <div class="hint" style="text-align:center">共 218 条 · 上拉加载更多</div>
+        </div>
+        <div class="tabbar">
+          <div class="tab on"><svg class="ic"><use href="#i-home"/></svg><span>首页</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-task"/></svg><span>任务</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-shop"/></svg><span>商城</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-bell"/></svg><span>通知</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-user"/></svg><span>我的</span></div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>筛选走服务端（member_id / source / 日期范围 / 关键字），不是本地过滤——记录量没有 500 条上限。</figcaption>
+  </figure>
+
+  <!-- ========== 13.6 我的兑换 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.6</span><span class="nm">我的兑换（商城）</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar"><h2>兑换商城</h2></div>
+        <div class="body" style="padding-bottom:0">
+          <div class="card pad" style="display:flex;align-items:center;gap:12px;background:linear-gradient(120deg,#FFF6EF,#fff);border-color:#FFE3D0">
+            <div class="grow">
+              <div class="t2" style="color:#B0824A">我的可用积分</div>
+              <div style="font-size:26px;font-weight:780;letter-spacing:-1px;color:#E2542A;font-variant-numeric:tabular-nums">98 <span style="font-size:13px;font-weight:600">分</span></div>
+            </div>
+            <div style="text-align:right">
+              <div class="t2">另有 30 分冻结中</div>
+              <div class="t2" style="color:#B0824A">任务结算后释放</div>
+            </div>
+          </div>
+          <div class="goods">
+            <div class="good"><div class="emo">🍦</div><div class="nm">冰淇淋</div><div class="cost">30 分</div><button class="btn">兑换</button></div>
+            <div class="good"><div class="emo">🎮</div><div class="nm">游戏 30 分钟</div><div class="cost">50 分</div><button class="btn">兑换</button></div>
+            <div class="good"><div class="emo">🎬</div><div class="nm">周末电影票</div><div class="cost">80 分</div><button class="btn">兑换</button></div>
+            <div class="good" style="opacity:.55"><div class="emo">🚲</div><div class="nm">骑车 1 小时</div><div class="cost" style="color:#B4BAC7">120 分</div><button class="btn ghost" style="color:#B4BAC7">积分不足</button></div>
+          </div>
+        </div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="bar"></div>
+          <div style="font-size:17px;font-weight:720;letter-spacing:-.3px">确认兑换</div>
+          <div class="card pad" style="margin-top:12px;display:flex;align-items:center;gap:12px;border-color:#FFE3D0;background:#FFFCF9">
+            <div style="font-size:26px">🍦</div>
+            <div class="grow"><div class="t1">冰淇淋</div><div class="t2">消耗 30 分 · 兑换后余额 68 分</div></div>
+          </div>
+          <div class="hint" style="margin:12px 2px 0">兑换后<b style="color:#E5484D">不可撤销</b>，请确认孩子真的想要。</div>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <button class="btn ghost">取消</button>
+            <button class="btn">确认兑换</button>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>余额不足的卡片置灰且不可点。确认弹层是最后一道拦截；扣分与写负分流水在同一事务里。</figcaption>
+  </figure>
+
+  <!-- ========== 13.7 赠送积分 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.7</span><span class="nm">赠送积分</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar">
+          <div class="iconbtn"><svg class="ic"><use href="#i-back"/></svg></div>
+          <h2 style="font-size:17px">赠送积分</h2>
+        </div>
+        <div class="body">
+          <div class="sec-title">送给谁</div>
+          <div style="display:flex;gap:9px">
+            <div style="flex:1;text-align:center;background:#fff;border:1px solid #FFD9C2;border-radius:14px;padding:10px 0">
+              <div class="av sm" style="margin:0 auto 6px;background:linear-gradient(140deg,#DFF5E5,#BFEACD)">🐼</div>
+              <div style="font-size:12px;font-weight:650">小月</div>
+            </div>
+            <div style="flex:1;text-align:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 0">
+              <div class="av sm b" style="margin:0 auto 6px">🦊</div>
+              <div style="font-size:12px;font-weight:650;color:#6B7280">爸爸</div>
+            </div>
+            <div style="flex:1;text-align:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 0">
+              <div class="av sm y" style="margin:0 auto 6px">🐻</div>
+              <div style="font-size:12px;font-weight:650;color:#6B7280">妈妈</div>
+            </div>
+          </div>
+          <div class="card pad" style="text-align:center">
+            <div class="t2">赠送金额</div>
+            <div style="font-size:38px;font-weight:780;letter-spacing:-1.5px;color:#20242E;font-variant-numeric:tabular-nums;margin:2px 0 4px">20</div>
+            <div class="chips" style="justify-content:center">
+              <span class="chip">5</span><span class="chip on">20</span><span class="chip">50</span><span class="chip">全部</span>
+            </div>
+            <div class="hint" style="margin-top:9px">可用 98 分 · 不设上限，唯一约束是余额</div>
+          </div>
+          <div class="card pad" style="display:flex;gap:10px;align-items:center">
+            <svg class="ic" style="color:#C3C8D4"><use href="#i-gift"/></svg>
+            <div class="grow"><div class="t2" style="margin:0">附言（可选，≤64 字）</div></div>
+            <div style="font-size:13px;color:#20242E">生日快乐 🎂</div>
+          </div>
+          <button class="btn">赠送 20 分</button>
+          <div class="sec-title" style="margin-top:2px">赠送历史</div>
+          <div class="row" style="padding:9px 13px">
+            <div class="src transfer">🎁</div>
+            <div class="grow"><div class="t1" style="font-size:13px">妈妈 → 我 · +20</div><div class="t2">昨天 21:10 · 生日快乐</div></div>
+          </div>
+          <div class="row" style="padding:9px 13px">
+            <div class="src transfer">🎁</div>
+            <div class="grow"><div class="t1" style="font-size:13px">我 → 小月 · -10</div><div class="t2">10 月 28 日 · 借你的橡皮</div></div>
+          </div>
+          <div class="hint">赠送不可撤销，转出前请确认金额。</div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>赠送是「转移」：家庭总积分不变。受赠方会收到站内通知，转账不设每日上限。</figcaption>
+  </figure>
+
+  <!-- ========== 13.8 任务 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.8</span><span class="nm">任务</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar">
+          <h2>任务</h2><span class="sp"></span>
+          <div class="iconbtn"><svg class="ic"><use href="#i-plus"/></svg></div>
+        </div>
+        <div class="body">
+          <div class="seg"><b class="on">待接取</b><b>我的任务</b><b>我发布的</b></div>
+          <div class="task">
+            <div class="top">
+              <div class="tt">倒垃圾</div>
+              <div class="pts">10 分</div>
+            </div>
+            <div class="meta2"><span>👩 妈妈发布</span><span>今天 20:00 截止</span></div>
+            <div class="acts">
+              <button class="btn sm" style="flex:1">接取任务</button>
+            </div>
+          </div>
+          <div class="task">
+            <div class="top"><div class="tt">整理书桌并拍照说明</div><div class="pts">30 分</div></div>
+            <div class="meta2"><span>👨 爸爸发布</span><span>明天 12:00 截止</span></div>
+            <div class="acts"><button class="btn sm" style="flex:1">接取任务</button></div>
+          </div>
+          <div class="task" style="border-color:#FFE0CC;background:#FFFCF9">
+            <div class="top">
+              <div class="tt">给花浇水</div>
+              <div class="pts">15 分</div>
+            </div>
+            <div class="meta2"><span>👩 妈妈发布</span><span style="color:#FF7A3D;font-weight:650">我已接取</span></div>
+            <div class="acts">
+              <button class="btn sm ghost" style="flex:1">放弃</button>
+              <button class="btn sm" style="flex:2">提交完成</button>
+            </div>
+          </div>
+          <div class="hint">发布任务会从你的可用积分里<b>冻结</b>等额分值，任务关闭时自动退回。</div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg class="ic"><use href="#i-home"/></svg><span>首页</span></div>
+          <div class="tab on"><svg class="ic"><use href="#i-task"/></svg><span>任务</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-shop"/></svg><span>商城</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-bell"/></svg><span>通知</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-user"/></svg><span>我的</span></div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>「提交完成」只需文字说明（必填，无图片凭证）。自己发布的任务不出现在待接取里。</figcaption>
+  </figure>
+
+  <!-- ========== 13.9 任务投票 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.9</span><span class="nm">任务投票</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar">
+          <h2>任务投票</h2><span class="sp"></span>
+          <span class="chip" style="background:#FFF1E9;border-color:#FFE0CC;color:#E2542A">2 待投</span>
+        </div>
+        <div class="body">
+          <div class="card pad">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="av sm">🐰</div>
+              <div class="grow"><div class="t1" style="font-size:13.5px">小星 提交了「倒垃圾」</div><div class="t2">10 分 · 3 小时前</div></div>
+            </div>
+            <div style="background:#F7F8FC;border-radius:12px;padding:11px 12px;margin-top:11px;font-size:13px;color:#3A4150;line-height:1.6">
+              「已倒完，垃圾袋换成新的了，厨房那袋也一起带下去了。」
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;font-size:12px">
+              <span style="color:#16A34A;font-weight:700">已同意 1</span>
+              <span style="color:#8A909E">需 2 票过半（共 2 人有投票权）</span>
+            </div>
+            <div class="progress"><i style="width:50%"></i></div>
+            <div class="meta2" style="display:flex;gap:10px;font-size:11.5px;color:#8A909E;margin-top:9px">
+              <span>⏳ 还剩 20 小时</span><span>发布者无投票权</span>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:13px">
+              <button class="btn ghost" style="flex:1;color:#E5484D;border-color:#F8D7D8">反对</button>
+              <button class="btn" style="flex:2">同意</button>
+            </div>
+          </div>
+          <div class="card pad" style="opacity:.72">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="av sm g">🐼</div>
+              <div class="grow"><div class="t1" style="font-size:13.5px">小月 提交了「整理书桌」</div><div class="t2">30 分 · 昨天</div></div>
+              <span class="tag" style="background:#F2F3F7;color:#8A909E">你已投同意</span>
+            </div>
+            <div class="progress" style="margin-top:11px"><i style="width:100%;background:#16A34A"></i></div>
+            <div class="hint" style="margin-top:8px">2/2 已同意 · 等待结算</div>
+          </div>
+          <div class="card pad" style="background:#FAFBFF;border-color:#E4EAF7">
+            <div style="font-size:12px;font-weight:700;color:#5B6472;margin-bottom:8px">投票怎么算</div>
+            <div style="font-size:11.5px;color:#7A8091;line-height:1.85">
+              · 同意票 <b style="color:#3A4150">超过半数</b>才算通过，2 人投票需 2 票<br>
+              · <b style="color:#3A4150">发布者不投票</b>，也不计入分母<br>
+              · 反对票足以否决时立即驳回，不必等超时<br>
+              · 超时未过半 → 作废，任务回到待接取
+            </div>
+          </div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg class="ic"><use href="#i-home"/></svg><span>首页</span></div>
+          <div class="tab on"><svg class="ic"><use href="#i-task"/></svg><span>任务</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-shop"/></svg><span>商城</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-bell"/></svg><span>通知</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-user"/></svg><span>我的</span></div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>票数实时刷新（X / Y）。发布者看得到但不显示投票按钮；超时未过半自动置 expired，任务回到待接取。</figcaption>
+  </figure>
+
+  <!-- ========== 13.10 通知中心 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.10</span><span class="nm">通知中心</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar">
+          <h2>通知</h2><span class="sp"></span>
+          <span style="font-size:12.5px;color:#FF7A3D;font-weight:650">全部已读</span>
+        </div>
+        <div class="body">
+          <div class="notif unread">
+            <div class="src transfer">🎁</div>
+            <div class="grow">
+              <div class="t1">收到一笔赠送</div>
+              <div class="t2" style="white-space:normal;line-height:1.5;margin-top:3px">妈妈赠送了你 20 分 —— 生日快乐 🎂</div>
+              <div class="t2" style="margin-top:5px;color:#B4BAC7">2 分钟前</div>
+            </div>
+            <span class="udot"></span>
+          </div>
+          <div class="notif unread">
+            <div class="src task">✅</div>
+            <div class="grow">
+              <div class="t1">任务审核通过</div>
+              <div class="t2" style="white-space:normal;line-height:1.5;margin-top:3px">「倒垃圾」全员投票通过，+10 分已到账</div>
+              <div class="t2" style="margin-top:5px;color:#B4BAC7">1 小时前</div>
+            </div>
+            <span class="udot"></span>
+          </div>
+          <div class="notif read">
+            <div class="src redeem">🍦</div>
+            <div class="grow">
+              <div class="t1">兑换成功</div>
+              <div class="t2" style="white-space:normal;line-height:1.5;margin-top:3px">冰淇淋 · 消耗 30 分，记得找妈妈领</div>
+              <div class="t2" style="margin-top:5px;color:#C3C8D4">昨天 18:30</div>
+            </div>
+          </div>
+          <div class="notif read">
+            <div class="src task">❌</div>
+            <div class="grow">
+              <div class="t1">任务被驳回</div>
+              <div class="t2" style="white-space:normal;line-height:1.5;margin-top:3px">「整理书桌」被驳回：桌面还有书没归位（剩 2 次机会）</div>
+              <div class="t2" style="margin-top:5px;color:#C3C8D4">2 天前</div>
+            </div>
+          </div>
+          <div class="hint" style="text-align:center">点击任意通知跳转到对应对象</div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg class="ic"><use href="#i-home"/></svg><span>首页</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-task"/></svg><span>任务</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-shop"/></svg><span>商城</span></div>
+          <div class="tab on"><svg class="ic"><use href="#i-bell"/></svg><span>通知</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-user"/></svg><span>我的</span></div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>未读带橙点与浅橙底；点击即标记已读并跳转（ref_type + ref_id）。驳回通知里带剩余重提次数。</figcaption>
+  </figure>
+
+  <!-- ========== 13.11 屏幕时间状态 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.11</span><span class="nm">屏幕时间状态</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar"><div class="iconbtn"><svg class="ic"><use href="#i-back"/></svg></div><h2 style="font-size:17px">屏幕时间</h2></div>
+        <div class="body">
+          <div class="card pad" style="padding-top:16px">
+            <div class="ring">
+              <svg width="150" height="150" viewBox="0 0 150 150">
+                <circle cx="75" cy="75" r="62" fill="none" stroke="#EFF1F6" stroke-width="13"/>
+                <circle cx="75" cy="75" r="62" fill="none" stroke="url(#g1)" stroke-width="13"
+                        stroke-linecap="round" stroke-dasharray="390" stroke-dashoffset="110"
+                        transform="rotate(-90 75 75)"/>
+                <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#FF9F5A"/><stop offset="1" stop-color="#FF6B35"/>
+                </linearGradient></defs>
+              </svg>
+              <div class="center">
+                <div class="big">86</div>
+                <div class="cap2">分钟 / 阈值 120</div>
+              </div>
+            </div>
+            <div style="text-align:center;font-size:12.5px;color:#16A34A;font-weight:700;margin-top:2px">达标 +2 分 · 还差 34 分钟到上限</div>
+          </div>
+          <div class="stat">
+            <span class="ok"><svg class="ic sm" style="stroke-width:2.4"><use href="#i-check"/></svg></span>
+            <div class="grow"><div class="t1" style="font-size:13px">使用情况访问权限</div><div class="t2">已授权，正常采集</div></div>
+          </div>
+          <div class="stat">
+            <span class="ok"><svg class="ic sm" style="stroke-width:2.4"><use href="#i-check"/></svg></span>
+            <div class="grow"><div class="t1" style="font-size:13px">夜间判定（0:00–7:00）</div><div class="t2">夜间使用 0 分钟 · 达标</div></div>
+          </div>
+          <div class="stat">
+            <span class="ok" style="background:#FFF6E8;color:#D97706">!</span>
+            <div class="grow"><div class="t1" style="font-size:13px">后台运行权限</div><div class="t2" style="color:#D97706">未加入白名单，可能漏报</div></div>
+            <button class="btn sm" style="padding:7px 11px;font-size:12px">去设置</button>
+          </div>
+          <div class="card pad" style="padding:12px 14px 10px">
+            <div style="display:flex;align-items:center;margin-bottom:10px">
+              <div class="t2" style="margin:0">近 7 天时长（分钟）</div>
+              <span style="margin-left:auto;font-size:10.5px;color:#8A909E">阈值 120</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:7px;height:76px">
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+                <div style="width:100%;height:32px;border-radius:5px;background:#DDE3EF"></div>
+                <span style="font-size:9.5px;color:#B4BAC7">一</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+                <div style="width:100%;height:35px;border-radius:5px;background:#DDE3EF"></div>
+                <span style="font-size:9.5px;color:#B4BAC7">二</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+                <div style="width:100%;height:26px;border-radius:5px;background:#DDE3EF"></div>
+                <span style="font-size:9.5px;color:#B4BAC7">三</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+                <div style="width:100%;height:43px;border-radius:5px;background:#DDE3EF"></div>
+                <span style="font-size:9.5px;color:#B4BAC7">四</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+                <div style="width:100%;height:38px;border-radius:5px;background:#DDE3EF"></div>
+                <span style="font-size:9.5px;color:#B4BAC7">五</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+                <div style="width:100%;height:48px;border-radius:5px;background:linear-gradient(180deg,#FF9F5A,#FF7A3D)"></div>
+                <span style="font-size:9.5px;color:#FF7A3D;font-weight:700">六</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+                <div style="width:100%;height:37px;border-radius:5px;background:linear-gradient(180deg,#FFC49B,#FFA97A)"></div>
+                <span style="font-size:9.5px;color:#8A909E;font-weight:700">日</span>
+              </div>
+            </div>
+          </div>
+          <div class="card pad" style="display:flex;align-items:center;gap:10px">
+            <svg class="ic" style="color:#C3C8D4"><use href="#i-clock"/></svg>
+            <div class="grow"><div class="t1" style="font-size:13px">最近一次上报</div><div class="t2">今天 21:40 · 每 30 分钟自动上报</div></div>
+            <span class="tag" style="background:#E8F7EE;color:#16A34A">正常</span>
+          </div>
+          <div class="hint">数据只由设备自动上报，App 内没有手动填写入口。</div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>三块权限分开显示，缺哪个就单独引导（缺后台白名单是最常见的漏报原因）。夜间时长由设备端按 0–7 点切片后上报。</figcaption>
+  </figure>
+
+  <!-- ========== 13.12 设置 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.12</span><span class="nm">设置（我的）</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar"><h2>我的</h2></div>
+        <div class="body">
+          <div class="card pad" style="display:flex;gap:13px;align-items:center">
+            <div class="av lg">🐰</div>
+            <div class="grow">
+              <div style="font-size:18px;font-weight:720;letter-spacing:-.3px">小星 <span class="tag me">我</span></div>
+              <div class="t2">@xiaoxing</div>
+              <div class="t2" style="color:#B0824A;margin-top:3px">星星之家 · 成员</div>
+            </div>
+            <svg class="ic" style="color:#C3C8D4"><use href="#i-chev"/></svg>
+          </div>
+          <div class="list">
+            <div class="li">
+              <svg class="ic" style="color:#8A909E"><use href="#i-home"/></svg>
+              <div class="grow"><div class="t1">家庭组</div><div class="t2">星星之家 · 4 人</div></div>
+              <svg class="ic sm chev"><use href="#i-chev"/></svg>
+            </div>
+            <div class="li">
+              <span style="font-size:16px">🐰</span>
+              <div class="grow"><div class="t1">头像</div><div class="t2">从预设里选（不支持上传）</div></div>
+              <svg class="ic sm chev"><use href="#i-chev"/></svg>
+            </div>
+            <div class="li">
+              <svg class="ic" style="color:#8A909E"><use href="#i-lock"/></svg>
+              <div class="grow"><div class="t1">修改密码</div></div>
+              <svg class="ic sm chev"><use href="#i-chev"/></svg>
+            </div>
+            <div class="li">
+              <svg class="ic" style="color:#8A909E"><use href="#i-bell"/></svg>
+              <div class="grow"><div class="t1">通知</div></div>
+              <svg class="ic sm chev"><use href="#i-chev"/></svg>
+            </div>
+            <div class="li danger">
+              <svg class="ic" style="color:#E5484D"><use href="#i-x"/></svg>
+              <div class="grow"><div class="t1">退出家庭组</div><div class="t2" style="color:#D99">积分清零，且不能再加入该组</div></div>
+              <svg class="ic sm chev"><use href="#i-chev"/></svg>
+            </div>
+          </div>
+          <button class="btn ghost">退出登录</button>
+          <div class="hint" style="text-align:center">组长看不到「退出家庭组」——须先转让组长</div>
+        </div>
+        <div class="tabbar">
+          <div class="tab"><svg class="ic"><use href="#i-home"/></svg><span>首页</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-task"/></svg><span>任务</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-shop"/></svg><span>商城</span></div>
+          <div class="tab"><svg class="ic"><use href="#i-bell"/></svg><span>通知</span></div>
+          <div class="tab on"><svg class="ic"><use href="#i-user"/></svg><span>我的</span></div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>「退出家庭组」必须二次确认（弹窗写明积分清零 + 禁入该组）。组长视角该项换成「组长管理」入口。</figcaption>
+  </figure>
+
+  <!-- ========== 13.13 成员管理 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.13</span><span class="nm">成员管理</span><span class="only">仅组长</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar"><div class="iconbtn"><svg class="ic"><use href="#i-back"/></svg></div><h2 style="font-size:17px">成员管理</h2></div>
+        <div class="body">
+          <div class="card pad" style="background:linear-gradient(125deg,#2B3040,#171A22);border:0;color:#fff">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="grow">
+                <div style="font-size:11.5px;color:rgba(255,255,255,.6)">家庭邀请码</div>
+                <div style="font-size:24px;font-weight:780;letter-spacing:3px;margin-top:3px;white-space:nowrap">K7M2QP9X</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.5);margin-top:4px">6 天后过期 · 重置后旧码立即失效</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px;flex:0 0 66px">
+                <span style="background:rgba(255,255,255,.16);border-radius:10px;padding:7px 0;font-size:12px;font-weight:650;display:flex;gap:4px;align-items:center;justify-content:center"><svg class="ic sm" style="stroke:#fff"><use href="#i-copy"/></svg>复制</span>
+                <span style="background:rgba(255,255,255,.08);border-radius:10px;padding:7px 0;font-size:12px;color:rgba(255,255,255,.75);text-align:center">重置</span>
+              </div>
+            </div>
+          </div>
+          <div class="card pad" style="display:flex;gap:9px;align-items:center">
+            <div style="flex:1;background:#F5F7FB;border-radius:11px;padding:10px 12px;font-size:13px;color:#B4BAC7">输入已注册用户名</div>
+            <button class="btn sm">邀请</button>
+          </div>
+          <div class="sec-title">成员 · 4 人</div>
+          <div class="row">
+            <div class="av sm y">🐻</div>
+            <div class="grow"><div class="t1" style="font-size:13.5px">妈妈 <span class="tag lead">组长</span></div><div class="t2">可用 180 · 冻结 30</div></div>
+            <span style="font-size:12px;color:#B4BAC7">本人</span>
+          </div>
+          <div class="row">
+            <div class="av sm">🐰</div>
+            <div class="grow"><div class="t1" style="font-size:13.5px">小星</div><div class="t2">可用 98 · 冻结 30</div></div>
+            <button class="btn sm ghost" style="color:#E5484D;border-color:#F8D7D8">踢出</button>
+          </div>
+          <div class="row">
+            <div class="av sm b">🦊</div>
+            <div class="grow"><div class="t1" style="font-size:13.5px">爸爸</div><div class="t2">可用 155</div></div>
+            <button class="btn sm ghost">设为组长</button>
+          </div>
+          <div class="card pad" style="display:flex;align-items:center;gap:10px;background:#FAFBFF;border-color:#E4EAF7">
+            <span style="font-size:14px">⏳</span>
+            <div class="grow"><div class="t1" style="font-size:13px">待处理邀请 1</div><div class="t2">xiaoyue · 等待对方确认</div></div>
+            <span style="font-size:12px;color:#FF7A3D;font-weight:650">撤回</span>
+          </div>
+          <div class="hint" style="margin-top:2px">踢出后该成员积分清零，且不能再加入本组；组长须先转让才能离开。</div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>「设为组长」是转让：确认后自己降为成员，不能反悔要再转回来。踢出需二次确认（积分清零 + 禁入）。</figcaption>
+  </figure>
+
+  <!-- ========== 13.14 睡觉规则配置 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.14</span><span class="nm">睡觉规则配置</span><span class="only">仅组长</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar"><div class="iconbtn"><svg class="ic"><use href="#i-back"/></svg></div><h2 style="font-size:17px">睡觉规则</h2></div>
+        <div class="body" style="gap:10px">
+          <div class="card pad">
+            <div class="t2" style="margin-bottom:9px">睡觉时间点</div>
+            <div style="display:flex;gap:9px;align-items:center">
+              <div style="flex:1;background:#F5F7FB;border-radius:12px;padding:11px 13px">
+                <div style="font-size:10.5px;color:#8A909E">开始</div>
+                <div style="font-size:16px;font-weight:700;font-variant-numeric:tabular-nums">0:00</div>
+              </div>
+              <span style="color:#C3C8D4">→</span>
+              <div style="flex:1;background:#F5F7FB;border-radius:12px;padding:11px 13px">
+                <div style="font-size:10.5px;color:#8A909E">结束</div>
+                <div style="font-size:16px;font-weight:700;font-variant-numeric:tabular-nums">7:00</div>
+              </div>
+            </div>
+            <div class="hint" style="margin-top:9px">这段时间内使用手机 ≤ 允许时长，才算「按时睡觉」</div>
+          </div>
+          <div class="card pad" style="display:flex;align-items:center;gap:10px">
+            <div class="grow"><div class="t1" style="font-size:13.5px">允许夜间使用</div><div class="t2">0 分钟 = 0 点前放下手机</div></div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="width:28px;height:28px;border-radius:9px;background:#F3F5FA;display:grid;place-items:center;color:#6B7280">−</span>
+              <span style="font-size:16px;font-weight:750;font-variant-numeric:tabular-nums">0</span>
+              <span style="width:28px;height:29px;border-radius:9px;background:#FFF1E9;display:grid;place-items:center;color:#FF7A3D">＋</span>
+            </div>
+          </div>
+          <div class="card pad" style="display:flex;align-items:center;gap:10px">
+            <div class="grow"><div class="t1" style="font-size:13.5px">达标奖励</div><div class="t2">按时睡觉当天加</div></div>
+            <div style="font-size:16px;font-weight:750;color:#FF7A3D">+2</div>
+          </div>
+          <div class="card pad">
+            <div style="display:flex;align-items:center;margin-bottom:9px">
+              <div class="t2">连续奖励档位</div>
+              <span style="margin-left:auto;font-size:11.5px;color:#FF7A3D;font-weight:650">＋ 添加档位</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;background:#F8F9FD;border-radius:12px;padding:10px 12px">
+              <div class="grow"><div class="t1" style="font-size:13px">满 3 天 · 循环发放</div><div class="t2">每满 3 天都发一次</div></div>
+              <div style="font-size:14px;font-weight:750;color:#16A34A">+5</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;background:#F8F9FD;border-radius:12px;padding:10px 12px;margin-top:8px">
+              <div class="grow"><div class="t1" style="font-size:13px">满 7 天 · 仅一次</div><div class="t2">一轮连续里只发一次</div></div>
+              <div style="font-size:14px;font-weight:750;color:#16A34A">+10</div>
+            </div>
+          </div>
+          <div class="card pad" style="display:flex;align-items:center;gap:10px">
+            <div class="grow"><div class="t1" style="font-size:13.5px">日总量阈值</div><div class="t2">≤120 加 2 分，超出每分钟扣</div></div>
+            <div style="font-size:15px;font-weight:750;font-variant-numeric:tabular-nums">120<span style="font-size:11px;font-weight:600;color:#8A909E"> 分钟</span></div>
+          </div>
+          <button class="btn" style="margin-top:2px">保存</button>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>配置按组隔离、改配置不追溯历史。档位支持任意条数，保存时校验：天数 ≥1、分值非 0、模式只能是 repeat / once。</figcaption>
+  </figure>
+
+  <!-- ========== 13.15 商品管理 ========== -->
+  <figure>
+    <div class="cap"><span class="no">13.15</span><span class="nm">商品管理</span><span class="only">仅组长</span></div>
+    <div class="phone"><div class="viewport"><div class="notch"></div>
+      <div class="screen">
+        <div class="status"><span>9:41</span><span class="right"><span class="sig"><i></i><i></i><i></i><i></i></span><span class="bat"><i></i></span></span></div>
+        <div class="appbar">
+          <div class="iconbtn"><svg class="ic"><use href="#i-back"/></svg></div>
+          <h2 style="font-size:17px">商品管理</h2><span class="sp"></span>
+          <div class="iconbtn"><svg class="ic"><use href="#i-plus"/></svg></div>
+        </div>
+        <div class="body" style="padding-bottom:0">
+          <div class="hint" style="margin:0">成员在「兑换商城」看到的就是这里的商品。</div>
+          <div class="row">
+            <div class="src" style="background:#FFF1E6;font-size:16px">🍦</div>
+            <div class="grow"><div class="t1">冰淇淋</div><div class="t2">30 分 · 已兑换 3 次</div></div>
+            <svg class="ic sm" style="color:#C3C8D4"><use href="#i-chev"/></svg>
+          </div>
+          <div class="row">
+            <div class="src" style="background:#EAF1FF;font-size:16px">🎮</div>
+            <div class="grow"><div class="t1">游戏 30 分钟</div><div class="t2">50 分 · 已兑换 1 次</div></div>
+            <svg class="ic sm" style="color:#C3C8D4"><use href="#i-chev"/></svg>
+          </div>
+          <div class="row">
+            <div class="src" style="background:#EFE9FF;font-size:16px">🎬</div>
+            <div class="grow"><div class="t1">周末电影票</div><div class="t2">80 分 · 已兑换 0 次</div></div>
+            <svg class="ic sm" style="color:#C3C8D4"><use href="#i-chev"/></svg>
+          </div>
+          <div class="row">
+            <div class="src" style="background:#E9F8EE;font-size:16px">🚲</div>
+            <div class="grow"><div class="t1">骑车 1 小时</div><div class="t2">120 分 · 已兑换 0 次</div></div>
+            <svg class="ic sm" style="color:#C3C8D4"><use href="#i-chev"/></svg>
+          </div>
+        </div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="bar"></div>
+          <div style="font-size:17px;font-weight:720;letter-spacing:-.3px">编辑商品</div>
+          <div style="margin-top:14px">
+            <div style="font-size:11.5px;color:#8A909E;margin-bottom:6px">商品名称</div>
+            <div style="background:#F5F7FB;border-radius:12px;padding:12px 13px;font-size:14px">冰淇淋</div>
+          </div>
+          <div style="margin-top:12px">
+            <div style="font-size:11.5px;color:#8A909E;margin-bottom:6px">所需积分</div>
+            <div style="background:#F5F7FB;border-radius:12px;padding:12px 13px;font-size:14px;font-variant-numeric:tabular-nums">30</div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <button class="btn danger" style="flex:1">删除</button>
+            <button class="btn" style="flex:2">保存</button>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <figcaption>删除商品不影响已产生的兑换记录（兑换单存的是快照名称与分值）。改名同理，历史记录不会跟着变。</figcaption>
+  </figure>
+
+</div>
+
+<div class="foot-note">
+  <b>口径说明</b>：① 全部数据字段与 <code>docs/features.md</code> 第 3 节表结构一致，没有原型自创字段；
+  ② 头像只用预设标识（🐻🦊🐰🐼 等），系统内不存在任何上传入口；
+  ③ 任务发布即冻结、投票过半才转移，界面上「可用 / 冻结」始终分开显示；
+  ④ 组长专属界面（13.13–13.15）在成员视角下不出现，不是置灰。
+</div>
+
+<div class="lightbox" id="lb"><div class="phone"><div class="viewport"><div class="notch"></div><div id="lbmount" style="position:absolute;inset:0"></div></div></div></div>
+
+<script>
+(function(){
+  var lb = document.getElementById('lb');
+  var mount = document.getElementById('lbmount');
+  document.querySelectorAll('figure .phone').forEach(function(p){
+    p.addEventListener('click', function(e){
+      e.stopPropagation();
+      var s = p.querySelector('.screen').cloneNode(true);
+      mount.innerHTML = '';
+      mount.appendChild(s);
+      lb.classList.add('on');
+    });
+  });
+  lb.addEventListener('click', function(){ lb.classList.remove('on'); mount.innerHTML=''; });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ lb.classList.remove('on'); mount.innerHTML=''; } });
+})();
+</script>
+</body>
+</html>
