@@ -1,5 +1,17 @@
-node_modules/
-dist/
+# 构建产物
+/bin/
+/dist/
+
+# 本地数据与配置（绝不提交）
+/data/
+.env
+.env.*
+
+# 日志
+*.log
+
+# 编辑器 / 系统
 .idea/
 .vscode/
-/.wrangler
+.DS_Store
+Thumbs.db

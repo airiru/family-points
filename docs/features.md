@@ -1,14 +1,14 @@
 # 家庭积分榜 · 功能清单 v3
 
 > 状态：`✅ 已实现` / `⬜ 待实现` / `⚠️ 需确认` / `⛔ 已知缺口`
-> 最后更新：2026-11-02
+> 最后更新：2026-11-03
 > **v3 是自建服务器方案，v1（KV）与 v2（D1）的设计已全部作废。**
 
 ## 架构演进记录
 
 | 版本 | 存储 | 后端 | 客户端 | 部署 | 状态 |
 |---|---|---|---|---|---|
-| v1 | Cloudflare KV | Worker (JS) | Web only | Cloudflare Pages | 代码现状 |
+| v1 | Cloudflare KV | Worker (JS) | Web only | Cloudflare Pages | **代码已删除**（2026-11-03） |
 | v2 | Cloudflare D1 | Worker (JS) | Web + Android | Cloudflare Pages | ❌ 作废 |
 | **v3** | **MySQL 8** | **Go** | **Web 后台 + Android 原生** | **自建服务器** | 本文档 |
 

@@ -4,17 +4,24 @@
 > 日志在 `.memory/YYYY-MM-DD.md`，**追加式**，不要覆盖。
 > 记忆是**线索不是事实**——凡能从磁盘验证的结论，动手前先去验证。
 
-## 一、技术栈与运行形态（**当前代码实况 = v1**）
+## 一、仓库现状：**v1 代码已删除，仓库里只剩文档与记忆**（2026-11-03）
 
-> ⚠️ 本节描述的是**磁盘上正在运行的代码**。v2 目标架构见第二节，**尚未实现**。
-> 不要把 v2 的设计当成既有事实——动手前先确认代码里到底是不是 D1。
+> ⚠️ **不要再去仓库里找 `src/`、`worker/`、`wrangler.toml`、`package.json`——它们已被删除。**
+> 2026-11-03 用户拍板「一切从 0 开始」，v1 全套前端/后端/构建链一并移除。
+> 需要查阅旧实现时用 git 历史取回：
+> `git show 46ff29e:worker/index.js`（**46ff29e 是最后一次 v1 代码提交**）。
+>
+> 仓库当前只剩 8 个受控文件：`.gitignore`、`LICENSE`、`README.md`（已过时待重写）、
+> `docs/features.md`（功能唯一事实源）、`.memory/` 下的记忆与技能权威源。
 
-| 层 | 实现 |
+**v1 曾经是什么**（仅供对照，代码已不在盘上）：
+
+| 层 | v1 实现 |
 |---|---|
-| 前端 | Vue 3.5 + Vite 7，`<script setup>` 单文件组件，hash 路由（无 vue-router） |
+| 前端 | Vue 3.5 + Vite 7，`<script setup>`，hash 路由（无 vue-router） |
 | 后端 | Cloudflare Worker，`worker/index.js` 单文件，导出 `fetch` |
 | 存储 | Cloudflare KV，**单键** `state`（一个 JSON 存全部数据） |
-| 部署 | **Cloudflare Pages**（`wrangler pages deploy`），非 Workers |
+| 部署 | **Cloudflare Pages**（`wrangler pages deploy`） |
 
 ## 一之二、v3 目标架构（2026-11-02 用户拍板，**未实现**）
 
@@ -175,20 +182,15 @@ Token 改 **Access 2h + Refresh 30d**；并发兑换需事务 + `FOR UPDATE` 防
 
 ## 三、构建与部署链路
 
-```
-npm run build  = vite build && node scripts/postbuild.mjs
-npm run deploy = npm run build && wrangler pages deploy
-```
-
-`postbuild.mjs` 的作用：把 `worker/index.js` 复制为 `dist/worker-api.js`，并生成 **Pages 高级模式**入口
-`dist/_worker.js`（`/api/*` 交给 Worker，其余走 `env.ASSETS.fetch`）。
-⇒ **删掉 postbuild 这一步，Pages 上所有 `/api/*` 会 404**，这是最容易被误删的隐性依赖。
+**v1 链路已随代码一并删除**（原为 `vite build` + `postbuild.mjs` + `wrangler pages deploy`）。
+v3 的目标链路是 **自建服务器**：Go 二进制 + MySQL + Nginx，用 Docker Compose 编排；
+数据库 schema 变更走 **golang-migrate**。**尚未实现，无任何脚本**。
 
 ## 四、记忆协议自身的落点
 
 - 权威源：`.memory/skills/memory-handoff/SKILL.md`（进仓库，可 review / 可回溯）
-- 已存在的工具级副本（当前 3 份，**每次会话现场重算，不要引用本清单**）：
-  `~/.workbuddy-ai/skills/`、`~/.workbuddy/skills/`、`~/.dsh/skills/`
+- 已存在的工具级副本（2026-11-03 实测 **4 份**，**每次会话现场重算，不要引用本清单**）：
+  `~/.workbuddy-ai/skills/`、`~/.workbuddy/skills/`、`~/.dsh/skills/`、`~/.trae-cn/skills/`
 - 同步后必须逐份 `diff` 核验为空，不要只信脚本跑过了。
 
 ## 五、功能口径的单一事实源
@@ -206,9 +208,6 @@ npm run deploy = npm run build && wrangler pages deploy
   清单待决策项见 `docs/features.md` 第 19 节——**只剩 3 条（19.5–19.7）**：
   服务器规格与 OS、是否公开注册、域名与备案。
   （19.11/19.13/19.14/19.15 已于 2026-11-03 拍板，见第 28–30 条。）
-- **README.md 与代码已漂移**（2026-11-02 核验）：
-  - 文中写 `wrangler.jsonc`，实际文件是 `wrangler.toml`
-  - 文中写「`npm run deploy` = vite build + wrangler deploy」，实际是 `vite build && wrangler pages deploy`
-  - 文中通篇称「Cloudflare Workers 部署」，实际部署目标是 **Pages**
-  - 未提及 `scripts/postbuild.mjs` 这一步（见上，删了会 404）
-  ⇒ 未修。改动属文档性质，需用户确认口径后再动。
+- **README.md 已整体失效**（2026-11-03 更新）：它描述的是已删除的 v1（Cloudflare KV/Pages/
+  `wrangler.jsonc`/postbuild 全链）。**不必逐条纠错**——v3 起手时整份重写。
+  （原「README 与代码漂移」待办就此关闭。）

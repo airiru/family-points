@@ -1,3 +1,9 @@
+> ⚠️ **本文件已失效（2026-11-03）**：v1（Vue + Cloudflare Worker + KV）的代码已按用户决策
+> **全部删除**，仓库改为 v3（自建服务器：MySQL 8 + Go + Web 后台 + Kotlin 原生 App）。
+> 下文描述的文件结构、构建命令、部署步骤**均不存在**，请勿照做。
+> 功能与架构的唯一依据是 [`docs/features.md`](docs/features.md)；旧代码可用
+> `git show 46ff29e:worker/index.js` 取回。本 README 待 v3 起手时整份重写。
+
 # 家庭积分榜（Vue 3 + Cloudflare Workers 版）
 
 多成员积分管理系统：自定义计分规则（如"按时睡觉 +1"、"晚睡半小时 -3"，可配连续打卡奖励）、积分排行榜、自定义兑换商城、账号权限、历史记录。前端为 **Vue 3 + Vite**，数据接口由 **Cloudflare Worker** 提供，数据保存在 **Cloudflare KV**，多成员访问共享同一份数据。
