@@ -28,8 +28,17 @@ func fail(c *gin.Context, err error) {
 		httpx.BadRequest(c, err.Error())
 	case errors.Is(err, repo.ErrNotFound):
 		httpx.NotFound(c, "资源不存在")
-	case errors.Is(err, service.ErrNotInFamily):
+	case errors.Is(err, service.ErrNotInFamily),
+		errors.Is(err, service.ErrNotLeader),
+		errors.Is(err, service.ErrBanned):
 		httpx.Forbidden(c, err.Error())
+	case errors.Is(err, service.ErrAlreadyInFamily),
+		errors.Is(err, service.ErrLeaderMustTransfer):
+		httpx.Conflict(c, err.Error())
+	case errors.Is(err, service.ErrInviteCodeInvalid),
+		errors.Is(err, service.ErrConfirmRequired),
+		errors.Is(err, service.ErrCannotTargetSelf):
+		httpx.BadRequest(c, err.Error())
 	default:
 		httpx.Internal(c, "服务器内部错误")
 	}

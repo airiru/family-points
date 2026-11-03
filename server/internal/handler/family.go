@@ -117,3 +117,197 @@ func auditCrossFamily(c *gin.Context, action string, familyID uint64) {
 		"action", action, "admin_id", adminID, "admin", username,
 		"family_id", familyID, "path", c.FullPath())
 }
+
+// ---------- 邀请码 ----------
+
+// AppInviteCode GET /api/app/family/invite-code —— 组长查看当前邀请码。
+func (h *Family) AppInviteCode(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	code, expires, err := h.svc.InviteCode(c.Request.Context(), m)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"invite_code": code, "expires_at": expires})
+}
+
+// AppResetInviteCode POST /api/app/family/invite-code —— 重置邀请码（旧码立即失效）。
+func (h *Family) AppResetInviteCode(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	code, expires, err := h.svc.ResetInviteCode(c.Request.Context(), m)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"invite_code": code, "expires_at": expires})
+}
+
+// AppJoin POST /api/app/family/join —— 凭邀请码加入（需前台 token，且尚未入组）。
+func (h *Family) AppJoin(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		InviteCode string `json:"invite_code"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	f, err := h.svc.Join(c.Request.Context(), m, in.InviteCode)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"family_id": f.ID, "family_name": f.Name, "role": "member"})
+}
+
+// ---------- 退出 / 踢出（不可逆，必须二次确认）----------
+
+// AppLeave POST /api/app/family/leave —— 自行退出。
+//
+// 前端必须先弹窗二次确认，再把 confirm=true 传上来；后端不信任「前端已经问过」，
+// 没有 confirm 一律 400 —— 这条路径会把积分清零，误触代价太大。
+func (h *Family) AppLeave(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		Confirm bool `json:"confirm"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if err := h.svc.Leave(c.Request.Context(), m, in.Confirm); err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"left": true, "score_reset": true})
+}
+
+// AppKick POST /api/app/member/remove —— 组长踢出成员（二次确认）。
+func (h *Family) AppKick(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		MemberID uint64 `json:"member_id"`
+		Confirm  bool   `json:"confirm"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if err := h.svc.Kick(c.Request.Context(), m, in.MemberID, in.Confirm); err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"removed": true, "member_id": in.MemberID})
+}
+
+// ---------- 组长转让 / 隐藏 / 改名 ----------
+
+// AppTransferLeader POST /api/app/family/transfer-leader —— 组长转让。
+func (h *Family) AppTransferLeader(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		MemberID uint64 `json:"member_id"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if err := h.svc.TransferLeader(c.Request.Context(), m, in.MemberID); err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"leader_id": in.MemberID})
+}
+
+// AppSetHidden POST /api/app/member/hidden —— 隐藏 / 显示成员。
+func (h *Family) AppSetHidden(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		MemberID uint64 `json:"member_id"`
+		Hidden   bool   `json:"hidden"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if err := h.svc.SetHidden(c.Request.Context(), m, in.MemberID, in.Hidden); err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"member_id": in.MemberID, "hidden": in.Hidden})
+}
+
+// AppRenameFamily POST /api/app/family/rename —— 组长改家庭组名。
+func (h *Family) AppRenameFamily(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	name, err := h.svc.RenameFamily(c.Request.Context(), m, in.Name)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"name": name})
+}
+
+// AppRenameMember POST /api/app/member/rename —— 改昵称（本人或组长）。
+func (h *Family) AppRenameMember(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		MemberID uint64 `json:"member_id"`
+		Name     string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if in.MemberID == 0 {
+		in.MemberID = m.ID // 不传就是改自己
+	}
+	if err := h.svc.RenameMember(c.Request.Context(), m, in.MemberID, in.Name); err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"member_id": in.MemberID, "name": in.Name})
+}
