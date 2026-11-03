@@ -136,11 +136,61 @@ func (r *Family) IsBanned(ctx context.Context, familyID, memberID uint64) (bool,
 }
 
 // Join 把成员加入家庭组（调用方需先校验：未入组、未被禁入、码有效）。
+//
+// 同时**给新成员补一条屏幕时间规则**（复制组长的配置）：否则他的设备一上报就报
+// 「还没有屏幕时间规则」，等于新成员进来用不了屏幕时间功能。
+// 组长之后可以单独调整（12.4：每成员一条，组内可差异化）。
 func (r *Family) Join(ctx context.Context, familyID, memberID uint64) error {
-	_, err := r.db.ExecContext(ctx,
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE members SET family_id = ?, role = ? WHERE id = ? AND family_id IS NULL`,
-		familyID, model.RoleMember, memberID)
-	return err
+		familyID, model.RoleMember, memberID); err != nil {
+		return err
+	}
+
+	// 复制组长的屏幕时间规则：先取模板再显式插入。
+	// （不用 INSERT ... SELECT + ON DUPLICATE KEY，MySQL 会报 member_id ambiguous）
+	type tmpl struct {
+		ThresholdMin   int     `db:"threshold_min"`
+		BonusPoints    int     `db:"bonus_points"`
+		PenaltyPoints  int     `db:"penalty_points"`
+		Enabled        bool    `db:"enabled"`
+		NightStartHour *int    `db:"night_start_hour"`
+		NightEndHour   *int    `db:"night_end_hour"`
+		NightMaxMin    *int    `db:"night_max_min"`
+		NightRuleID    *uint64 `db:"night_rule_id"`
+	}
+	var t tmpl
+	err = tx.GetContext(ctx, &t,
+		`SELECT threshold_min, bonus_points, penalty_points, enabled,
+		        night_start_hour, night_end_hour, night_max_min, night_rule_id
+		   FROM screen_rules WHERE family_id = ?
+		  ORDER BY (member_id = (SELECT id FROM members
+		                          WHERE family_id = ? AND role = 'leader' LIMIT 1)) DESC
+		  LIMIT 1`, familyID, familyID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		// 兜底默认值（正常路径不会走到：建组时已写入）
+		t = tmpl{ThresholdMin: 120, BonusPoints: 2, PenaltyPoints: 3, Enabled: true}
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT IGNORE INTO screen_rules
+		   (family_id, member_id, threshold_min, bonus_points, penalty_points, enabled,
+		    night_start_hour, night_end_hour, night_max_min, night_rule_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		familyID, memberID, t.ThresholdMin, t.BonusPoints, t.PenaltyPoints, t.Enabled,
+		t.NightStartHour, t.NightEndHour, t.NightMaxMin, t.NightRuleID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 // Leave 退出 / 踢出：积分清零 + family_id 置空 + 角色回落 + 写禁入名单。

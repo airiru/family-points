@@ -271,21 +271,3 @@ func (r *Ledger) Transfers(ctx context.Context, familyID uint64, limit int) ([]m
 }
 
 // ---------- 流水 ----------
-
-// Records 分页列出本组流水（按发生时间倒序）。
-func (r *Ledger) Records(ctx context.Context, familyID uint64, limit, offset int) ([]model.Record, error) {
-	var list []model.Record
-	err := r.db.SelectContext(ctx, &list,
-		`SELECT id, family_id, member_id, member_name, title, points,
-		        occurred_at, added_at, source, transfer_id, redemption_id, streak_award
-		   FROM records WHERE family_id = ?
-		  ORDER BY occurred_at DESC, id DESC LIMIT ? OFFSET ?`, familyID, limit, offset)
-	return list, err
-}
-
-// CountRecords 本组流水总数（分页用）。
-func (r *Ledger) CountRecords(ctx context.Context, familyID uint64) (int, error) {
-	var n int
-	err := r.db.GetContext(ctx, &n, `SELECT COUNT(*) FROM records WHERE family_id = ?`, familyID)
-	return n, err
-}

@@ -22,7 +22,7 @@ import (
 // Build 组装 gin 引擎。
 func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *handler.Family,
 	ledgerHandler *handler.Ledger, screenHandler *handler.Screen, taskHandler *handler.Task,
-	mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
+	reportHandler *handler.Report, mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -107,8 +107,11 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		inFamily.POST("/transfer/send", ledgerHandler.AppSendTransfer)
 		inFamily.GET("/transfer/list", ledgerHandler.AppTransfers)
 
-		// 流水
-		inFamily.GET("/records", ledgerHandler.AppRecords)
+		// 概览 / 记录 / 榜单 / 趋势
+		inFamily.GET("/state", reportHandler.AppState)
+		inFamily.GET("/records", reportHandler.AppRecords)
+		inFamily.GET("/stats/ranking", reportHandler.AppRanking)
+		inFamily.GET("/stats/trend", reportHandler.AppTrend)
 
 		// 睡觉规则与屏幕时间配置
 		inFamily.GET("/rule", screenHandler.AppRules)

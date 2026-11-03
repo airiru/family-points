@@ -153,20 +153,3 @@ func (h *Ledger) AppTransfers(c *gin.Context) {
 }
 
 // ---------- 流水 ----------
-
-// AppRecords GET /api/app/records —— 本组流水分页。
-func (h *Ledger) AppRecords(c *gin.Context) {
-	m, ok := middleware.CurrentMember(c)
-	if !ok {
-		httpx.Unauthorized(c, "未登录")
-		return
-	}
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	page, err := h.svc.Records(c.Request.Context(), *m.FamilyID, limit, offset)
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	httpx.OK(c, page)
-}

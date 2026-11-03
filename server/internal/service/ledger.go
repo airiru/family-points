@@ -111,30 +111,3 @@ func (s *Ledger) Transfers(ctx context.Context, familyID uint64, limit int) ([]m
 }
 
 // ---------- 流水 ----------
-
-// RecordPage 是流水分页结果。
-type RecordPage struct {
-	Items  []model.Record `json:"items"`
-	Total  int            `json:"total"`
-	Limit  int            `json:"limit"`
-	Offset int            `json:"offset"`
-}
-
-// Records 分页查询本组流水。
-func (s *Ledger) Records(ctx context.Context, familyID uint64, limit, offset int) (*RecordPage, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	list, err := s.ledger.Records(ctx, familyID, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	total, err := s.ledger.CountRecords(ctx, familyID)
-	if err != nil {
-		return nil, err
-	}
-	return &RecordPage{Items: list, Total: total, Limit: limit, Offset: offset}, nil
-}

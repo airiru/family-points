@@ -60,6 +60,9 @@ func fail(c *gin.Context, err error) {
 		errors.Is(err, service.ErrDeviceTokenInvalid):
 		httpx.BadRequest(c, err.Error())
 	default:
+		// 500 必须留日志：否则线上只看到「服务器内部错误」，根因彻底丢失
+		logger().Error("未映射的内部错误",
+			"err", err, "path", c.FullPath(), "method", c.Request.Method)
 		httpx.Internal(c, "服务器内部错误")
 	}
 }

@@ -64,8 +64,11 @@ func main() {
 	taskSvc := service.NewTask(repo.NewTask(conn))
 	taskHandler := handler.NewTask(taskSvc)
 
+	reportSvc := service.NewReport(repo.NewReport(conn), familyRepo)
+	reportHandler := handler.NewReport(reportSvc)
+
 	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler,
-		screenHandler, taskHandler, authMW, deviceMW)
+		screenHandler, taskHandler, reportHandler, authMW, deviceMW)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
