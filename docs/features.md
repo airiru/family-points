@@ -414,7 +414,11 @@ CREATE TABLE refresh_tokens (
 3. **后台管理员是例外**：`typ='admin'` 可跨组操作，但**必须显式传入目标 `family_id` 且写审计日志**。
    管理员 token 不允许调用 `/api/app/*`。
 4. **管理员账号不属于任何成员**，不得出现在成员列表、排行榜、记录中。
-5. **配置即租户数据**：睡觉时间点、连续奖励档位、阈值、分值等**全部按 `family_id` 隔离**，
+5. **实现落点**（2026-11-03，P2 完成）：前台组内接口统一挂 `RequireFamily` 中间件，
+   `family_id` 从 `members.family_id` 读；管理员跨组接口一律 `:family_id` 路径参数，
+   解析失败/组不存在都返回 **404**（连 400 都不用，避免用状态码差异探测 id 是否存在）。
+   跨组访问先记应用日志，P8 换成写 `audit_logs`。
+6. **配置即租户数据**：睡觉时间点、连续奖励档位、阈值、分值等**全部按 `family_id` 隔离**，
    存在数据库表里（`rules` / `screen_rules`），**不得写成全局常量、环境变量或配置文件**。
    A 组改配置绝不影响 B 组。任何"全局默认配置"都必须落库并带 `family_id`。
 
@@ -1025,6 +1029,8 @@ rules.streaks = [
 | 15.2.12 | `/api/admin/state` | GET | 后台初始化数据 |
 | 15.2.13 | `/api/admin/accounts` | GET/POST | 管理员账号列表 / 新增 / 停用 |
 | 15.2.14 | `/api/admin/families` | GET | 所有家庭组列表（运营方视角） |
+| 15.2.15 | `/api/admin/family/:family_id` | GET | 跨组查看单个家庭组（**family_id 只能走路径参数**） |
+| 15.2.16 | `/api/admin/family/:family_id/members` | GET | 跨组查看成员（含被隐藏的） |
 
 > **已移除**：`/api/admin/score/*`（记一笔）、`/api/admin/screen/report-manual`（手动录入）。
 > 接口层**直接删除，返回 404**，不是隐藏。
@@ -1055,6 +1061,8 @@ rules.streaks = [
 | 15.3.18 | `/api/app/stats/trend` | GET | 趋势图 |
 | 15.3.19 | `/api/app/member/avatar` | POST | 改自己的头像（**只接受预设标识**，见 22.2） |
 | 15.3.20 | `/api/app/family/leave` | POST | 自行退出家庭组（积分清零 + 写入 `family_bans`） |
+| 15.3.26 | `/api/app/family` | GET | 本组信息（**family_id 取自 token**，不接受任何参数） |
+| 15.3.27 | `/api/app/family/members` | GET | 本组成员（过滤被隐藏的） |
 
 **仅组长（`role='leader'`）**
 
@@ -1655,8 +1663,8 @@ FROM task_votes WHERE submission_id=?;
 | **P8 后台 + 审计 + 通知** | 管理员全量接口、审计 append-only（剔除 `pass_hash`、失败不阻断）、180 天清理、站内通知、预设头像 | 84–86、98–101 |
 | **P9 客户端** | Android 15 界面（3 个组长专属）、Web 后台前端 | 92–94 及全部界面条目 |
 
-**当前进度（2026-11-03）**：**P0 ✅ / P1 ✅**（19 项接口测试全通过，脚本 `server/scripts/p1_auth_check.sh`）/
-P2 未开始。
+**当前进度（2026-11-03）**：**P0 ✅ / P1 ✅ / P2 ✅**（P1 19 项、P2 15 项接口测试全通过，
+脚本 `server/scripts/p1_auth_check.sh`、`p2_tenant_check.sh`）/ P3 未开始。
 
 **顺序理由**：P1/P2 是**所有接口的前置**，晚做就要回头改每个 handler；
 P4 的账目模型定不下来，P5–P7 全部无法结算；审计（P8）放最后是因为它**旁路**，

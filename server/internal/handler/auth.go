@@ -3,8 +3,6 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
 
 	"familypoints/server/internal/httpx"
@@ -28,7 +26,7 @@ func (h *Auth) Register(c *gin.Context) {
 	}
 	member, pair, err := h.svc.Register(c.Request.Context(), in)
 	if err != nil {
-		h.fail(c, err)
+		fail(c, err)
 		return
 	}
 	httpx.OK(c, gin.H{
@@ -55,7 +53,7 @@ func (h *Auth) LoginAdmin(c *gin.Context) {
 	}
 	admin, pair, err := h.svc.LoginAdmin(c.Request.Context(), in.Username, in.Password)
 	if err != nil {
-		h.fail(c, err)
+		fail(c, err)
 		return
 	}
 	httpx.OK(c, gin.H{
@@ -79,7 +77,7 @@ func (h *Auth) LoginMember(c *gin.Context) {
 	}
 	member, pair, err := h.svc.LoginMember(c.Request.Context(), in.Username, in.Password)
 	if err != nil {
-		h.fail(c, err)
+		fail(c, err)
 		return
 	}
 	httpx.OK(c, gin.H{
@@ -114,7 +112,7 @@ func (h *Auth) refresh(c *gin.Context, subjectType string) {
 	}
 	pair, err := h.svc.Refresh(c.Request.Context(), in.RefreshToken, subjectType)
 	if err != nil {
-		h.fail(c, err)
+		fail(c, err)
 		return
 	}
 	httpx.OK(c, pair)
@@ -154,7 +152,7 @@ func (h *Auth) changePassword(c *gin.Context, do func(oldPwd, newPwd string) err
 		return
 	}
 	if err := do(in.OldPassword, in.NewPassword); err != nil {
-		h.fail(c, err)
+		fail(c, err)
 		return
 	}
 	// 改密后旧 refresh 全部失效，客户端必须重新登录
@@ -193,19 +191,4 @@ func (h *Auth) MeMember(c *gin.Context) {
 	})
 }
 
-// fail 把 service 错误映射成 HTTP 状态码。跨组/不存在一律 404（约定 9）。
-func (h *Auth) fail(c *gin.Context, err error) {
-	switch {
-	case errors.Is(err, service.ErrInvalidCredentials),
-		errors.Is(err, service.ErrTokenInvalid):
-		httpx.Unauthorized(c, err.Error())
-	case errors.Is(err, service.ErrAdminDisabled):
-		httpx.Forbidden(c, err.Error())
-	case errors.Is(err, service.ErrUsernameTaken):
-		httpx.Conflict(c, err.Error())
-	case errors.Is(err, service.ErrInvalidInput):
-		httpx.BadRequest(c, err.Error())
-	default:
-		httpx.Internal(c, "服务器内部错误")
-	}
-}
+

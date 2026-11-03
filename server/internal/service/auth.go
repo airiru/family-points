@@ -36,8 +36,9 @@ type TokenPair struct {
 	RefreshToken     string `json:"refresh_token"`
 	RefreshExpiresIn int64  `json:"refresh_expires_in"` // 秒
 	TokenType        string `json:"token_type"`         // 固定 "Bearer"
-	// 仅后台：true 表示必须先改密码，其他接口一律拒绝（5.4.2）
-	MustChangePassword bool `json:"must_change_password,omitempty"`
+	// 仅后台有意义：true 表示必须先改密码（5.4.2）。
+	// 注意**不能加 omitempty** —— false 与「字段不存在」对客户端含义完全不同。
+	MustChangePassword bool `json:"must_change_password"`
 }
 
 // Auth 是认证服务。

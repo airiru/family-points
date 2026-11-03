@@ -20,7 +20,7 @@ import (
 )
 
 // Build 组装 gin 引擎。
-func Build(env string, db *sqlx.DB, authHandler *handler.Auth, mw *middleware.Auth) *gin.Engine {
+func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *handler.Family, mw *middleware.Auth) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -54,13 +54,24 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, mw *middleware.Au
 	{
 		admin.GET("/me", authHandler.MeAdmin)
 		admin.POST("/password", authHandler.ChangeAdminPassword)
+
+		// 管理员跨组：family_id 只能走路径参数（4.3 第 3 条）
+		admin.GET("/family/:family_id", familyHandler.AdminInfo)
+		admin.GET("/family/:family_id/members", familyHandler.AdminMembers)
 	}
 
-	// 前台：只认 member token
+	// 前台：只认 member token；组内接口额外要求已加入家庭组
 	app := r.Group("/api/app", mw.RequireMember())
 	{
 		app.GET("/me", authHandler.MeMember)
 		app.POST("/password", authHandler.ChangeMemberPassword)
+	}
+
+	// 组内接口：family_id 一律取自 token 主体，不接受任何请求参数
+	inFamily := app.Group("", middleware.RequireFamily())
+	{
+		inFamily.GET("/family", familyHandler.AppInfo)
+		inFamily.GET("/family/members", familyHandler.AppMembers)
 	}
 
 	return r

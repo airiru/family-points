@@ -40,6 +40,20 @@ type Admin struct {
 	CreatedAt          time.Time `db:"created_at"`
 }
 
+// Family 对应 families 表。
+type Family struct {
+	ID                 uint64     `db:"id"`
+	Name               string     `db:"name"`
+	InviteCode         string     `db:"invite_code"`
+	InviteCodeExpiresAt *time.Time `db:"invite_code_expires_at"`
+	CreatedAt          time.Time  `db:"created_at"`
+}
+
+// InviteCodeUsable 判断邀请码是否仍可用（7 天有效期，5.2.5）。
+func (f *Family) InviteCodeUsable(now time.Time) bool {
+	return f.InviteCodeExpiresAt != nil && now.Before(*f.InviteCodeExpiresAt)
+}
+
 // RefreshToken 对应 refresh_tokens 表（只存哈希）。
 type RefreshToken struct {
 	ID            uint64     `db:"id"`
