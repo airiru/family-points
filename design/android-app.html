@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>家庭积分 · Android 交互原型</title>
+<style>
+:root{
+  --bg:#F6F7FB; --card:#fff; --ink:#141821; --sub:#6B7280; --line:#EEF0F5;
+  --primary:#FF7A3D; --primary-soft:#FFF1E9; --green:#16A34A; --green-soft:#E8F7EE;
+  --red:#E5484D; --red-soft:#FDECEC; --gold:#F5A524; --blue:#3B82F6; --violet:#7C5CFF;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  background:radial-gradient(1200px 600px at 10% -10%,#FFF3EA 0,transparent 55%),
+             radial-gradient(900px 500px at 95% 0,#EAF0FF 0,transparent 50%),#EEF0F5;
+  color:var(--ink); display:flex; align-items:center; justify-content:center;
+  min-height:100vh; padding:24px 16px;
+}
+.stage{display:flex;gap:36px;align-items:flex-start;flex-wrap:wrap;justify-content:center}
+.aside{max-width:320px;padding-top:20px}
+.aside h1{margin:0 0 10px;font-size:24px;letter-spacing:-.4px}
+.aside p{margin:0 0 14px;color:var(--sub);font-size:13.5px;line-height:1.7}
+.aside .k{display:inline-block;background:#fff;border:1px solid var(--line);border-radius:7px;
+  padding:3px 8px;font-size:12px;margin:0 4px 6px 0;color:#4B5563}
+.aside button{width:100%;margin-top:6px;padding:11px;border-radius:11px;border:1px solid var(--line);
+  background:#fff;font-size:14px;font-weight:600;cursor:pointer;color:var(--ink)}
+.aside button:hover{border-color:var(--primary);color:var(--primary)}
+
+/* 手机外壳 */
+.phone{
+  width:390px;height:844px;background:#0B0D12;border-radius:44px;padding:10px;
+  box-shadow:0 40px 80px -20px rgba(16,24,40,.35),0 0 0 1px rgba(255,255,255,.06) inset;
+  position:relative;flex:0 0 auto;
+}
+.phone-inner{width:100%;height:100%;background:var(--bg);border-radius:35px;overflow:hidden;
+  display:flex;flex-direction:column;position:relative}
+.statusbar{height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 26px;font-size:13px;font-weight:600;color:var(--ink);background:transparent;z-index:5}
+.statusbar .right{display:flex;gap:5px;align-items:center;font-size:12px}
+.pill{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:96px;height:24px;
+  background:#0B0D12;border-radius:999px;z-index:10}
+
+.screen{flex:1;overflow-y:auto;overflow-x:hidden;padding:0 0 12px;scrollbar-width:none}
+.screen::-webkit-scrollbar{display:none}
+.tabbar{flex:0 0 62px;display:flex;background:#fff;border-top:1px solid var(--line);padding-bottom:6px}
+.tabbar button{flex:1;border:0;background:none;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:3px;font-size:10.5px;color:#9AA1AE;cursor:pointer;font-weight:600;padding-top:6px}
+.tabbar button.on{color:var(--primary)}
+.tabbar svg{width:21px;height:21px}
+
+/* 通用 */
+.pad{padding:0 18px}
+.hd{display:flex;align-items:center;gap:10px;padding:8px 18px 14px}
+.hd h2{margin:0;font-size:21px;letter-spacing:-.3px;flex:1}
+.hd .back{border:0;background:#fff;width:34px;height:34px;border-radius:11px;display:flex;
+  align-items:center;justify-content:center;cursor:pointer;border:1px solid var(--line)}
+.card{background:var(--card);border-radius:16px;padding:14px;margin:0 18px 12px;
+  box-shadow:0 1px 2px rgba(20,24,33,.04);border:1px solid #F1F3F8}
+.row{display:flex;align-items:center;gap:11px}
+.grow{flex:1;min-width:0}
+.name{font-size:15px;font-weight:650}
+.sub{font-size:12px;color:var(--sub);margin-top:2px}
+.pts{font-variant-numeric:tabular-nums;font-weight:750;font-size:15px}
+.plus{color:var(--green)} .minus{color:var(--red)} .zero{color:#9AA1AE}
+.avatar{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;
+  justify-content:center;font-size:21px;background:#F1F3F8;flex:0 0 auto}
+.btn{border:0;border-radius:12px;padding:11px 16px;font-size:14px;font-weight:650;cursor:pointer;
+  background:var(--primary);color:#fff;transition:.15s}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.soft{background:var(--primary-soft);color:var(--primary)}
+.btn.danger{background:var(--red-soft);color:var(--red)}
+.btn.block{width:100%;display:block}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.tag{font-size:11px;padding:3px 8px;border-radius:7px;font-weight:650;background:#F1F3F8;color:#4B5563}
+.tag.g{background:var(--green-soft);color:var(--green)}
+.tag.r{background:var(--red-soft);color:var(--red)}
+.tag.o{background:var(--primary-soft);color:var(--primary)}
+.tag.b{background:#EAF1FF;color:var(--blue)}
+.empty{text-align:center;color:var(--sub);font-size:13px;padding:34px 0}
+.seg{display:flex;background:#EDEFF5;border-radius:12px;padding:3px;margin:0 18px 14px}
+.seg button{flex:1;border:0;background:none;padding:9px;border-radius:9px;font-size:13.5px;
+  font-weight:650;color:var(--sub);cursor:pointer}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(20,24,33,.08)}
+input,select,textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 13px;
+  font-size:14px;font-family:inherit;background:#fff;color:var(--ink);outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--primary)}
+label{display:block;font-size:12.5px;color:var(--sub);margin:12px 0 6px;font-weight:600}
+.hint{font-size:12px;color:var(--sub);line-height:1.65;margin-top:8px}
+.divider{height:1px;background:var(--line);margin:12px 0}
+
+/* 榜单 */
+.rank{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+.rank:last-child{border-bottom:0}
+.rank .no{width:26px;text-align:center;font-size:16px;font-weight:750;color:#9AA1AE}
+.rank .no.top{font-size:19px}
+
+/* 任务卡 */
+.task-card{border-left:3px solid var(--primary)}
+.task-card.taken{border-left-color:var(--blue)}
+.task-card.done{border-left-color:var(--green);opacity:.85}
+
+/* 弹窗 */
+.sheet-mask{position:absolute;inset:0;background:rgba(10,12,18,.42);display:none;
+  align-items:flex-end;z-index:50;border-radius:35px}
+.sheet-mask.show{display:flex}
+.sheet{width:100%;background:#fff;border-radius:24px 24px 35px 35px;padding:20px 18px 26px;
+  max-height:78%;overflow-y:auto;animation:up .22s ease}
+@keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:none;opacity:1}}
+.sheet h3{margin:0 0 14px;font-size:17px}
+.toast{position:absolute;left:50%;bottom:96px;transform:translateX(-50%) translateY(10px);
+  background:rgba(20,24,33,.92);color:#fff;font-size:13px;padding:10px 16px;border-radius:11px;
+  opacity:0;transition:.22s;pointer-events:none;z-index:99;max-width:80%;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* 屏幕时间环 */
+.ring{width:132px;height:132px;border-radius:50%;margin:6px auto 12px;display:flex;
+  align-items:center;justify-content:center;position:relative}
+.ring::after{content:'';position:absolute;inset:11px;background:#fff;border-radius:50%}
+.ring .val{position:relative;z-index:1;text-align:center}
+.ring .val b{font-size:26px;font-variant-numeric:tabular-nums}
+.ring .val span{display:block;font-size:11.5px;color:var(--sub);margin-top:2px}
+
+/* 列表项 */
+.li{display:flex;align-items:center;gap:11px;padding:13px 0;border-bottom:1px solid var(--line)}
+.li:last-child{border-bottom:0}
+.li .ico{width:34px;height:34px;border-radius:11px;background:#F1F3F8;display:flex;
+  align-items:center;justify-content:center;font-size:16px;flex:0 0 auto}
+</style>
+</head>
+<body>
+<div class="stage">
+  <aside class="aside">
+    <h1>家庭积分 · 交互原型</h1>
+    <p>可点击、可操作的高保真原型，覆盖文档 13 节的 15 个界面。数据为内存模拟，刷新即重置。</p>
+    <div>
+      <span class="k">积分榜 / 得分榜</span><span class="k">任务接取 + 投票</span>
+      <span class="k">赠送</span><span class="k">兑换</span><span class="k">屏幕时间</span>
+      <span class="k">组长管理</span><span class="k">通知</span>
+    </div>
+    <button onclick="switchRole()">切换角色（当前：<b id="roleLabel">组长</b>）</button>
+    <button onclick="resetAll()">重置演示数据</button>
+    <p style="margin-top:14px;font-size:12px;color:#9AA1AE">
+      提示：组长可见「成员管理 / 睡觉规则 / 商品管理」三个入口，普通成员看不到。
+    </p>
+  </aside>
+
+  <div class="phone">
+    <div class="pill"></div>
+    <div class="phone-inner">
+      <div class="statusbar">
+        <span id="clock">21:04</span>
+        <span class="right">▲ 5G ▮▮▮</span>
+      </div>
+      <div class="screen" id="screen"></div>
+      <nav class="tabbar" id="tabbar"></nav>
+      <div class="sheet-mask" id="mask" onclick="if(event.target===this)closeSheet()">
+        <div class="sheet" id="sheet"></div>
+      </div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 数据 ================= */
+const PRESET_AVATARS = ['🐻','🐰','🦊','🐼','🐯','🐨','🦁','🐸'];
+
+function seed(){
+  return {
+    loggedIn:false,
+    role:'leader',            // leader | member
+    meId:'m1',
+    family:{ name:'我们家', inviteCode:'FP7K2M9Q', inviteExpire:'11-10' },
+    members:[
+      { id:'m1', name:'爸爸', avatar:'🐻', score:86, frozen:10, streak:5, isLeader:true },
+      { id:'m2', name:'妈妈', avatar:'🐰', score:132, frozen:0, streak:0, isLeader:false },
+      { id:'m3', name:'小明', avatar:'🦊', score:74, frozen:0, streak:3, isLeader:false },
+      { id:'m4', name:'小红', avatar:'🐼', score:58, frozen:5, streak:7, isLeader:false },
+      { id:'m5', name:'奶奶', avatar:'🐨', score:41, frozen:0, streak:0, isLeader:false },
+    ],
+    records:[
+      { id:'r1', memberId:'m3', title:'准时睡觉', points:2,  at:'今天 07:12', period:'week' },
+      { id:'r2', memberId:'m2', title:'任务「整理书房」收入', points:10, at:'今天 09:30', period:'week' },
+      { id:'r3', memberId:'m4', title:'兑换「一次看电影」', points:-30, at:'昨天 20:15', period:'week' },
+      { id:'r4', memberId:'m1', title:'发布任务冻结', points:0, at:'昨天 18:02', period:'week' },
+      { id:'r5', memberId:'m3', title:'连续 3 天准时睡觉，奖励', points:5, at:'昨天 07:05', period:'week' },
+      { id:'r6', memberId:'m5', title:'收到爸爸赠送', points:8, at:'前天 19:40', period:'week' },
+      { id:'r7', memberId:'m1', title:'赠送给奶奶', points:-8, at:'前天 19:40', period:'week' },
+      { id:'r8', memberId:'m2', title:'准时睡觉', points:2, at:'上周三 07:20', period:'last' },
+      { id:'r9', memberId:'m4', title:'任务「擦地板」收入', points:6, at:'上周二 16:10', period:'last' },
+    ],
+    tasks:[
+      { id:'t1', title:'整理书房', points:10, publisherId:'m1', assigneeId:null, status:'open', due:'今天 21:00' },
+      { id:'t2', title:'擦地板', points:6, publisherId:'m2', assigneeId:'m3', status:'taken', due:'明天 12:00' },
+      { id:'t3', title:'给奶奶读报纸', points:5, publisherId:'m3', assigneeId:'m4', status:'submitted', due:'今天 20:00' },
+      { id:'t4', title:'浇花', points:3, publisherId:'m4', assigneeId:'m2', status:'closed', due:'昨天' },
+    ],
+    votes:{ t3:{ approve:['m1','m5'], reject:['m2'] } },
+    coupons:[
+      { id:'c1', itemName:'冰淇淋', cost:10, memberId:'m1', status:'unused', rejectCount:0, votes:{approve:[],reject:[]} },
+      { id:'c2', itemName:'一次看电影', cost:30, memberId:'m1', status:'redeemed', rejectCount:0, votes:{approve:[],reject:[]} },
+    ],
+    goods:[
+      { id:'g1', name:'冰淇淋', cost:10, emoji:'🍦' },
+      { id:'g2', name:'一次看电影', cost:30, emoji:'🎬' },
+      { id:'g3', name:'周末公园骑行', cost:25, emoji:'🚴' },
+      { id:'g4', name:'挑一本书', cost:15, emoji:'📚' },
+    ],
+    notifications:[
+      { id:'n1', title:'任务待你投票', body:'「给奶奶读报纸」已提交，等你表态', unread:true, at:'10 分钟前', go:'vote' },
+      { id:'n2', title:'收到赠送', body:'爸爸赠送给你 8 分', unread:true, at:'2 小时前', go:'board' },
+      { id:'n3', title:'任务通过', body:'「擦地板」已通过，+6 分', unread:false, at:'昨天', go:'task' },
+    ],
+    sleepRule:{ bedtime:0, wake:7, maxMin:0, enabled:true, tiers:[{every:3,bonus:5,mode:'repeat'},{every:7,bonus:10,mode:'once'}] },
+    screen:{ todayMin:96, nightMin:0, reported:true, lastReport:'今天 07:10' },
+    route:'board', tab:'board', boardType:'points', boardPeriod:'week', detailId:null, taskId:null,
+  };
+}
+let S = seed();
+
+/* ================= 工具 ================= */
+const $ = id => document.getElementById(id);
+const member = id => S.members.find(m => m.id === id);
+const me = () => member(S.meId);
+const fmtPts = p => (p > 0 ? '+' : '') + p;
+const cls = p => p > 0 ? 'plus' : p < 0 ? 'minus' : 'zero';
+
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1700);
+}
+function openSheet(html){ $('sheet').innerHTML = html; $('mask').classList.add('show'); }
+function closeSheet(){ $('mask').classList.remove('show'); }
+
+/* 得分榜：区间内正分之和 */
+function periodScore(id, period){
+  return S.records.filter(r => r.memberId === id && r.period === period && r.points > 0)
+                  .reduce((a, r) => a + r.points, 0);
+}
+function rankList(){
+  if (S.boardType === 'points'){
+    return [...S.members].sort((a,b) => (b.score + b.frozen) - (a.score + a.frozen))
+      .map(m => ({ ...m, val: m.score + m.frozen }));
+  }
+  return [...S.members].sort((a,b) => periodScore(b.id, S.boardPeriod) - periodScore(a.id, S.boardPeriod))
+    .map(m => ({ ...m, val: periodScore(m.id, S.boardPeriod) }));
+}
+function voteStat(taskId){
+  const v = S.votes[taskId] || { approve:[], reject:[] };
+  const eligible = S.members.filter(m => m.id !== S.tasks.find(t => t.id === taskId).publisherId).length;
+  return { approve:v.approve.length, reject:v.reject.length, need:Math.floor(eligible/2)+1, eligible };
+}
+
+/* ================= 路由 ================= */
+function go(route, opt){
+  S.route = route;
+  if (opt) Object.assign(S, opt);
+  render();
+}
+function switchRole(){
+  S.role = S.role === 'leader' ? 'member' : 'leader';
+  S.meId = S.role === 'leader' ? 'm1' : 'm3';
+  $('roleLabel').textContent = S.role === 'leader' ? '组长（爸爸）' : '普通成员（小明）';
+  toast('已切换为' + (S.role === 'leader' ? '组长' : '普通成员'));
+  render();
+}
+function resetAll(){ S = seed(); S.loggedIn = false; $('roleLabel').textContent = '组长'; render(); }
+
+/* ================= 渲染 ================= */
+function render(){
+  const sc = $('screen');
+  sc.scrollTop = 0;
+  if (!S.loggedIn){ sc.innerHTML = viewAuth(); renderTabs(); return; }
+  const map = {
+    board:viewBoard, member:viewMemberDetail, records:viewRecords, shop:viewShop, gift:viewGift,
+    task:viewTask, taskDetail:viewTaskDetail, vote:viewVote, notify:viewNotify, screen:viewScreen,
+    coupons:viewCoupons,
+    settings:viewSettings, members:viewMembers, sleeprule:viewSleepRule, goods:viewGoods,
+  };
+  sc.innerHTML = (map[S.route] || viewBoard)();
+  renderTabs();
+}
+
+function renderTabs(){
+  const tabs = [
+    ['board','积分榜','M3 13h4v7H3zM10 4h4v16h-4zM17 9h4v11h-4z'],
+    ['task','任务','M4 6h16M4 12h16M4 18h10'],
+    ['shop','商城','M6 7h12l-1 13H7L6 7zM9 7a3 3 0 016 0'],
+    ['notify','通知','M12 4a5 5 0 015 5v4l2 3H5l2-3V9a5 5 0 015-5zM10 19a2 2 0 004 0'],
+    ['settings','我的','M12 12a4 4 0 100-8 4 4 0 000 8zM4 21a8 8 0 0116 0'],
+  ];
+  const show = S.loggedIn;
+  $('tabbar').style.display = show ? 'flex' : 'none';
+  const unread = S.notifications.filter(n => n.unread).length;
+  $('tabbar').innerHTML = tabs.map(([k, label, d]) => `
+    <button class="${S.tab === k ? 'on' : ''}" onclick="tapTab('${k}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+           stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>
+      <span>${label}${k==='notify'&&unread?` ·${unread}`:''}</span>
+    </button>`).join('');
+}
+function tapTab(k){
+  S.tab = k;
+  const map = { board:'board', task:'task', shop:'shop', notify:'notify', settings:'settings' };
+  go(map[k]);
+}
+
+/* ---------- 1 登录 / 注册 ---------- */
+function viewAuth(){
+  return `
+  <div style="padding:56px 24px 0;text-align:center">
+    <div style="font-size:52px">🏆</div>
+    <h2 style="margin:16px 0 6px;font-size:25px;letter-spacing:-.5px">家庭积分</h2>
+    <p class="sub" style="margin:0 0 30px">和家人一起，把好习惯攒成分</p>
+  </div>
+  <div class="card" style="margin:0 24px">
+    <label>用户名</label>
+    <input id="au" placeholder="例如 xiaoming" value="xiaoming">
+    <label>密码</label>
+    <input id="ap" type="password" placeholder="至少 4 位" value="1234">
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn block" onclick="doLogin()">登录</button>
+      <button class="btn ghost block" onclick="doRegister()">注册</button>
+    </div>
+    <div class="hint">注册时可选择「创建家庭组」成为组长，或用邀请码加入已有家庭。</div>
+  </div>
+  <div class="card" style="margin:14px 24px">
+    <div class="row"><div class="grow"><div class="name" style="font-size:14px">演示入口</div>
+      <div class="sub">直接进入，跳过表单</div></div>
+      <button class="btn soft" onclick="quickEnter()">进入</button></div>
+  </div>`;
+}
+function doLogin(){ S.loggedIn = true; S.route = 'board'; S.tab = 'board'; toast('登录成功'); render(); }
+function doRegister(){
+  openSheet(`<h3>注册</h3>
+    <label>用户名</label><input id="ru" placeholder="例如 xiaoming">
+    <label>密码</label><input id="rp" type="password" placeholder="至少 4 位">
+    <div class="divider"></div>
+    <div class="name" style="font-size:14px;margin-bottom:8px">接下来</div>
+    <button class="btn block" onclick="regCreate()">创建家庭组（成为组长）</button>
+    <button class="btn ghost block" style="margin-top:8px" onclick="regJoin()">输入邀请码加入</button>
+    <div class="hint">账号只能本人注册，任何人不能替他人创建账号。</div>`);
+}
+function regCreate(){
+  const u = ($('ru')?.value || '').trim();
+  if (!u) return toast('请填写用户名');
+  closeSheet(); S.loggedIn = true; S.role = 'leader'; S.meId = 'm1';
+  $('roleLabel').textContent = '组长（爸爸）';
+  S.route = 'board'; S.tab = 'board'; toast('已创建家庭组，你是组长'); render();
+}
+function regJoin(){
+  const u = ($('ru')?.value || '').trim();
+  if (!u) return toast('请填写用户名');
+  openSheet(`<h3>输入邀请码</h3>
+    <input id="rc" placeholder="8 位邀请码" value="FP7K2M9Q">
+    <div class="hint">邀请码有效期 7 天。被踢出或自行退出的家庭组无法再次加入。</div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn ghost block" onclick="closeSheet()">取消</button>
+      <button class="btn block" onclick="regJoinOk()">加入</button>
+    </div>`);
+}
+function regJoinOk(){
+  closeSheet(); S.loggedIn = true; S.role = 'member'; S.meId = 'm3';
+  $('roleLabel').textContent = '普通成员（小明）';
+  S.route = 'board'; S.tab = 'board'; toast('已加入「我们家」'); render();
+}
+function quickEnter(){ S.loggedIn = true; S.route = 'board'; S.tab = 'board'; render(); }
+
+/* ---------- 2 积分榜 / 得分榜 ---------- */
+function viewBoard(){
+  const list = rankList();
+  const isPoints = S.boardType === 'points';
+  return `
+  <div class="hd"><h2>${S.family.name}</h2>
+    <button class="back" onclick="go('records')" title="记录">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div>
+  <div class="seg">
+    <button class="${isPoints?'on':''}" onclick="S.boardType='points';render()">积分榜</button>
+    <button class="${!isPoints?'on':''}" onclick="S.boardType='score';render()">得分榜</button>
+  </div>
+  ${!isPoints ? `<div class="seg" style="margin-top:-6px">
+      <button class="${S.boardPeriod==='week'?'on':''}" onclick="S.boardPeriod='week';render()">本周</button>
+      <button class="${S.boardPeriod==='last'?'on':''}" onclick="S.boardPeriod='last';render()">上周</button>
+    </div>` : ''}
+  <div class="card">
+    ${list.map((m,i) => `
+      <div class="rank" onclick="go('member',{detailId:'${m.id}'})">
+        <div class="no ${i<3?'top':''}">${['🥇','🥈','🥉'][i] || (i+1)}</div>
+        <div class="avatar">${m.avatar}</div>
+        <div class="grow">
+          <div class="name">${m.name}${m.id===S.meId?' <span class="tag o" style="font-size:10px">我</span>':''}</div>
+          <div class="sub">${isPoints
+            ? (m.frozen ? `可用 ${m.score} · 冻结 ${m.frozen}` : `可用 ${m.score} 分`)
+            : `本周得分 ${m.val}${m.streak?` · 🔥连续 ${m.streak} 天`:''}`}</div>
+        </div>
+        <div class="pts">${m.val}</div>
+      </div>`).join('')}
+  </div>
+  <div class="card" style="background:#fff">
+    <div class="sub" style="line-height:1.7">
+      <b>两个榜的口径不同：</b><br>
+      积分榜 = 剩余积分（净额，兑换已扣）；得分榜 = 区间内赚到的分（毛额，不看花掉的）。
+    </div>
+  </div>`;
+}
+
+/* ---------- 3 成员详情 ---------- */
+function viewMemberDetail(){
+  const m = member(S.detailId) || me();
+  const recs = S.records.filter(r => r.memberId === m.id);
+  return `
+  ${header('成员详情', 'board')}
+  <div class="card" style="text-align:center;padding:22px 14px">
+    <div class="avatar" style="width:64px;height:64px;font-size:32px;margin:0 auto 10px;border-radius:20px">${m.avatar}</div>
+    <div class="name" style="font-size:19px">${m.name}</div>
+    <div class="sub">${m.isLeader?'组长':'成员'}${m.streak?` · 🔥 连续 ${m.streak} 天`:''}</div>
+    <div style="display:flex;justify-content:center;gap:26px;margin-top:16px">
+      <div><div class="pts" style="font-size:22px">${m.score}</div><div class="sub">可用</div></div>
+      <div><div class="pts" style="font-size:22px;color:var(--blue)">${m.frozen}</div><div class="sub">冻结</div></div>
+      <div><div class="pts" style="font-size:22px">${m.score+m.frozen}</div><div class="sub">总计</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="name" style="font-size:14px;margin-bottom:6px">积分流水</div>
+    ${recs.length ? recs.map(r => `
+      <div class="row" style="padding:11px 0;border-bottom:1px solid var(--line)">
+        <div class="grow"><div style="font-size:14px;font-weight:600">${r.title}</div>
+          <div class="sub">${r.at}</div></div>
+        <div class="pts ${cls(r.points)}">${r.points===0?'—':fmtPts(r.points)}</div>
+      </div>`).join('') : '<div class="empty">暂无记录</div>'}
+  </div>
+  ${m.id !== S.meId ? `<div style="padding:0 18px 18px">
+    <button class="btn block soft" onclick="openGiftTo('${m.id}')">赠送积分给 ${m.name}</button></div>`:''}`;
+}
+
+/* ---------- 4 最近记录 ---------- */
+function viewRecords(){
+  return `
+  ${header('最近记录','board')}
+  <div class="card">
+    ${S.records.map(r => {
+      const m = member(r.memberId);
+      return `<div class="row" style="padding:11px 0;border-bottom:1px solid var(--line)">
+        <div class="avatar" style="width:34px;height:34px;font-size:16px;border-radius:10px">${m.avatar}</div>
+        <div class="grow"><div style="font-size:14px;font-weight:600">${m.name} · ${r.title}</div>
+          <div class="sub">${r.at}</div></div>
+        <div class="pts ${cls(r.points)}">${r.points===0?'—':fmtPts(r.points)}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+/* ---------- 5 商城 ---------- */
+function viewShop(){
+  const m = me();
+  return `
+  ${header('兑换商城','shop')}
+  <div class="card" style="background:linear-gradient(135deg,#FFF6F0,#FFFDFB)">
+    <div class="row"><div class="grow">
+      <div class="sub">我的可用积分</div>
+      <div class="pts" style="font-size:26px;color:var(--primary)">${m.score}</div>
+    </div><div style="font-size:34px">🎁</div></div>
+  </div>
+  ${S.goods.map(g => `
+    <div class="card">
+      <div class="row">
+        <div class="avatar" style="font-size:22px">${g.emoji}</div>
+        <div class="grow"><div class="name">${g.name}</div><div class="sub">需要 ${g.cost} 积分</div></div>
+        <button class="btn ${m.score<g.cost?'ghost':'soft'}" ${m.score<g.cost?'disabled':''}
+          onclick="confirmRedeem('${g.id}')">${m.score<g.cost?'积分不足':'兑换'}</button>
+      </div>
+    </div>`).join('')}
+  <div style="padding:0 18px 18px;display:flex;flex-direction:column;gap:10px">
+    <button class="btn block soft" onclick="go('coupons')">我的券（${myCoupons().filter(c=>c.status!=='redeemed').length} 张可用）</button>
+    ${S.role==='leader'?`<button class="btn block ghost" onclick="go('goods')">管理商品</button>`:''}
+  </div>`;
+}
+function myCoupons(){ return S.coupons.filter(c => c.memberId === S.meId); }
+
+/* ---------- 5b 我的券 ---------- */
+function couponStat(c){
+  const eligible = S.members.filter(m => m.id !== c.memberId).length;
+  const need = eligible === 0 ? 0 : Math.floor(eligible / 2) + 1;
+  return { approve:c.votes.approve.length, reject:c.votes.reject.length, need, eligible };
+}
+function viewCoupons(){
+  const list = myCoupons();
+  const unused = list.filter(c => c.status === 'unused').length;
+  const pending = list.filter(c => c.status === 'pending').length;
+  return `
+  ${header('我的券','shop')}
+  <div class="card" style="background:linear-gradient(135deg,#FFF6F0,#FFFDFB)">
+    <div class="row">
+      <div class="grow"><div class="sub">可用券</div>
+        <div class="pts" style="font-size:24px;color:var(--primary)">${unused}</div></div>
+      <div style="text-align:right"><div class="sub">待核销</div>
+        <div class="pts" style="font-size:18px;color:var(--blue)">${pending}</div></div>
+    </div>
+    <div class="hint">券是「已付积分待兑现」的凭证。使用后需家人投票核销。</div>
+  </div>
+  ${list.length ? list.map(c => {
+    const st = couponStat(c);
+    if (c.status === 'unused') return `
+      <div class="card" style="border-left:3px solid var(--primary)">
+        <div class="row">
+          <div class="avatar" style="font-size:20px">🎟️</div>
+          <div class="grow"><div class="name">${c.itemName}</div>
+            <div class="sub">已付 ${c.cost} 积分${c.rejectCount?` · 曾被驳回 ${c.rejectCount} 次`:''}</div></div>
+          <button class="btn soft" onclick="useCoupon('${c.id}')">使用</button>
+        </div>
+      </div>`;
+    if (c.status === 'pending') return `
+      <div class="card" style="border-left:3px solid var(--blue)">
+        <div class="row">
+          <div class="avatar" style="font-size:20px">⏳</div>
+          <div class="grow"><div class="name">${c.itemName}</div>
+            <div class="sub">待家人投票核销 · 已同意 ${st.approve}/${st.need}</div></div>
+        </div>
+        <div style="height:7px;background:#EDEFF5;border-radius:99px;overflow:hidden;margin-top:10px">
+          <div style="height:100%;width:${st.need?Math.min(100,st.approve/st.need*100):100}%;background:var(--green)"></div>
+        </div>
+        <button class="btn ghost block" style="margin-top:10px" onclick="simulateCouponVote('${c.id}')">模拟其他成员投票</button>
+      </div>`;
+    return `
+      <div class="card" style="opacity:.6;border-left:3px solid var(--green)">
+        <div class="row">
+          <div class="avatar" style="font-size:20px">✅</div>
+          <div class="grow"><div class="name">${c.itemName}</div>
+            <div class="sub">已核销</div></div>
+          <span class="tag g">已完成</span>
+        </div>
+      </div>`;
+  }).join('') : '<div class="empty">还没有券，去商城兑换一个吧</div>'}`;
+}
+function useCoupon(id){
+  const c = S.coupons.find(x => x.id === id);
+  if (!c || c.status !== 'unused') return toast('这张券当前不可使用');
+  const st = couponStat(c);
+  if (st.eligible === 0){
+    c.status = 'redeemed';
+    toast('家庭只有你一人，直接核销'); render(); return;
+  }
+  c.status = 'pending'; c.votes = { approve:[], reject:[] };
+  toast('已发起核销，等待家人投票'); render();
+}
+function simulateCouponVote(id){
+  const c = S.coupons.find(x => x.id === id);
+  if (!c || c.status !== 'pending') return;
+  const cands = S.members.filter(m => m.id !== c.memberId
+    && !c.votes.approve.includes(m.id) && !c.votes.reject.includes(m.id));
+  if (!cands.length) return toast('所有人都已投票');
+  const v = cands[0];
+  c.votes.approve.push(v.id);
+  const st = couponStat(c);
+  if (st.approve >= st.need){
+    c.status = 'redeemed';
+    toast(`过半同意（${st.approve}/${st.need}），券已核销`);
+  } else {
+    toast(`${v.name} 投了同意（${st.approve}/${st.need}）`);
+  }
+  render();
+}
+
+function confirmRedeem(id){
+  const g = S.goods.find(x => x.id === id), m = me();
+  openSheet(`<h3>确认兑换</h3>
+    <div class="row" style="margin-bottom:16px">
+      <div class="avatar" style="font-size:22px">${g.emoji}</div>
+      <div class="grow"><div class="name">${g.name}</div><div class="sub">将扣除 ${g.cost} 积分</div></div>
+    </div>
+    <div class="row"><div class="grow sub">兑换后余额</div><div class="pts">${m.score - g.cost}</div></div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn ghost block" onclick="closeSheet()">取消</button>
+      <button class="btn block" onclick="doRedeem('${g.id}')">确认兑换</button>
+    </div>`);
+}
+function doRedeem(id){
+  const g = S.goods.find(x => x.id === id), m = me();
+  if (m.score < g.cost){ toast('积分不足'); return; }
+  m.score -= g.cost;
+  S.records.unshift({ id:'r'+Date.now(), memberId:m.id, title:`兑换「${g.name}」`,
+    points:-g.cost, at:'刚刚', period:'week' });
+  S.coupons.unshift({ id:'c'+Date.now(), itemName:g.name, cost:g.cost, memberId:m.id,
+    status:'unused', rejectCount:0, votes:{approve:[],reject:[]} });
+  closeSheet(); toast(`已兑换「${g.name}」，券已放入「我的券」`); render();
+}
+
+/* ---------- 6 赠送 ---------- */
+function viewGift(){
+  const m = me();
+  const others = S.members.filter(x => x.id !== m.id);
+  return `
+  ${header('赠送积分','settings')}
+  <div class="card">
+    <div class="sub">可用积分</div>
+    <div class="pts" style="font-size:24px;color:var(--primary)">${m.score}</div>
+    <div class="hint">赠送是积分转移，家庭总分不变。不需要对方确认，直接到账。</div>
+  </div>
+  <div class="card">
+    <div class="name" style="font-size:14px;margin-bottom:6px">选择成员</div>
+    ${others.map(x => `
+      <div class="li" onclick="openGiftTo('${x.id}')">
+        <div class="ico">${x.avatar}</div>
+        <div class="grow"><div class="name" style="font-size:14px">${x.name}</div>
+          <div class="sub">当前 ${x.score} 分</div></div>
+        <span class="sub">赠送 ›</span>
+      </div>`).join('')}
+  </div>`;
+}
+function openGiftTo(id){
+  const t = member(id), m = me();
+  openSheet(`<h3>赠送给 ${t.name}</h3>
+    <label>金额</label>
+    <input id="gAmt" type="number" min="1" max="${m.score}" value="5" placeholder="输入积分">
+    <label>附言（可选）</label>
+    <input id="gNote" placeholder="例如：这周表现不错">
+    <div class="hint">可用 ${m.score} 分，赠送后余额 ${m.score} → ${Math.max(0, m.score-5)}</div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn ghost block" onclick="closeSheet()">取消</button>
+      <button class="btn block" onclick="doGift('${id}')">确认赠送</button>
+    </div>`);
+}
+function doGift(id){
+  const t = member(id), m = me();
+  const amt = parseInt($('gAmt').value, 10);
+  const note = $('gNote').value.trim();
+  if (!amt || amt <= 0) return toast('请输入正整数');
+  if (amt > m.score) return toast('余额不足');
+  m.score -= amt; t.score += amt;
+  S.records.unshift({ id:'r'+Date.now(), memberId:t.id, title:`收到 ${m.name} 的赠送${note?`（${note}）`:''}`, points:amt, at:'刚刚', period:'week' });
+  S.records.unshift({ id:'r'+(Date.now()+1), memberId:m.id, title:`赠送给 ${t.name}`, points:-amt, at:'刚刚', period:'week' });
+  closeSheet(); toast(`已赠送给 ${t.name} ${amt} 分`); go('board');
+}
+
+/* ---------- 7 任务列表 ---------- */
+function viewTask(){
+  const others = S.tasks.filter(t => t.publisherId !== S.meId);
+  return `
+  <div class="hd"><h2>任务</h2>
+    <button class="back" onclick="openCreateTask()" title="发布任务">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </div>
+  <div class="seg">
+    <button class="on">可接取 ${others.filter(t=>t.status==='open').length}</button>
+    <button onclick="go('vote')">待投票 ${Object.keys(S.votes).length}</button>
+  </div>
+  ${S.tasks.map(t => {
+    const p = member(t.publisherId), a = t.assigneeId ? member(t.assigneeId) : null;
+    const tag = { open:['可接取','o'], taken:['进行中','b'], submitted:['待投票','o'], closed:['已完成','g'] }[t.status];
+    return `<div class="card task-card ${t.status==='taken'?'taken':t.status==='closed'?'done':''}"
+      onclick="go('taskDetail',{taskId:'${t.id}'})">
+      <div class="row">
+        <div class="grow">
+          <div class="name">${t.title}</div>
+          <div class="sub">${p.name} 发布 · 截止 ${t.due}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="pts plus">+${t.points}</div>
+          <span class="tag ${tag[1]}" style="margin-top:4px;display:inline-block">${tag[0]}</span>
+        </div>
+      </div>
+      ${a?`<div class="sub" style="margin-top:8px">接取人：${a.name}</div>`:''}
+    </div>`;
+  }).join('')}`;
+}
+
+/* ---------- 8 任务详情 ---------- */
+function viewTaskDetail(){
+  const t = S.tasks.find(x => x.id === S.taskId) || S.tasks[0];
+  const p = member(t.publisherId), a = t.assigneeId ? member(t.assigneeId) : null;
+  const isPublisher = t.publisherId === S.meId;
+  const isAssignee = t.assigneeId === S.meId;
+  const st = voteStat(t.id);
+  return `
+  ${header('任务详情','task')}
+  <div class="card">
+    <div class="name" style="font-size:18px">${t.title}</div>
+    <div class="sub" style="margin-top:4px">${p.name} 发布 · 截止 ${t.due}</div>
+    <div class="row" style="margin-top:14px">
+      <div class="grow"><div class="sub">悬赏（已冻结）</div>
+        <div class="pts plus" style="font-size:22px">+${t.points}</div></div>
+      <div style="text-align:right"><div class="sub">状态</div>
+        <div class="name" style="font-size:14px">${{open:'待接取',taken:'进行中',submitted:'待投票',closed:'已完成'}[t.status]}</div></div>
+    </div>
+    ${a?`<div class="divider"></div><div class="row"><div class="avatar" style="font-size:16px;width:32px;height:32px">${a.avatar}</div>
+      <div class="grow"><div class="name" style="font-size:14px">${a.name}</div><div class="sub">接取人</div></div></div>`:''}
+  </div>
+  ${t.status==='submitted'?`
+  <div class="card">
+    <div class="name" style="font-size:14px;margin-bottom:10px">投票进度</div>
+    <div class="row" style="margin-bottom:8px">
+      <div class="grow sub">同意 ${st.approve} / 需要 ${st.need}</div>
+      <div class="sub">反对 ${st.reject}</div>
+    </div>
+    <div style="height:8px;background:#EDEFF5;border-radius:99px;overflow:hidden">
+      <div style="height:100%;width:${Math.min(100, st.approve/st.need*100)}%;background:var(--green)"></div>
+    </div>
+    <div class="hint">除发布者外全员过半同意才通过；投票后不可更改。</div>
+  </div>`:''}
+  <div style="padding:0 18px 18px;display:flex;flex-direction:column;gap:10px">
+    ${t.status==='open' && !isPublisher ? `<button class="btn block" onclick="claimTask('${t.id}')">接取任务</button>`:''}
+    ${t.status==='taken' && isAssignee ? `<button class="btn block" onclick="submitTask('${t.id}')">提交完成</button>
+      <button class="btn block ghost" onclick="abandonTask('${t.id}')">放弃接取</button>`:''}
+    ${t.status==='submitted' && !isPublisher ? `<button class="btn block" onclick="vote('${t.id}','approve')">投同意票</button>
+      <button class="btn block ghost" onclick="vote('${t.id}','reject')">投反对票</button>`:''}
+    ${isPublisher && t.status!=='closed' ? `<button class="btn block danger" onclick="closeTask('${t.id}')">关闭任务（退回冻结积分）</button>`:''}
+    ${t.status==='open' && isPublisher ? `<div class="hint" style="text-align:center">发布者不能接取自己的任务</div>`:''}
+  </div>`;
+}
+function claimTask(id){
+  const t = S.tasks.find(x => x.id === id);
+  if (t.publisherId === S.meId) return toast('不能接取自己发布的任务');
+  if (t.assigneeId) return toast('该任务已被接取');
+  t.assigneeId = S.meId; t.status = 'taken';
+  toast('已接取，完成后记得提交'); render();
+}
+function abandonTask(id){
+  const t = S.tasks.find(x => x.id === id);
+  t.assigneeId = null; t.status = 'open';
+  toast('已放弃接取，任务回到可接取'); render();
+}
+function submitTask(id){
+  const t = S.tasks.find(x => x.id === id);
+  t.status = 'submitted';
+  S.votes[id] = { approve:[], reject:[] };
+  toast('已提交，等待其他成员投票'); render();
+}
+function vote(id, type){
+  const t = S.tasks.find(x => x.id === id);
+  if (t.publisherId === S.meId) return toast('发布者没有投票权');
+  const v = S.votes[id] || (S.votes[id] = { approve:[], reject:[] });
+  if (v.approve.includes(S.meId) || v.reject.includes(S.meId)) return toast('你已投过票，不能更改');
+  v[type].push(S.meId);
+  const st = voteStat(id);
+  if (st.approve >= st.need){
+    const p = member(t.publisherId), a = member(t.assigneeId);
+    p.frozen -= t.points; a.score += t.points; t.status = 'closed';
+    S.records.unshift({ id:'r'+Date.now(), memberId:a.id, title:`任务「${t.title}」收入`, points:t.points, at:'刚刚', period:'week' });
+    toast(`投票通过，${t.points} 分已转给 ${a.name}`);
+  } else if (st.reject > st.eligible - st.need){
+    t.status = 'open'; t.assigneeId = null;
+    toast('反对票已足够，任务被驳回');
+  } else {
+    toast(`已投票（同意 ${st.approve}/${st.need}）`);
+  }
+  render();
+}
+function closeTask(id){
+  const t = S.tasks.find(x => x.id === id);
+  const p = member(t.publisherId);
+  p.frozen -= t.points; p.score += t.points;
+  t.status = 'closed';
+  toast('任务已关闭，冻结积分已退回'); render();
+}
+function openCreateTask(){
+  const m = me();
+  openSheet(`<h3>发布任务</h3>
+    <label>任务内容</label>
+    <input id="tkTitle" placeholder="例如：整理书房">
+    <label>悬赏分值（从你的积分冻结）</label>
+    <input id="tkPts" type="number" min="1" value="5">
+    <div class="hint">可用 ${m.score} 分。发布后除你之外任何成员都可接取；通过后分值转给完成者。</div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn ghost block" onclick="closeSheet()">取消</button>
+      <button class="btn block" onclick="doCreateTask()">发布</button>
+    </div>`);
+}
+function doCreateTask(){
+  const m = me();
+  const title = $('tkTitle').value.trim();
+  const pts = parseInt($('tkPts').value, 10);
+  if (!title) return toast('请填写任务内容');
+  if (!pts || pts <= 0) return toast('分值必须是正整数');
+  if (pts > m.score) return toast('可用积分不足');
+  m.score -= pts; m.frozen += pts;
+  S.tasks.unshift({ id:'t'+Date.now(), title, points:pts, publisherId:m.id,
+    assigneeId:null, status:'open', due:'今天 22:00' });
+  closeSheet(); toast('任务已发布，积分已冻结'); render();
+}
+
+/* ---------- 9 投票中心 ---------- */
+function viewVote(){
+  const list = S.tasks.filter(t => t.status === 'submitted');
+  return `
+  ${header('待投票','task')}
+  ${list.length ? list.map(t => {
+    const p = member(t.publisherId), a = member(t.assigneeId), st = voteStat(t.id);
+    const mine = (S.votes[t.id]?.approve||[]).includes(S.meId) || (S.votes[t.id]?.reject||[]).includes(S.meId);
+    return `<div class="card">
+      <div class="name">${t.title}</div>
+      <div class="sub">${a.name} 完成 · ${p.name} 发布 · +${t.points} 分</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+        <div style="height:7px;background:#EDEFF5;border-radius:99px;overflow:hidden;flex:1">
+          <div style="height:100%;width:${Math.min(100,st.approve/st.need*100)}%;background:var(--green)"></div>
+        </div>
+        <span class="sub">${st.approve}/${st.need}</span>
+      </div>
+      ${p.id===S.meId ? '<div class="hint">你是发布者，无投票权</div>' :
+        mine ? '<div class="hint">你已投票，不可更改</div>' :
+        `<div style="display:flex;gap:10px;margin-top:12px">
+          <button class="btn ghost block" onclick="vote('${t.id}','reject')">反对</button>
+          <button class="btn block" onclick="vote('${t.id}','approve')">同意</button>
+        </div>`}
+    </div>`;
+  }).join('') : '<div class="empty">暂无待投票任务</div>'}`;
+}
+
+/* ---------- 10 通知 ---------- */
+function viewNotify(){
+  return `
+  <div class="hd"><h2>通知</h2></div>
+  ${S.notifications.map(n => `
+    <div class="card" onclick="readNotify('${n.id}')" style="opacity:${n.unread?1:.65}">
+      <div class="row">
+        <div class="ico" style="width:36px;height:36px;border-radius:11px;background:#F1F3F8;display:flex;align-items:center;justify-content:center">
+          ${n.unread?'🔔':'📄'}</div>
+        <div class="grow"><div class="name" style="font-size:14px">${n.title}</div>
+          <div class="sub">${n.body}</div></div>
+        <div class="sub" style="font-size:11.5px">${n.at}</div>
+      </div>
+    </div>`).join('')}
+  ${S.notifications.every(n=>!n.unread)?'<div class="empty">全部已读</div>':''}`;
+}
+function readNotify(id){
+  const n = S.notifications.find(x => x.id === id);
+  n.unread = false; render();
+  if (n.go) setTimeout(() => go(n.go), 180);
+}
+
+/* ---------- 11 屏幕时间 ---------- */
+function viewScreen(){
+  const m = me(), s = S.screen;
+  const pct = Math.min(100, s.todayMin / 180 * 100);
+  const ok = s.nightMin <= S.sleepRule.maxMin;
+  return `
+  ${header('屏幕时间','settings')}
+  <div class="card" style="text-align:center;padding:20px 14px">
+    <div class="ring" style="background:conic-gradient(var(--primary) ${pct}%, #EDEFF5 0)">
+      <div class="val"><b>${Math.floor(s.todayMin/60)}h${s.todayMin%60}m</b><span>今日使用</span></div>
+    </div>
+    <div class="row" style="justify-content:center;gap:26px;margin-top:6px">
+      <div><div class="name" style="font-size:15px">${s.nightMin} 分钟</div><div class="sub">夜间使用</div></div>
+      <div><div class="name" style="font-size:15px;color:${ok?'var(--green)':'var(--red)'}">${ok?'达标':'未达标'}</div>
+        <div class="sub">昨晚睡觉</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row"><div class="grow">
+      <div class="name" style="font-size:14px">上报状态</div>
+      <div class="sub">${s.reported?'已上报 · '+s.lastReport:'今日尚未上报'}</div>
+    </div><span class="tag ${s.reported?'g':'r'}">${s.reported?'正常':'待上报'}</span></div>
+    <div class="divider"></div>
+    <div class="row"><div class="grow">
+      <div class="name" style="font-size:14px">使用情况访问权限</div>
+      <div class="sub">需要「使用情况访问」才能自动统计</div>
+    </div><span class="tag g">已授权</span></div>
+  </div>
+  <div class="card">
+    <div class="name" style="font-size:14px;margin-bottom:8px">睡觉规则</div>
+    <div class="sub">${S.sleepRule.bedtime}:00 前放下手机 · 允许 ${S.sleepRule.maxMin} 分钟</div>
+    <div class="sub" style="margin-top:4px">连续 ${S.sleepRule.tiers.map(t=>`${t.every}天 +${t.bonus}`).join(' · ')}</div>
+  </div>
+  <div style="padding:0 18px 18px">
+    <button class="btn block ghost" onclick="mockReport()">模拟设备上报</button>
+  </div>`;
+}
+function mockReport(){
+  S.screen.todayMin += 24; S.screen.nightMin = 0; S.screen.reported = true; S.screen.lastReport = '刚刚';
+  const m = me(); m.streak += 1;
+  S.records.unshift({ id:'r'+Date.now(), memberId:m.id, title:'准时睡觉', points:2, at:'刚刚', period:'week' });
+  m.score += 2;
+  toast('上报成功：夜间 0 分钟，准时睡觉 +2'); render();
+}
+
+/* ---------- 12 设置 ---------- */
+function viewSettings(){
+  const m = me();
+  const isLeader = S.role === 'leader';
+  return `
+  <div class="hd"><h2>我的</h2></div>
+  <div class="card">
+    <div class="row">
+      <div class="avatar" style="width:52px;height:52px;font-size:26px;border-radius:16px">${m.avatar}</div>
+      <div class="grow"><div class="name" style="font-size:17px">${m.name}</div>
+        <div class="sub">${isLeader?'组长':'成员'} · ${S.family.name}</div></div>
+      <div style="text-align:right"><div class="pts" style="font-size:19px">${m.score}</div>
+        <div class="sub">可用积分</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="li" onclick="go('gift')"><div class="ico">🎁</div>
+      <div class="grow"><div class="name" style="font-size:14px">赠送积分</div>
+        <div class="sub">把积分转给其他成员</div></div><span class="sub">›</span></div>
+    <div class="li" onclick="go('screen')"><div class="ico">📱</div>
+      <div class="grow"><div class="name" style="font-size:14px">屏幕时间</div>
+        <div class="sub">今日使用与上报状态</div></div><span class="sub">›</span></div>
+    <div class="li" onclick="go('records')"><div class="ico">📋</div>
+      <div class="grow"><div class="name" style="font-size:14px">积分记录</div>
+        <div class="sub">全部流水</div></div><span class="sub">›</span></div>
+  </div>
+  ${isLeader?`
+  <div class="card">
+    <div class="sub" style="margin-bottom:6px;font-weight:650">组长工具</div>
+    <div class="li" onclick="go('members')"><div class="ico">👥</div>
+      <div class="grow"><div class="name" style="font-size:14px">成员管理</div>
+        <div class="sub">邀请、踢出、设组长</div></div><span class="sub">›</span></div>
+    <div class="li" onclick="go('sleeprule')"><div class="ico">🌙</div>
+      <div class="grow"><div class="name" style="font-size:14px">睡觉规则</div>
+        <div class="sub">时间点与连续奖励</div></div><span class="sub">›</span></div>
+    <div class="li" onclick="go('goods')"><div class="ico">🏪</div>
+      <div class="grow"><div class="name" style="font-size:14px">商品管理</div>
+        <div class="sub">增删改商城商品</div></div><span class="sub">›</span></div>
+  </div>`:`
+  <div class="card"><div class="hint" style="text-align:center;margin:0">
+    成员管理、睡觉规则、商品管理仅组长可见</div></div>`}
+  <div class="card">
+    <div class="li"><div class="ico">🔑</div>
+      <div class="grow"><div class="name" style="font-size:14px">修改密码</div></div><span class="sub">›</span></div>
+    <div class="li" onclick="logout()"><div class="ico">🚪</div>
+      <div class="grow"><div class="name" style="font-size:14px;color:var(--red)">退出登录</div></div></div>
+  </div>`;
+}
+function logout(){ S.loggedIn = false; render(); toast('已退出'); }
+
+/* ---------- 13 成员管理（组长） ---------- */
+function viewMembers(){
+  return `
+  ${header('成员管理','settings')}
+  <div class="card">
+    <div class="row"><div class="grow"><div class="name" style="font-size:14px">邀请码</div>
+      <div class="sub">有效期 7 天 · 至 ${S.family.inviteExpire}</div></div>
+      <button class="btn soft" onclick="toast('邀请码已复制：${S.family.inviteCode}')">复制</button></div>
+    <div style="margin-top:10px;font-size:20px;letter-spacing:3px;font-weight:750;color:var(--primary)">${S.family.inviteCode}</div>
+    <div class="hint">对方注册后输入此码即可加入。重置后旧码立即失效。</div>
+    <button class="btn ghost block" style="margin-top:10px" onclick="toast('已重置邀请码')">重置邀请码</button>
+  </div>
+  ${S.members.map(m => `
+    <div class="card">
+      <div class="row">
+        <div class="avatar">${m.avatar}</div>
+        <div class="grow"><div class="name">${m.name}${m.id===S.meId?' <span class="tag o" style="font-size:10px">我</span>':''}</div>
+          <div class="sub">${m.isLeader?'组长':'成员'} · ${m.score} 分${m.frozen?` · 冻结 ${m.frozen}`:''}</div></div>
+        ${m.isLeader?'<span class="tag o">组长</span>':
+          `<button class="btn ghost" style="padding:7px 12px;font-size:12.5px"
+            onclick="openMemberActions('${m.id}')">管理</button>`}
+      </div>
+    </div>`).join('')}
+  <div style="padding:0 18px 18px">
+    <button class="btn block" onclick="toast('输入对方用户名发起邀请')">邀请成员</button>
+  </div>`;
+}
+function openMemberActions(id){
+  const m = member(id);
+  openSheet(`<h3>管理 ${m.name}</h3>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <button class="btn ghost block" onclick="closeSheet();toast('已设为组长（原组长降为成员）')">设为组长</button>
+      <button class="btn ghost block" onclick="closeSheet();toast('已隐藏该成员')">在榜单中隐藏</button>
+      <button class="btn danger block" onclick="kickMember('${id}')">踢出家庭组</button>
+    </div>
+    <div class="hint">踢出后：积分清零、禁止再加入本组，历史记录保留。</div>`);
+}
+function kickMember(id){
+  const m = member(id);
+  S.members = S.members.filter(x => x.id !== id);
+  closeSheet(); toast(`已将 ${m.name} 踢出，积分清零`); render();
+}
+
+/* ---------- 14 睡觉规则（组长） ---------- */
+function viewSleepRule(){
+  const r = S.sleepRule;
+  return `
+  ${header('睡觉规则','settings')}
+  <div class="card">
+    <div class="row"><div class="grow"><div class="name" style="font-size:14px">启用睡觉判定</div>
+      <div class="sub">由屏幕时间自动判定，无需手动打卡</div></div>
+      <button class="btn ${r.enabled?'soft':'ghost'}" onclick="r.enabled=!r.enabled;render()">${r.enabled?'已启用':'已关闭'}</button></div>
+  </div>
+  <div class="card">
+    <label>睡觉时间点（几点前放下手机）</label>
+    <select onchange="S.sleepRule.bedtime=+this.value;render()">
+      ${[21,22,23,0].map(h=>`<option value="${h}" ${r.bedtime===h?'selected':''}>${h===0?'24:00（0 点）':h+':00'}</option>`).join('')}
+    </select>
+    <label>起床时间点</label>
+    <select onchange="S.sleepRule.wake=+this.value;render()">
+      ${[6,7,8].map(h=>`<option value="${h}" ${r.wake===h?'selected':''}>${h}:00</option>`).join('')}
+    </select>
+    <label>该时段允许使用（分钟）</label>
+    <input type="number" value="${r.maxMin}" min="0" onchange="S.sleepRule.maxMin=+this.value;render()">
+    <div class="hint">设为 0 表示「完全不许用」，用一分钟就算未达标。</div>
+  </div>
+  <div class="card">
+    <div class="name" style="font-size:14px;margin-bottom:8px">连续奖励档位</div>
+    ${r.tiers.map((t,i)=>`
+      <div class="row" style="padding:9px 0;border-bottom:1px solid var(--line)">
+        <div class="grow"><div style="font-size:14px;font-weight:600">连续 ${t.every} 天 +${t.bonus} 分</div>
+          <div class="sub">${t.mode==='repeat'?'每满就奖':'本轮只奖一次'}</div></div>
+        <button class="btn danger" style="padding:6px 11px;font-size:12px"
+          onclick="S.sleepRule.tiers.splice(${i},1);render()">删</button>
+      </div>`).join('')}
+    <button class="btn ghost block" style="margin-top:10px" onclick="addTier()">+ 添加档位</button>
+  </div>`;
+}
+function addTier(){
+  S.sleepRule.tiers.push({ every:3, bonus:5, mode:'repeat' });
+  toast('已添加档位'); render();
+}
+
+/* ---------- 15 商品管理（组长） ---------- */
+function viewGoods(){
+  return `
+  ${header('商品管理','shop')}
+  ${S.goods.map(g => `
+    <div class="card">
+      <div class="row">
+        <div class="avatar" style="font-size:22px">${g.emoji}</div>
+        <div class="grow"><div class="name">${g.name}</div><div class="sub">${g.cost} 积分</div></div>
+        <button class="btn danger" style="padding:7px 12px;font-size:12.5px"
+          onclick="S.goods=S.goods.filter(x=>x.id!=='${g.id}');render();toast('已删除')">删</button>
+      </div>
+    </div>`).join('')}
+  <div style="padding:0 18px 18px">
+    <button class="btn block" onclick="openAddGoods()">+ 新增商品</button>
+  </div>`;
+}
+function openAddGoods(){
+  openSheet(`<h3>新增商品</h3>
+    <label>名称</label><input id="gdName" placeholder="例如：一次游乐场">
+    <label>所需积分</label><input id="gdCost" type="number" min="1" value="20">
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn ghost block" onclick="closeSheet()">取消</button>
+      <button class="btn block" onclick="doAddGoods()">添加</button>
+    </div>`);
+}
+function doAddGoods(){
+  const name = $('gdName').value.trim(), cost = parseInt($('gdCost').value, 10);
+  if (!name) return toast('请填写名称');
+  if (!cost || cost <= 0) return toast('积分必须是正整数');
+  S.goods.push({ id:'g'+Date.now(), name, cost, emoji:'🎁' });
+  closeSheet(); toast('已添加'); render();
+}
+
+/* ---------- 公共头 ---------- */
+function header(title, backTab){
+  return `<div class="hd">
+    <button class="back" onclick="tapTab('${backTab}')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+        stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <h2>${title}</h2>
+  </div>`;
+}
+
+/* ---------- 启动 ---------- */
+setInterval(() => {
+  const d = new Date();
+  $('clock').textContent = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}, 30000);
+render();
+</script>
+</body>
+</html>
