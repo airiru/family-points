@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.familypoints.app.data.api.MemberBrief
 import com.familypoints.app.ui.theme.Blue
 import com.familypoints.app.ui.theme.Green
+import com.familypoints.app.ui.theme.Ink
 import com.familypoints.app.ui.theme.GreenSoft
 import com.familypoints.app.ui.theme.Line
 import com.familypoints.app.ui.theme.Primary
@@ -60,14 +61,27 @@ fun CardBox(
 
 /** 积分文本：正绿负红零灰。 */
 @Composable
-fun PointsText(points: Int, big: Boolean = false) {
+/**
+ * 分值文本。
+ *
+ * @param signed true = 流水口径（+5 / -3 / 0 显示为 —）；false = 余额口径（不带符号、不用红绿）。
+ *   余额不是「赚了多少」，加 + 号会让人误读成收入。
+ */
+fun PointsText(points: Int, big: Boolean = false, signed: Boolean = true) {
     val color = when {
+        !signed -> Ink
         points > 0 -> Green
         points < 0 -> Red
         else -> Sub
     }
+    val text = when {
+        !signed -> "$points"
+        points == 0 -> "—"
+        points > 0 -> "+$points"
+        else -> "$points"
+    }
     Text(
-        text = if (points == 0) "—" else if (points > 0) "+$points" else "$points",
+        text = text,
         color = color,
         fontWeight = FontWeight.Bold,
         fontSize = if (big) 22.sp else 15.sp,
@@ -177,7 +191,7 @@ fun MemberRow(
                 color = Sub,
             )
         }
-        if (trailing != null) trailing() else PointsText(member.totalScore)
+        if (trailing != null) trailing() else PointsText(member.totalScore, signed = false)
     }
 }
 

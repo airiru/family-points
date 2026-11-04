@@ -18,8 +18,10 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        // 后端地址：模拟器用 10.0.2.2 指向宿主机；真机改成局域网 IP
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
+        // 后端地址，优先级：-PapiBaseUrl=... > 默认 10.0.2.2（模拟器指向宿主机）
+        // 真机推荐：adb reverse tcp:8080 tcp:8080 + -PapiBaseUrl=http://127.0.0.1:8080/
+        val apiBaseUrl = (project.findProperty("apiBaseUrl") as String?) ?: "http://10.0.2.2:8080/"
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
     buildTypes {

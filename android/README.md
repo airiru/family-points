@@ -119,8 +119,29 @@ app/src/main/java/com/familypoints/app/
 2. **`TokenStore` 缺 `@ApplicationContext`** —— 裸 `Context` 无法被 Hilt 解析，Dagger 报 MissingBinding。
 3. **`AppViewModel` 的 suspend 调用位置** —— `runCatching{}.onFailure{}` 里读 DataStore，改为显式 `try/catch`。
 
-### 尚未验证
+### 真机验证（2026-11-04，HUAWEI ANA-AN00 / Android 12 / API 31）
 
-- **未在真机 / 模拟器上运行过**，只验证了编译与打包（`adb install` 与首屏启动都还没做过）
-- 屏幕时间采集、WorkManager 定时上报、token 自动刷新等运行时行为**未经实测**
-- 与后端的联调未做：`API_BASE_URL` 默认 `10.0.2.2:8080`，需要模拟器 + 本机服务同时跑
+`adb install` + 真机启动 + 真登录**全部通过**，走的是 `adb reverse` 隧道：
+
+```bash
+adb reverse tcp:8080 tcp:8080          # 设备的 127.0.0.1:8080 → 本机 8080
+./gradlew assembleDebug -PapiBaseUrl=http://127.0.0.1:8080/
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n com.familypoints.app.debug/com.familypoints.app.MainActivity
+```
+
+已验证的界面（截图逐一核对）：登录 → 积分榜（4 名成员、真实余额、冻结额正确）
+→ 任务（可接取为空符合「排除自己发布」）→ 商城（余额不足置灰、我的券入口）
+→ 我的（组长工具三项按角色显示）。
+
+**踩到的坑**：华为设备在**密码框获得焦点时 `adb screencap` 返回空文件**（安全截屏保护）。
+先 `adb shell input keyevent 4` 收起键盘再截即可。
+
+### 仍未验证
+
+- **屏幕时间采集与上报**：`UsageStatsManager` 授权流程、WorkManager 定时任务、跨零点切分都没实测
+- **token 自动刷新**：refresh 过期后重放请求的路径未触发过
+- 商品券核销投票的完整链路（需要多台设备或多个账号轮流操作）
+- 已知性能问题：`/api/app/state` 1.5s、`/api/app/stats/ranking` 3.6s。
+  后者是 **N+1 查询**（每个成员单独算一次连续天数，`service/report.go:161`），
+  加上远端 MySQL 的 RTT，成员越多越慢

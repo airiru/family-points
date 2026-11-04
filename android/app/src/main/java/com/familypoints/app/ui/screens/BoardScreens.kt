@@ -193,7 +193,12 @@ private fun RankingItem(
                 color = Sub,
             )
         }
-        PointsText(if (type == "points") row.score + row.frozenScore else row.periodScore, big = true)
+        PointsText(
+            if (type == "points") row.score + row.frozenScore else row.periodScore,
+            big = true,
+            // 积分榜是余额（不带符号），得分榜是区间所得（可以带 +）
+            signed = type != "points",
+        )
     }
 }
 
