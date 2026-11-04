@@ -227,7 +227,7 @@ var expectedTables = []string{
 	"families", "family_bans", "admins", "members", "rules", "items",
 	"records", "transfers", "tasks", "task_submissions", "task_votes",
 	"audit_logs", "notifications", "screen_rules", "screen_reports", "devices",
-	"refresh_tokens", "redemptions",
+	"refresh_tokens", "redemptions", "coupons", "coupon_votes",
 }
 
 // verifySchema 核对 P0 的完成判据：表齐全 + 几条关键约束真的生效。

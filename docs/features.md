@@ -160,7 +160,7 @@ CREATE TABLE items (
   KEY idx_family (family_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 兑换单（P4 已实现，与 0003_ledger 迁移一致）
+-- 兑换单（P4 已实现，与 0001_init 迁移一致）
 CREATE TABLE redemptions (
   id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   family_id  BIGINT UNSIGNED NOT NULL,
@@ -1871,6 +1871,24 @@ GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER ON 
   迁移表被打成 `dirty`，当时只能把字段并入 `0001` 并 `-reset` 重建。
   **教训：拿到新库先跑一次 `-grants` 和 `-check-ddl`**，别等到写迁移时才发现
 - `-reset`（仅 dev）仍然保留，用于「确实要清库重来」的场景，**不再作为改表的唯一手段**
+
+### 24.6 开发阶段的数据与迁移策略（2026-11-04 用户明确）
+
+> **现在是开发阶段：不兼容旧数据、旧代码、旧版本。可以完全推倒重来，数据库可以重新设计。**
+
+| 场景 | 开发阶段的做法 | 不要做的事 |
+|---|---|---|
+| 加字段 / 改字段 | 直接改 `0001`，或 `-reset` 后重跑；必要时 squash 迁移链 | 为「已执行的迁移不能改」而将就设计 |
+| 改表关系 | 重新设计表结构，`-reset` 重建 | 写数据迁移脚本、双写窗口、回滚预案 |
+| 已有测试数据 | 丢了就丢了，重跑脚本再生成 | 为了保住测试数据写兼容代码 |
+| 旧版本代码 | 直接删或改，不留兼容分支 | 保留「兼容 v1」的兜底逻辑 |
+
+**仍然必须做的两件事**（「不兼容旧数据」不等于「不写文档」）：
+
+1. `go run ./cmd/migrate -verify` —— 重建后表结构必须与第 3 节一致
+2. `python scripts/api_audit.py` —— 接口清单与路由必须零漂移
+
+> 判据：**任何为了「保住已有数据」而增加的复杂度，在当前阶段都是错的。**
 
 ---
 

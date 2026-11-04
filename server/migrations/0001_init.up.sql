@@ -83,9 +83,11 @@ CREATE TABLE IF NOT EXISTS records (
   streak_award JSON         NULL,
   source       ENUM('screen','night','task','transfer','redeem') NOT NULL,
   transfer_id  BIGINT UNSIGNED NULL,
+  redemption_id BIGINT UNSIGNED NULL,        -- 指向兑换单，与 transfer_id 对称
   KEY idx_family_time (family_id, occurred_at DESC),
   KEY idx_member_time (member_id, occurred_at DESC),
-  KEY idx_transfer (transfer_id)
+  KEY idx_transfer (transfer_id),
+  KEY idx_redemption (redemption_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 积分赠送（转移关系，便于审计与撤销）
@@ -206,6 +208,7 @@ CREATE TABLE IF NOT EXISTS screen_reports (
   report_date     DATE         NOT NULL,
   total_min       INT          NOT NULL,
   night_min       INT          NULL,
+  night_ok        TINYINT(1)   NULL,         -- 夜间判定快照；NULL = 当日未做判定
   points          INT          NOT NULL,
   record_id       BIGINT UNSIGNED NULL,
   night_record_id BIGINT UNSIGNED NULL,
@@ -228,4 +231,69 @@ CREATE TABLE IF NOT EXISTS devices (
   last_seen_at DATETIME(3)  NULL,
   KEY idx_token (token_hash),
   KEY idx_family (family_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- ============================================================
+-- 以下四张表原为 0002–0005 的增量迁移，2026-11-04 开发阶段 squash 进来。
+-- 现在**只有这一个迁移文件**：改表就改这里 + `migrate -reset` 重建。
+-- 等到真正上线、库里有不可丢的真实数据时，才开始写 0002+ 的增量迁移。
+-- ============================================================
+
+-- 可吊销的 refresh token（改密 / 登出 / 轮换时旧 token 必须能立即失效）
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  subject_type     ENUM('admin','member') NOT NULL,
+  subject_id       BIGINT UNSIGNED NOT NULL,
+  token_hash       CHAR(64)     NOT NULL UNIQUE,   -- 只存 sha256 hex
+  expires_at       DATETIME(3)  NOT NULL,
+  revoked_at       DATETIME(3)  NULL,              -- 非空 = 已失效
+  replaced_by_hash CHAR(64)     NULL,              -- 轮换出的新 token，便于追溯
+  created_at       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_subject (subject_type, subject_id),
+  KEY idx_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 兑换单（承载「这张单是否已撤销」的状态，records 是 append-only 流水不承载状态）
+CREATE TABLE IF NOT EXISTS redemptions (
+  id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id  BIGINT UNSIGNED NOT NULL,
+  member_id  BIGINT UNSIGNED NOT NULL,
+  item_id    BIGINT UNSIGNED NULL,          -- 商品可能被删，允许为空
+  item_name  VARCHAR(64)  NOT NULL,         -- 快照：商品改名/删除不影响历史
+  cost       INT          NOT NULL,         -- 兑换时的价格快照
+  created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  revoked_at DATETIME(3)  NULL,             -- 预留：撤销功能暂不做（9.4）
+  KEY idx_family_time (family_id, created_at DESC),
+  KEY idx_member (member_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 商品券（兑换后生成，与兑换单 1:1；券存快照，商品改动不影响已发的券）
+CREATE TABLE IF NOT EXISTS coupons (
+  id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id     BIGINT UNSIGNED NOT NULL,
+  member_id     BIGINT UNSIGNED NOT NULL,   -- 持有者 = 兑换者
+  redemption_id BIGINT UNSIGNED NOT NULL,   -- 来源兑换单，1:1
+  item_name     VARCHAR(64)  NOT NULL,      -- 快照
+  cost          INT          NOT NULL,      -- 价格快照
+  status        ENUM('unused','pending','redeemed') NOT NULL DEFAULT 'unused',
+  reject_count  INT          NOT NULL DEFAULT 0,
+  vote_deadline DATETIME(3)  NULL,          -- 核销投票截止
+  created_at    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  settled_at    DATETIME(3)  NULL,          -- 核销完成时间
+  UNIQUE KEY uk_redemption (redemption_id),
+  KEY idx_member_status (member_id, status),
+  KEY idx_family (family_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 券核销投票（与 task_votes 同构：一人一票、投后不可改）
+CREATE TABLE IF NOT EXISTS coupon_votes (
+  id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id  BIGINT UNSIGNED NOT NULL,
+  coupon_id  BIGINT UNSIGNED NOT NULL,
+  voter_id   BIGINT UNSIGNED NOT NULL,
+  vote       ENUM('approve','reject') NOT NULL,
+  created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_coupon_voter (coupon_id, voter_id),
+  KEY idx_coupon (coupon_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
