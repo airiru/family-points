@@ -21,15 +21,26 @@
 
 > 判据：**任何为了「保住已有数据」而增加的复杂度，在当前阶段都是错的。**
 
-## 一、仓库现状：**v1 代码已删除，仓库里只剩文档与记忆**（2026-11-03）
+## 一、仓库现状：**v3 三层已全部落地**（2026-11-04 核对磁盘）
 
-> ⚠️ **不要再去仓库里找 `src/`、`worker/`、`wrangler.toml`、`package.json`——它们已被删除。**
-> 2026-11-03 用户拍板「一切从 0 开始」，v1 全套前端/后端/构建链一并移除。
-> 需要查阅旧实现时用 git 历史取回：
-> `git show 46ff29e:worker/index.js`（**46ff29e 是最后一次 v1 代码提交**）。
->
-> 仓库当前只剩 8 个受控文件：`.gitignore`、`LICENSE`、`README.md`（已过时待重写）、
-> `docs/features.md`（功能唯一事实源）、`.memory/` 下的记忆与技能权威源。
+> 2026-11-03 用户拍板「一切从 0 开始」，v1 全套（Vue + Worker + KV）删除；
+> 2026-11-03 起 v3 从零实现，**截至 2026-11-04 已跑通端到端**。
+> 需要查阅旧 v1 实现时用 git 历史取回：`git show 46ff29e:worker/index.js`
+> （**46ff29e 是最后一次 v1 代码提交**）。
+
+| 目录 | 现状（磁盘实测） |
+|---|---|
+| `server/` | Go + Gin + sqlx，**45 个 .go**，`internal/` 13 个子包（auth/config/db/handler/httpx/middleware/model/repo/router/scoring/service/audit） |
+| `server/migrations/` | **单一 `0001_init`**（已 squash，20 张表）+ `embed.go` |
+| `server/scripts/` | **10 个验收脚本** p1–p8b + p9_coupon |
+| `android/` | Kotlin + Compose，**19 个 .kt**，已真实构建出 APK |
+| `web/` | Vue 3 + Vite，**14 个页面**（含 Login），仅管理员 |
+| `docs/features.md` | **2165 行**，1–25 节，功能唯一事实源 |
+| `README.md` | **已整体失效**（顶部有失效声明），待重写 |
+
+**阶段进度**：P1 认证 → P2 多租户 → P3 家庭组 → P4 账目 → P5 屏幕时间 →
+P6 任务投票 → P7 榜单 → P8a 审计通知 → P8b 后台管理 → **P9 商品券** 全部完成；
+Android 客户端与 Web 后台均已实现。**剩下的是部署（19.5–19.7 挂起）。**
 
 **v1 曾经是什么**（仅供对照，代码已不在盘上）：
 
@@ -40,17 +51,17 @@
 | 存储 | Cloudflare KV，**单键** `state`（一个 JSON 存全部数据） |
 | 部署 | **Cloudflare Pages**（`wrangler pages deploy`） |
 
-## 一之二、v3 目标架构（2026-11-02 用户拍板，**未实现**）
+## 一之二、v3 架构（2026-11-02 拍板，**已实现**）
 
 > 架构已被变更三次：v1 KV → v2 D1 → **v3 自建 MySQL/Go**。**v2 方案已作废**，不要参考。
 
-| 维度 | v1（代码现状） | v3（目标） |
+| 维度 | v1（已删除） | v3（当前实现） |
 |---|---|---|
-| 存储 | KV 单键 `state` | **MySQL 8**（InnoDB / utf8mb4） |
+| 存储 | KV 单键 `state` | **MySQL 8**（InnoDB / utf8mb4，20 张表） |
 | 后端 | Cloudflare Worker (JS) | **Go + Gin + sqlx**，自建服务器 |
-| Web | 前端应用（双角色） | **管理后台**（仅 `admins`，无成员视图） |
-| Android | 无 | **Kotlin + Compose 原生**（成员端，15 个界面，3 个仅组长可见） |
-| 部署 | Cloudflare Pages | **自建服务器**：Nginx + Docker Compose |
+| Web | 前端应用（双角色） | **管理后台**（仅 `admins`，无成员视图，14 页） |
+| Android | 无 | **Kotlin + Compose 原生**（成员端，16 个界面，3 个仅组长可见） |
+| 部署 | Cloudflare Pages | **自建服务器**：Nginx + Docker Compose（**未做**） |
 
 **已定决策**（用户明确选择，不要重新讨论）：
 1. 数据库 **MySQL**；后端 **Go**；Android **Kotlin 原生**；后台 **Web**。
@@ -68,24 +79,20 @@ Token 改 **Access 2h + Refresh 30d**；并发兑换需事务 + `FOR UPDATE` 防
 
 ## 二、架构约定（改动前必须遵守）
 
-1. **单键全量状态**：`STATE_KEY = 'state'`，结构 `{ members, rules, items, records, secret }`。
-   任何写操作 = 读出整个 state → 改内存对象 → `saveState()` 整体写回。
-   ⇒ 新增字段必须在 `emptyState()` 里给默认值，否则老数据读取时是 `undefined`。
-2. **接口协议统一**：所有响应为 `{ ok, state?, error? }`。前端 `store.js` 的 `request()` 收到响应后
-   **无条件 `Object.assign(state, j.state)`** —— 后端返回的 `state` 就是前端唯一数据源，
-   不要在 action 里另造增量补丁。
-3. **鉴权是无状态 token**：`username.exp.hmac(username.exp)`，HMAC-SHA256 签在 `state.secret` 上，
-   有效期 30 天（`TOKEN_DAYS`）。**角色以成员当前配置为准**，不从 token 里读。
-4. **权限收敛在后端**：`fetch` 里统一拦截 —— 非 `admin` 只放行 `item/redeemSelf` 一条写接口，
-   前端隐藏按钮只是体验，**不是安全边界**。
-5. **记录上限 500 条**（`MAX_RECORDS`），`saveState()` 里 `slice(-MAX_RECORDS)` 丢弃最旧。
-   加任何"按全量记录统计"的逻辑时，要意识到历史会被截断。
-6. **补记语义**：记录有 `time`（事项发生时间）与 `addedAt`（实际写入时间）两个字段。
-   前端 `addedText()` 判定「相差 > 12 小时 = 补记」。补记日期按**东八区当天中午**折算。
-7. **连续打卡**：`rule.streaks` 为数组（每项含连续天数 N 与奖励分 M）。
-   口径以 worker 的 `streakCount()` / `streakResetAt()` 为准，前端 `memberStreak()` 是**同口径的展示副本**
-   —— 改一处必须改另一处，否则前后端显示不一致。
-8. **0 分是合法记录**（如「违反重新计数」说明），显示为中性样式，不计正分。`ptsClass()` 三态：plus/minus/空。
+> ⛔ **下面第 1–8 条是 v1（Cloudflare KV）的约定，已全部作废** ——
+> v1 代码已删除，`STATE_KEY` / `saveState()` / 500 条截断 / HMAC-SHA256 token 在 v3 里**都不存在**。
+> 仅作历史对照保留，**不要照着实现**。v3 的强制约定从第 9 条开始。
+
+**~~v1 约定（已作废）~~**：
+
+1. ~~**单键全量状态**：`STATE_KEY = 'state'`…~~ → v3 是 MySQL 20 张表 + 事务。
+2. ~~**接口协议统一**：`{ ok, state?, error? }`…~~ → v3 是 `{ ok, data?, error? }`。
+3. ~~**鉴权是无状态 token**：HMAC 签在 `state.secret` 上，30 天…~~ → v3 是 JWT，Access 2h + Refresh 30d。
+4. ~~**权限收敛在后端**（非 admin 只放行 `item/redeemSelf`）~~ → v3 见第 9 条多租户隔离。
+5. ~~**记录上限 500 条**~~ → **v3 已取消截断**，MySQL 无此约束。
+6. ~~**补记语义**（`time` / `addedAt` 相差 > 12 小时）~~ → v3 是 `occurred_at` / `added_at` 两列。
+7. ~~**连续打卡**口径以 worker 的 `streakCount()` 为准~~ → v3 在 `internal/scoring`。
+8. ~~**0 分是合法记录**，`ptsClass()` 三态~~ → 语义保留，但那是 v1 前端函数，已不存在。
 
 ### v3 强制约定（实现时必须遵守，否则会出安全或数据事故）
 
@@ -206,9 +213,25 @@ Token 改 **Access 2h + Refresh 30d**；并发兑换需事务 + `FOR UPDATE` 防
 
 ## 三、构建与部署链路
 
-**v1 链路已随代码一并删除**（原为 `vite build` + `postbuild.mjs` + `wrangler pages deploy`）。
-v3 的目标链路是 **自建服务器**：Go 二进制 + MySQL + Nginx，用 Docker Compose 编排；
-数据库 schema 变更走 **golang-migrate**。**尚未实现，无任何脚本**。
+**本地开发（2026-11-04 实测可跑）**：
+
+```bash
+# 后端（需 MySQL 在 3306）
+cd server && go run ./cmd/migrate            # 首次；-reset 重建、-verify 校验、-seed-admin 建管理员
+go run ./cmd/api                             # :8080
+
+# Web 后台
+cd web && npm install && npm run dev         # :5173，/api 代理到 8080
+
+# Android
+cd android && JAVA_HOME=/d/tools/jdk-21.0.2 /d/tools/gradle-8.9/bin/gradle assembleDebug
+```
+
+**版本组合（已验证，别乱升）**：AGP 8.7.3 + **JDK 21**（JDK 25 被 AGP 拒绝）+
+Gradle 8.9 + compileSdk 35 + minSdk 26。Web 依赖用 npmmirror 源。
+
+**部署链路尚未实现**：目标为 Go 二进制 + MySQL + Nginx，Docker Compose 编排；
+schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrations/`）。
 
 ## 四、记忆协议自身的落点
 
@@ -226,16 +249,17 @@ v3 的目标链路是 **自建服务器**：Go 二进制 + MySQL + Nginx，用 D
 
 ## 六、已知待办 / 未修
 
-- **v3 开发进行中（尚未写第一行代码）**（2026-11-03）：架构已冻结为 MySQL 8 + Go + Web 后台 +
-  Kotlin 原生，**不要再讨论换栈**。
-  **开发顺序见 `docs/features.md` 第 24 节（P0 骨架 → P9 客户端）**，按依赖推进、不要跳阶段；
-  每阶段完成判据都映射到第 23 节验收条目。
-- **19.5–19.7 已挂起**（2026-11-03「先开发，不管部署」）：服务器规格、是否公开注册、域名备案
-  **不阻塞开发**。开发期默认口径：**开放注册**（限流/验证码不实现，但路由层留挂载点）、
-  一律 `localhost`、MySQL 用本机或 Docker。
-  ⚠️ 挂起项**不得**成为「这个功能先不做」的理由。
-- **两项未选型，只影响 P9**：Web 后台前端框架（Vue 3 / React / Go 模板 + HTMX 三选一）、
-  Android `minSdk`（建议 26）。**不要因此停住 P0–P8 的后端开发。**
-- **README.md 已整体失效**（2026-11-03 更新）：它描述的是已删除的 v1（Cloudflare KV/Pages/
-  `wrangler.jsonc`/postbuild 全链）。**不必逐条纠错**——v3 起手时整份重写。
-  （原「README 与代码漂移」待办就此关闭。）
+- **v3 三层已实现完毕**（2026-11-04 核对）：P1–P9 后端、Android 客户端、Web 后台全部落地，
+  P1–P9 验收 **269 项全过**。架构冻结为 MySQL 8 + Go + Web 后台 + Kotlin 原生，**不要再讨论换栈**。
+- **下一步是部署**（19.5–19.7 挂起中）：服务器规格、是否公开注册、域名备案。
+  **不阻塞功能开发**；开发期默认口径：开放注册（限流/验证码不实现但留挂载点）、
+  一律 `localhost`、MySQL 本机。
+- **两项曾未选型，现已定**：Web 用 **Vue 3**（已实现）；Android `minSdk` = **26**（已构建验证）。
+- **Web 12 个功能页只验证了「可编译 + 登录通」**，未逐页点击核对数据；
+  Android 未做趋势图折线（接口已接）。
+- **README.md 已整体失效**（2026-11-03）：描述的是已删除的 v1。
+  **不必逐条纠错**——v3 稳定后整份重写。
+- **本地环境两个坑**（2026-11-04 实测）：
+  ① 本机 `http_proxy` 会吞掉 localhost 请求并返回误导性 502，排查一律加 `curl --noproxy '*'`；
+  ② `p8b_admin_check.sh` 会把默认管理员密码改成 `admins123`，跑完回归需
+  `DELETE FROM admins` + `migrate -seed-admin` 复位。
