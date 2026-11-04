@@ -5,12 +5,20 @@ Kotlin + Jetpack Compose 原生实现，覆盖 `docs/features.md` 第 13 节的 
 ## 构建
 
 ```bash
-# 首次：用 Android Studio 打开 android/ 目录，它会自动补齐 gradle wrapper
-# 或本地已装 Gradle 8.9+：
 cd android
-gradle wrapper          # 生成 gradlew
-./gradlew assembleDebug
+./gradlew assembleDebug          # 产物：app/build/outputs/apk/debug/app-debug.apk
 ```
+
+需要先设置两个环境变量（`local.properties` 只放 `sdk.dir`，不要提交）：
+
+```bash
+export JAVA_HOME=/path/to/jdk-17      # AGP 8.7 不接受 JDK 25
+export ANDROID_HOME=/path/to/Android/Sdk
+```
+
+wrapper 已提交（`gradlew` / `gradlew.bat` / `gradle-wrapper.jar`），**不需要**本机装 Gradle。
+`gradle-wrapper.properties` 的 `distributionUrl` 指向华为云镜像，国内下载更稳；
+换到海外网络时可改回 `services.gradle.org`。
 
 **环境要求**
 
@@ -85,37 +93,27 @@ app/src/main/java/com/familypoints/app/
 
 | 项 | 原因 |
 |---|---|
-| **商品券与核销投票** | 后端 `coupons` / `coupon_votes` 两张表与 3 个接口**尚未实现**（文档 9.6 已设计），客户端无法对接 |
+| ~~商品券与核销投票~~ | ✅ **已实现**（2026-11-03 后端 + 客户端同步落地，见 9.6）：我的券三态、用券发起核销、跨家庭投票 |
 | 头像自定义上传 | 决策为「仅预设头像」（19.14），当前直接渲染 emoji |
 | 趋势图 | 接口 `stats/trend` 已接，界面暂未画折线 |
 | 通知点击跳转 | 目前只做已读，未做深链到具体任务 |
 
 ## 验证状态
 
-**已通过真实构建**（2026-11-03）：
+**已通过真实构建**，两台机器各一次：
 
-```
-BUILD SUCCESSFUL in 54s
-app/build/outputs/apk/debug/app-debug.apk   19 MB
-package: com.familypoints.app.debug  minSdk 26  targetSdk 35
-```
+| 日期 | JDK | Gradle | 结果 |
+|---|---|---|---|
+| 2026-11-03 | 21.0.2 | 8.9 | `BUILD SUCCESSFUL in 54s` |
+| 2026-11-04 | 17.0.21（Microsoft） | 8.9（wrapper） | `BUILD SUCCESSFUL in 16m 16s`（首次含依赖下载），增量 50s |
 
-构建环境（本机已就绪）：
+产物：`app/build/outputs/apk/debug/app-debug.apk`，**19 MB**，
+`package: com.familypoints.app.debug`，`minSdk 26` / `targetSdk 35`。
 
-| 组件 | 版本 / 路径 |
-|---|---|
-| JDK | **21.0.2**（`D://tools//jdk-21.0.2`）——AGP 8.7 不接受 JDK 25 |
-| Gradle | 8.9（`D://tools//gradle-8.9`） |
-| Android SDK | `D://Android//Sdk`（platform 35 / build-tools 35.0.0） |
+> **平台 35 可自动补齐**：本机 SDK 原本只有 platform 34，AGP 8.7 在构建时自动下载了
+> `platforms/android-35`（`licenses/android-sdk-license` 已接受即可），无需手工装 cmdline-tools。
 
-构建命令：
-
-```bash
-cd android
-JAVA_HOME=/d/tools/jdk-21.0.2 /d/tools/gradle-8.9/bin/gradle assembleDebug
-```
-
-### 构建过程中修掉的 3 个错误
+### 构建过程中修掉的 3 个错误（2026-11-03）
 
 1. **`ApiService.kt` 未闭合注释** —— KDoc 里写了 `/api/app/*`，Kotlin 支持嵌套块注释，`/*` 被当成新的注释开始，导致注释永不闭合。改为 `/api/app/...`。
 2. **`TokenStore` 缺 `@ApplicationContext`** —— 裸 `Context` 无法被 Hilt 解析，Dagger 报 MissingBinding。
@@ -123,6 +121,6 @@ JAVA_HOME=/d/tools/jdk-21.0.2 /d/tools/gradle-8.9/bin/gradle assembleDebug
 
 ### 尚未验证
 
-- **未在真机 / 模拟器上运行过**，只验证了编译与打包
+- **未在真机 / 模拟器上运行过**，只验证了编译与打包（`adb install` 与首屏启动都还没做过）
 - 屏幕时间采集、WorkManager 定时上报、token 自动刷新等运行时行为**未经实测**
-- 后端接口联调未做（需要先起 MySQL + Go 服务）
+- 与后端的联调未做：`API_BASE_URL` 默认 `10.0.2.2:8080`，需要模拟器 + 本机服务同时跑
