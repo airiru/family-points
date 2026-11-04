@@ -12,7 +12,11 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 
 echo "== 0. 管理员登录（首次必须改密，5.4.2）=="
 A_AT=""
-for pwd in admins123 admins; do
+# 支持外部传入当前管理员密码（改过密码后默认值会失效）
+CAND=()
+[ -n "${ADMIN_PASSWORD:-}" ] && CAND+=("$ADMIN_PASSWORD")
+CAND+=(admins123 admins1234 admins)
+for pwd in "${CAND[@]}"; do
   ADM=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d "{\"username\":\"admins\",\"password\":\"$pwd\"}")
   A_AT=$(echo "$ADM" | jget "['data']['token']['access_token']")
   if [ -n "${A_AT:-}" ] && [ "$A_AT" != "None" ]; then

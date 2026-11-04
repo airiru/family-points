@@ -31,11 +31,91 @@ type Admin struct {
 	screen   *repo.Screen
 	ledger   *repo.Ledger
 	report   *repo.Report
+	task     *repo.Task
 }
 
 // NewAdmin 构造。
-func NewAdmin(f *repo.Family, a *repo.Auth, s *repo.Screen, l *repo.Ledger, r *repo.Report) *Admin {
-	return &Admin{families: f, auth: a, screen: s, ledger: l, report: r}
+func NewAdmin(f *repo.Family, a *repo.Auth, s *repo.Screen, l *repo.Ledger, r *repo.Report, t *repo.Task) *Admin {
+	return &Admin{families: f, auth: a, screen: s, ledger: l, report: r, task: t}
+}
+
+// ---------- 只读视图（2026-11-04 补：后台 12 个页面需要能读到现值）----------
+
+// Rule 本组睡觉规则；未配置返回 nil（不是错误）。
+func (a *Admin) Rule(ctx context.Context, familyID uint64) (*model.Rule, error) {
+	r, err := a.screen.RuleByFamily(ctx, familyID)
+	if errors.Is(err, repo.ErrNotFound) {
+		return nil, nil
+	}
+	return r, err
+}
+
+// Items 本组商品列表。
+func (a *Admin) Items(ctx context.Context, familyID uint64) ([]model.Item, error) {
+	return a.ledger.Items(ctx, familyID)
+}
+
+// Tasks 本组全部任务（含已关闭）。
+func (a *Admin) Tasks(ctx context.Context, familyID uint64) ([]model.Task, error) {
+	if err := a.task.ExpireDue(ctx, familyID); err != nil { // 顺手把超时的置 expired
+		return nil, err
+	}
+	return a.task.List(ctx, familyID)
+}
+
+// Transfers 赠送记录（按时间倒序）。
+func (a *Admin) Transfers(ctx context.Context, familyID uint64, limit int) ([]model.Transfer, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	return a.ledger.Transfers(ctx, familyID, limit)
+}
+
+// ScreenReports 屏幕时间上报历史（只读）。memberID=0 表示全组。
+func (a *Admin) ScreenReports(ctx context.Context, familyID, memberID uint64, limit int) ([]model.ScreenReport, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	return a.screen.Reports(ctx, familyID, memberID, limit)
+}
+
+// Records 本组流水（只读，服务端分页与筛选）。
+func (a *Admin) Records(ctx context.Context, f repo.RecordFilter) ([]model.Record, int, error) {
+	if f.Limit <= 0 || f.Limit > 200 {
+		f.Limit = 50
+	}
+	return a.report.Records(ctx, f)
+}
+
+// Ranking 积分榜（mode=points）或得分榜（mode=score）。range 只对得分榜生效。
+func (a *Admin) Ranking(ctx context.Context, familyID uint64, mode, rng string, now time.Time) ([]repo.MemberScore, error) {
+	if mode == "score" {
+		from, to := adminPeriodRange(rng, now)
+		return a.report.RankingScore(ctx, familyID, from, to)
+	}
+	return a.report.RankingPoints(ctx, familyID)
+}
+
+// Trend 按天聚合（memberID=0 表示全组）。
+func (a *Admin) Trend(ctx context.Context, familyID, memberID uint64, days int, now time.Time) ([]repo.TrendPoint, error) {
+	if days <= 0 || days > 180 {
+		days = 30
+	}
+	to := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, 1)
+	from := to.AddDate(0, 0, -days)
+	return a.report.Trend(ctx, familyID, memberID, from, to)
+}
+
+// adminPeriodRange 与前台口径一致（避免与 report.go 的 periodRange 重名）：周从周一 00:00 起，月按自然月（11.1）。
+func adminPeriodRange(rng string, now time.Time) (time.Time, time.Time) {
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	if rng == "month" {
+		from := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		return from, from.AddDate(0, 1, 0)
+	}
+	offset := (int(day.Weekday()) + 6) % 7 // 周一=0
+	from := day.AddDate(0, 0, -offset)
+	return from, from.AddDate(0, 0, 7)
 }
 
 // FamilyRow 是家庭组列表的一行（复用仓储层类型，避免两处结构漂移）。

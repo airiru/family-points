@@ -84,6 +84,16 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.POST("/family/:family_id/item/save", adminHandler.SaveItem)
 		admin.GET("/export/records", adminHandler.ExportRecords)
 
+		// 只读视图（2026-11-04 补：后台 12 个页面需要读到现值）
+		admin.GET("/family/:family_id/rule", adminHandler.Rule)
+		admin.GET("/family/:family_id/items", adminHandler.Items)
+		admin.GET("/family/:family_id/tasks", adminHandler.Tasks)
+		admin.GET("/family/:family_id/records", adminHandler.Records)
+		admin.GET("/family/:family_id/transfers", adminHandler.Transfers)
+		admin.GET("/family/:family_id/screen-reports", adminHandler.ScreenReports)
+		admin.GET("/family/:family_id/stats/ranking", adminHandler.Ranking)
+		admin.GET("/family/:family_id/stats/trend", adminHandler.Trend)
+
 		// 管理员账号
 		admin.GET("/accounts", adminHandler.ListAdmins)
 		admin.POST("/accounts", adminHandler.CreateAdmin)

@@ -62,7 +62,8 @@ func main() {
 	screenHandler := handler.NewScreen(screenSvc)
 	deviceMW := middleware.NewDevice(screenRepo)
 
-	taskSvc := service.NewTask(repo.NewTask(conn))
+	taskRepo := repo.NewTask(conn)
+	taskSvc := service.NewTask(taskRepo)
 	taskHandler := handler.NewTask(taskSvc)
 
 	reportSvc := service.NewReport(repo.NewReport(conn), familyRepo)
@@ -72,7 +73,7 @@ func main() {
 	handler.SetAuditor(audit.New(auditRepo))
 	auditHandler := handler.NewAudit(auditRepo)
 
-	adminSvc := service.NewAdmin(familyRepo, authRepo, screenRepo, repo.NewLedger(conn), repo.NewReport(conn))
+	adminSvc := service.NewAdmin(familyRepo, authRepo, screenRepo, repo.NewLedger(conn), repo.NewReport(conn), taskRepo)
 	adminHandler := handler.NewAdmin(adminSvc)
 
 	couponSvc := service.NewCoupon(repo.NewCoupon(conn))

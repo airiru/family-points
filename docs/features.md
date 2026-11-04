@@ -1108,6 +1108,13 @@ rules.streaks = [
 
 **共 12 个页面**。相比早期版本删除了「记一笔」页与「手动录入」入口。
 
+> **实现状态（2026-11-04）**：`web/`（Vue 3 + Vite）已实现全部 12 个页面，
+> 直接对接 `/api/admin/*`。三处**有意只读**，不提供写操作：
+> **任务管理**（代审核会绕开「一人一票」，不做）、**赠送管理**（撤销已按 10.2.6 移除）、
+> **屏幕时间**（12 节：无手动录入入口）。记录与审计同样只读，记录是 append-only。
+>
+> 启动：`cd web && npm install && npm run dev`（`/api` 已代理到 `127.0.0.1:8080`）。
+
 ---
 
 ## 15. 接口清单
@@ -1142,6 +1149,14 @@ rules.streaks = [
 | 15.2.22 | `/api/admin/family/:family_id/member/hidden` | POST | 隐藏 / 显示成员 |
 | 15.2.23 | `/api/admin/family/:family_id/member/leader` | POST | 后台指定新组长（同事务降旧升新） |
 | 15.2.24 | `/api/admin/family/:family_id/rename` | POST | 改家庭组名 |
+| 15.2.29 | `/api/admin/family/:family_id/rule` | GET | 本组睡觉规则（未配置返回 `null`） |
+| 15.2.30 | `/api/admin/family/:family_id/items` | GET | 本组商品列表 |
+| 15.2.31 | `/api/admin/family/:family_id/tasks` | GET | 本组全部任务（含已关闭，顺手把超时提交置 `expired`） |
+| 15.2.32 | `/api/admin/family/:family_id/transfers` | GET | 赠送记录（`limit`，默认 50） |
+| 15.2.33 | `/api/admin/family/:family_id/screen-reports` | GET | 屏幕时间上报历史（只读，`member_id` / `limit`） |
+| 15.2.34 | `/api/admin/family/:family_id/stats/ranking` | GET | 积分榜 / 得分榜（`mode=points\|score`、`range=week\|month`） |
+| 15.2.35 | `/api/admin/family/:family_id/stats/trend` | GET | 按天趋势（`days` 默认 30、`member_id` 0=全组） |
+| 15.2.36 | `/api/admin/family/:family_id/records` | GET | 本组流水（只读、分页、`member_id` / `source` / `keyword` / `from` / `to`） |
 | 15.2.6 | `/api/admin/family/:family_id/rule/save` | POST | 睡觉规则与连续奖励档位（与组长同权） |
 | 15.2.7 | `/api/admin/family/:family_id/item/save` | POST | 商品增改（与组长同权；撤销兑换已按 9.4 移除） |
 | 15.2.8 | `/api/admin/task/*` | POST | 查看全部、代审核 |
@@ -1820,7 +1835,7 @@ FROM task_votes WHERE submission_id=?;
 | **P6 任务与投票** | 发布冻结、公开接取、提交（`note` 必填）、全员投票过半、驳回 3 次上限、超时 `expired` | 48–63、95–97 |
 | **P7 查询与榜单** | `/api/app/state` 分页（**不返回全量记录**）、记录筛选、积分榜 / 得分榜（`occurred_at` 聚合） | 74–82 |
 | **P8 后台 + 审计 + 通知** | 管理员全量接口、审计 append-only（剔除 `pass_hash`、失败不阻断）、180 天清理、站内通知、预设头像 | 84–86、98–101 |
-| **P9 客户端** | Android **16** 界面（3 个组长专属）+ 商品券核销、Web 后台前端 | 92–94 及全部界面条目 |
+| **P9 客户端** | Android **16** 界面（3 个组长专属）+ 商品券核销 ✅、Web 后台 12 页面 ✅ | 92–94 及全部界面条目 |
 
 **当前进度（2026-11-03）**：**P0 ✅ / P1 ✅ / P2 ✅ / P3 ✅ / P4 ✅ / P5 ✅ / P6 ✅ / P7 ✅**
 （P1 19、P2 15、P3 33、P4 23、P5 37、P6 34、P7 25、P8a 19 项接口测试 + 计分单测全通过，
@@ -1849,7 +1864,7 @@ P4 的账目模型定不下来，P5–P7 全部无法结算；审计（P8）放�
 
 | 项 | 结论 | 备注 |
 |---|---|---|
-| **Web 后台前端框架** | ✅ **Vue 3 + Vite**（2026-11-03 定） | 只影响 P9；后端接口与它无关。目录建议 `web/`，与 `server/` 并列 |
+| **Web 后台前端框架** | ✅ **Vue 3 + Vite**（2026-11-03 定，**2026-11-04 已落地**） | 目录 `web/`，与 `server/` 并列；无 UI 框架，样式手写以复用设计语言 |
 | Android 最低支持版本 | ✅ **`minSdk 26`**（Android 8.0，2026-11-03 拍板） | `UsageStatsManager` 在 8.0 上稳定；覆盖绝大多数在用设备 |
 
 ### 24.5 开发库连接（**凭证不入库**）

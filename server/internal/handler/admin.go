@@ -3,12 +3,14 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"familypoints/server/internal/httpx"
 	"familypoints/server/internal/middleware"
 	"familypoints/server/internal/model"
+	"familypoints/server/internal/repo"
 	"familypoints/server/internal/service"
 )
 
@@ -270,4 +272,145 @@ func (h *Admin) DisableAdmin(c *gin.Context) {
 // markAuditFamily 让 recordAudit 知道本次操作属于哪个家庭组（管理员跨组时必须显式标记）。
 func markAuditFamily(c *gin.Context, familyID uint64) {
 	c.Set("audit_family_id", familyID)
+}
+
+// ---------- 只读视图（2026-11-04 补：后台 12 个页面需要读到现值）----------
+
+func qInt(c *gin.Context, key string, def int) int {
+	if v := c.Query(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+// Rule GET /api/admin/family/:family_id/rule —— 本组睡觉规则（未配置返回 null）。
+func (h *Admin) Rule(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	r, err := h.svc.Rule(c.Request.Context(), fid)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"rule": r})
+}
+
+// Items GET /api/admin/family/:family_id/items —— 本组商品。
+func (h *Admin) Items(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	list, err := h.svc.Items(c.Request.Context(), fid)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"items": list})
+}
+
+// Tasks GET /api/admin/family/:family_id/tasks —— 本组全部任务（含已关闭）。
+func (h *Admin) Tasks(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	list, err := h.svc.Tasks(c.Request.Context(), fid)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"tasks": list})
+}
+
+// Transfers GET /api/admin/family/:family_id/transfers —— 赠送记录。
+func (h *Admin) Transfers(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	list, err := h.svc.Transfers(c.Request.Context(), fid, qInt(c, "limit", 50))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"transfers": list})
+}
+
+// ScreenReports GET /api/admin/family/:family_id/screen-reports —— 上报历史（只读）。
+func (h *Admin) ScreenReports(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	list, err := h.svc.ScreenReports(c.Request.Context(), fid, uint64(qInt(c, "member_id", 0)), qInt(c, "limit", 50))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"reports": list})
+}
+
+// Ranking GET /api/admin/family/:family_id/stats/ranking?mode=points|score&range=week|month
+func (h *Admin) Ranking(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	list, err := h.svc.Ranking(c.Request.Context(), fid, c.DefaultQuery("mode", "points"), c.DefaultQuery("range", "week"), time.Now())
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"ranking": list})
+}
+
+// Trend GET /api/admin/family/:family_id/stats/trend?days=30&member_id=0
+func (h *Admin) Trend(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	list, err := h.svc.Trend(c.Request.Context(), fid, uint64(qInt(c, "member_id", 0)), qInt(c, "days", 30), time.Now())
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"trend": list})
+}
+
+// Records GET /api/admin/family/:family_id/records —— 本组流水（只读、分页、可筛选）。
+func (h *Admin) Records(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	f := repo.RecordFilter{
+		FamilyID: fid,
+		MemberID: uint64(qInt(c, "member_id", 0)),
+		Source:   c.Query("source"),
+		Keyword:  c.Query("keyword"),
+		Limit:    qInt(c, "limit", 50),
+		Offset:   qInt(c, "offset", 0),
+	}
+	if v := c.Query("from"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			f.From = t
+		}
+	}
+	if v := c.Query("to"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			f.To = t.AddDate(0, 0, 1) // 含当天
+		}
+	}
+	list, total, err := h.svc.Records(c.Request.Context(), f)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"records": list, "total": total})
 }

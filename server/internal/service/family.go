@@ -34,13 +34,15 @@ func NewFamily(r *repo.Family) *Family { return &Family{families: r} }
 
 // MemberBrief 是对外暴露的成员信息：**绝不包含 pass_hash**。
 type MemberBrief struct {
-	ID          uint64  `json:"id"`
-	Name        string  `json:"name"`
-	Role        string  `json:"role"`
-	Avatar      *string `json:"avatar"`
-	Score       int     `json:"score"`
-	FrozenScore int     `json:"frozen_score"`
-	Hidden      bool    `json:"hidden,omitempty"`
+	ID          uint64    `json:"id"`
+	Name        string    `json:"name"`
+	Username    string    `json:"username"`
+	Role        string    `json:"role"`
+	Avatar      *string   `json:"avatar"`
+	Score       int       `json:"score"`
+	FrozenScore int       `json:"frozen_score"`
+	Hidden      bool      `json:"hidden"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // Info 返回家庭组基本信息。
@@ -61,8 +63,8 @@ func (s *Family) Members(ctx context.Context, familyID uint64, includeHidden boo
 	out := make([]MemberBrief, 0, len(list))
 	for _, m := range list {
 		out = append(out, MemberBrief{
-			ID: m.ID, Name: m.Name, Role: m.Role, Avatar: m.Avatar,
-			Score: m.Score, FrozenScore: m.FrozenScore, Hidden: m.Hidden,
+			ID: m.ID, Name: m.Name, Username: m.Username, Role: m.Role, Avatar: m.Avatar,
+			Score: m.Score, FrozenScore: m.FrozenScore, Hidden: m.Hidden, CreatedAt: m.CreatedAt,
 		})
 	}
 	return out, nil

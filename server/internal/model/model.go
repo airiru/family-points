@@ -14,17 +14,17 @@ const (
 
 // Member 对应 members 表。family_id 可空：注册后未入组时为空。
 type Member struct {
-	ID          uint64    `db:"id"`
-	FamilyID    *uint64   `db:"family_id"`
-	Name        string    `db:"name"`
-	Score       int       `db:"score"`
-	FrozenScore int       `db:"frozen_score"`
-	Hidden      bool      `db:"hidden"`
-	Avatar      *string   `db:"avatar"`
-	Username    string    `db:"username"`
-	PassHash    string    `db:"pass_hash"`
-	Role        string    `db:"role"`
-	CreatedAt   time.Time `db:"created_at"`
+	ID          uint64    `db:"id" json:"id"`
+	FamilyID    *uint64   `db:"family_id" json:"family_id"`
+	Name        string    `db:"name" json:"name"`
+	Score       int       `db:"score" json:"score"`
+	FrozenScore int       `db:"frozen_score" json:"frozen_score"`
+	Hidden      bool      `db:"hidden" json:"hidden"`
+	Avatar      *string   `db:"avatar" json:"avatar"`
+	Username    string    `db:"username" json:"username"`
+	PassHash    string    `db:"pass_hash" json:"-"`
+	Role        string    `db:"role" json:"role"`
+	CreatedAt   time.Time `db:"created_at" json:"created_at"`
 }
 
 // InFamily 表示该成员已加入某个家庭组。
@@ -42,11 +42,11 @@ type Admin struct {
 
 // Family 对应 families 表。
 type Family struct {
-	ID                  uint64     `db:"id"`
-	Name                string     `db:"name"`
-	InviteCode          string     `db:"invite_code"`
-	InviteCodeExpiresAt *time.Time `db:"invite_code_expires_at"`
-	CreatedAt           time.Time  `db:"created_at"`
+	ID                  uint64     `db:"id" json:"id"`
+	Name                string     `db:"name" json:"name"`
+	InviteCode          string     `db:"invite_code" json:"invite_code"`
+	InviteCodeExpiresAt *time.Time `db:"invite_code_expires_at" json:"invite_code_expires_at"`
+	CreatedAt           time.Time  `db:"created_at" json:"created_at"`
 }
 
 // InviteCodeUsable 判断邀请码是否仍可用（7 天有效期，5.2.5）。
@@ -65,14 +65,14 @@ type Item struct {
 
 // Redemption 是兑换单（撤销状态载体；积分流水在 records）。
 type Redemption struct {
-	ID        uint64     `db:"id"`
-	FamilyID  uint64     `db:"family_id"`
-	MemberID  uint64     `db:"member_id"`
-	ItemID    *uint64    `db:"item_id"`
-	ItemName  string     `db:"item_name"`
-	Cost      int        `db:"cost"`
-	CreatedAt time.Time  `db:"created_at"`
-	RevokedAt *time.Time `db:"revoked_at"`
+	ID        uint64     `db:"id" json:"id"`
+	FamilyID  uint64     `db:"family_id" json:"family_id"`
+	MemberID  uint64     `db:"member_id" json:"member_id"`
+	ItemID    *uint64    `db:"item_id" json:"item_id"`
+	ItemName  string     `db:"item_name" json:"item_name"`
+	Cost      int        `db:"cost" json:"cost"`
+	CreatedAt time.Time  `db:"created_at" json:"created_at"`
+	RevokedAt *time.Time `db:"revoked_at" json:"revoked_at"`
 }
 
 // Transfer 是赠送单。
@@ -267,14 +267,14 @@ type Notification struct {
 
 // RefreshToken 对应 refresh_tokens 表（只存哈希）。
 type RefreshToken struct {
-	ID             uint64     `db:"id"`
-	SubjectType    string     `db:"subject_type"`
-	SubjectID      uint64     `db:"subject_id"`
-	TokenHash      string     `db:"token_hash"`
-	ExpiresAt      time.Time  `db:"expires_at"`
-	RevokedAt      *time.Time `db:"revoked_at"`
-	ReplacedByHash *string    `db:"replaced_by_hash"`
-	CreatedAt      time.Time  `db:"created_at"`
+	ID             uint64     `db:"id" json:"id"`
+	SubjectType    string     `db:"subject_type" json:"subject_type"`
+	SubjectID      uint64     `db:"subject_id" json:"subject_id"`
+	TokenHash      string     `db:"token_hash" json:"-"`
+	ExpiresAt      time.Time  `db:"expires_at" json:"expires_at"`
+	RevokedAt      *time.Time `db:"revoked_at" json:"revoked_at"`
+	ReplacedByHash *string    `db:"replaced_by_hash" json:"replaced_by_hash"`
+	CreatedAt      time.Time  `db:"created_at" json:"created_at"`
 }
 
 // Valid 判断 token 是否仍可用（未吊销且未过期）。
