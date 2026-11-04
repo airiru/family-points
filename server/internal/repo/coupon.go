@@ -52,7 +52,7 @@ func (r *Coupon) CreateInTx(ctx context.Context, tx *sqlx.Tx, familyID, memberID
 
 // ListByMember 列出某成员的全部券（新到旧）。
 func (r *Coupon) ListByMember(ctx context.Context, familyID, memberID uint64) ([]model.Coupon, error) {
-	var list []model.Coupon
+	list := []model.Coupon{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT `+couponCols+` FROM coupons
 		  WHERE family_id = ? AND member_id = ?
@@ -64,7 +64,7 @@ func (r *Coupon) ListByMember(ctx context.Context, familyID, memberID uint64) ([
 //
 // 没有这个查询，别人兑换的券就没人能投票——核销机制等于空转。
 func (r *Coupon) ListPending(ctx context.Context, familyID, excludeMemberID uint64) ([]model.Coupon, error) {
-	var list []model.Coupon
+	list := []model.Coupon{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT `+couponCols+` FROM coupons
 		  WHERE family_id = ? AND status = ? AND member_id <> ?
@@ -275,7 +275,7 @@ func (r *Coupon) Vote(ctx context.Context, familyID, couponID, voterID uint64, v
 
 // Votes 列出某张券的投票。
 func (r *Coupon) Votes(ctx context.Context, familyID, couponID uint64) ([]model.CouponVote, error) {
-	var list []model.CouponVote
+	list := []model.CouponVote{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, coupon_id, voter_id, vote, created_at
 		   FROM coupon_votes WHERE family_id = ? AND coupon_id = ? ORDER BY id`,

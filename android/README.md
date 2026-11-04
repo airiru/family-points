@@ -137,11 +137,31 @@ adb shell am start -n com.familypoints.app.debug/com.familypoints.app.MainActivi
 **踩到的坑**：华为设备在**密码框获得焦点时 `adb screencap` 返回空文件**（安全截屏保护）。
 先 `adb shell input keyevent 4` 收起键盘再截即可。
 
+### 屏幕时间链路（2026-11-04 真机验证通过）
+
+`UsageStatsManager` 采集 → WorkManager 上报 → 服务端结算，全链路跑通：
+
+```
+POST /api/device/screen/report  200 (58-byte body，含 night_min)
+screen_reports  revision 1 → 2 → 3（覆盖重算）
+night_ok = true，连续第 3 天命中「满 3 天 +5」档位 → 当天 +7 / -3
+```
+
+**过程中修掉的 4 个 bug**（都是「编译能过、跑起来才发现」）：
+
+1. **设备令牌没有任何入口**：`TokenStore.deviceToken` 只读不写，Worker 拿不到令牌直接 return，
+   而页面还显示「已与服务器同步」。现在屏幕时间页有配置卡片，保存后立刻补算一次。
+2. **`ScreenRuleList` 字段名错**：后端返回 `screen_rules`，客户端读 `items` → 永远空列表，
+   夜间配置拿不到（且被 `runCatching` 静默吞掉）。
+3. **`nightMin` 被省略**：kotlinx 默认 `encodeDefaults=false`，`Int` 默认值 0 不会编码，
+   服务端当成「未判定」，夜间永远不加分。改为 `Int?`。
+4. **规则取错了人**：原来 `firstOrNull()` 随便抓一条，多成员家庭会算错夜间判定；
+   改为按本机登录成员匹配。
+
 ### 仍未验证
 
-- **屏幕时间采集与上报**：`UsageStatsManager` 授权流程、WorkManager 定时任务、跨零点切分都没实测
-- **token 自动刷新**：refresh 过期后重放请求的路径未触发过
-- 商品券核销投票的完整链路（需要多台设备或多个账号轮流操作）
+- **token 自动刷新**：refresh 过期后重放请求的路径没触发过（access 2h，测试期间没到期）
+- 商品券核销投票的完整链路（需要多个账号轮流操作）
 - 已知性能问题：`/api/app/state` 1.5s、`/api/app/stats/ranking` 3.6s。
   后者是 **N+1 查询**（每个成员单独算一次连续天数，`service/report.go:161`），
   加上远端 MySQL 的 RTT，成员越多越慢

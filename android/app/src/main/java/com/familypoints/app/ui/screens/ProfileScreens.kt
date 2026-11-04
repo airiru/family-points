@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
@@ -260,7 +261,13 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
     var hasPermission by remember { mutableStateOf(reader.hasPermission()) }
     var todayMinutes by remember { mutableStateOf(0) }
     var nightMinutes by remember { mutableStateOf(0) }
-    var reported by remember { mutableStateOf(false) }
+    val deviceToken by vm.deviceToken.collectAsStateWithLifecycle()
+    var tokenInput by remember { mutableStateOf("") }
+
+    // 「已同步」不能靠猜：只有「有权限 + 配了设备令牌」才可能上报成功。
+    // 之前这里用 loadOverview() 是否成功来推断，结果是**永远显示已同步**，
+    // 而没有设备令牌时 Worker 会直接 return，根本不会上报。
+    val synced = hasPermission && !deviceToken.isNullOrBlank()
 
     LaunchedEffect(Unit) {
         hasPermission = reader.hasPermission()
@@ -270,10 +277,6 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
             val r = reader.read(from, to, 0, 7, 0)
             todayMinutes = r.totalMinutes
             nightMinutes = r.nightMinutes
-            reported = runCatching {
-                vm.loadOverview()
-                true
-            }.getOrDefault(false)
         }
     }
 
@@ -379,13 +382,20 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
                             Column(Modifier.weight(1f)) {
                                 Text("上报状态", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                 Text(
-                                    if (reported) "已与服务器同步" else "尚未上报",
+                                    when {
+                                        !hasPermission -> "缺少使用情况访问权限"
+                                        deviceToken.isNullOrBlank() -> "未配置设备令牌，无法上报"
+                                        else -> "已配置设备令牌，按计划自动上报"
+                                    },
                                     fontSize = 12.sp,
                                     color = Sub,
                                 )
                             }
-                            Pill(if (reported) "正常" else "待上报", if (reported) Green else Red,
-                                if (reported) GreenSoft else MaterialTheme.colorScheme.surfaceVariant)
+                            Pill(
+                                if (synced) "正常" else "待配置",
+                                if (synced) Green else Red,
+                                if (synced) GreenSoft else MaterialTheme.colorScheme.surfaceVariant,
+                            )
                         }
                         Divider(color = Line, modifier = Modifier.padding(vertical = 12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -394,6 +404,36 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
                                 Text("已授权，可自动统计", fontSize = 12.sp, color = Sub)
                             }
                             Pill("已授权", Green, GreenSoft)
+                        }
+                    }
+                }
+
+                if (deviceToken.isNullOrBlank()) {
+                    item {
+                        CardBox {
+                            Text("配置设备令牌", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(
+                                "屏幕时间只接受设备令牌上报（成员登录态打不进这个接口）。" +
+                                    "请让管理员在 Web 后台「设备管理」里为这个成员生成一个令牌，" +
+                                    "粘贴到下面——明文只显示一次，存好再关。",
+                                fontSize = 12.sp,
+                                color = Sub,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+                            )
+                            OutlinedTextField(
+                                value = tokenInput,
+                                onValueChange = { tokenInput = it },
+                                label = { Text("设备令牌") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Button(
+                                onClick = { vm.saveDeviceToken(tokenInput) },
+                                modifier = Modifier.fillMaxWidth().height(44.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = androidx.compose.ui.graphics.Color.White),
+                            ) { Text("保存并立即上报") }
                         }
                     }
                 }

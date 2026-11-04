@@ -115,8 +115,13 @@ class AppViewModel @Inject constructor(
     private val _inviteCode = MutableStateFlow<String?>(null)
     val inviteCode: StateFlow<String?> = _inviteCode.asStateFlow()
 
+    /** 设备令牌：屏幕时间上报的唯一凭证，由管理员在后台签发。null = 还没配置。 */
+    private val _deviceToken = MutableStateFlow<String?>(null)
+    val deviceToken: StateFlow<String?> = _deviceToken.asStateFlow()
+
     init {
         restoreSession()
+        viewModelScope.launch { _deviceToken.value = tokenStore.deviceTokenOnce() }
     }
 
     // ---------------- 会话 ----------------
@@ -453,6 +458,26 @@ class AppViewModel @Inject constructor(
     fun consumeMessage() { _message.value = null }
 
     fun showMessage(msg: String) { _message.value = msg }
+
+    /**
+     * 保存设备令牌并立刻上报一次。
+     *
+     * 令牌由管理员在 Web 后台为某成员生成（明文只显示一次），家长把它填到孩子这台设备上。
+     * 之所以不让 App 自助申请：屏幕时间只认设备令牌，成员能自签就能伪造数据（12 节）。
+     */
+    fun saveDeviceToken(raw: String) {
+        val t = raw.trim()
+        if (t.isBlank()) {
+            showMessage("令牌不能为空")
+            return
+        }
+        viewModelScope.launch {
+            tokenStore.saveDeviceToken(t)
+            _deviceToken.value = t
+            scheduler.runNow() // 不用等 21:00，保存后立刻补算一次
+            showMessage("设备令牌已保存，正在上报昨天的数据…")
+        }
+    }
 
     private fun launchBusy(showBusy: Boolean = true, block: suspend () -> Unit) {
         viewModelScope.launch {

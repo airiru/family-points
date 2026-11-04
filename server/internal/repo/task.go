@@ -102,7 +102,7 @@ func (r *Task) Create(ctx context.Context, familyID, publisherID uint64, title s
 
 // List 列出本组任务（新→旧）。
 func (r *Task) List(ctx context.Context, familyID uint64) ([]model.Task, error) {
-	var list []model.Task
+	list := []model.Task{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, title, points, publisher_id, escrow_points, assignee_id,
 		        completed_by, due_at, repeat_rule, status, created_at
@@ -324,7 +324,7 @@ func (r *Task) Submit(ctx context.Context, familyID, taskID, memberID uint64, no
 
 // Submissions 列出某任务的全部提交。
 func (r *Task) Submissions(ctx context.Context, familyID, taskID uint64) ([]model.TaskSubmission, error) {
-	var list []model.TaskSubmission
+	list := []model.TaskSubmission{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, task_id, member_id, note, status, vote_deadline,
 		        review_note, reviewed_at, record_id, created_at
@@ -351,7 +351,7 @@ func (r *Task) SubmissionByID(ctx context.Context, familyID, id uint64) (*model.
 
 // Votes 列出某提交的票。
 func (r *Task) Votes(ctx context.Context, familyID, submissionID uint64) ([]model.TaskVote, error) {
-	var list []model.TaskVote
+	list := []model.TaskVote{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, submission_id, voter_id, vote, created_at
 		   FROM task_votes WHERE family_id = ? AND submission_id = ? ORDER BY id`,

@@ -27,7 +27,7 @@ func NewLedger(db *sqlx.DB) *Ledger { return &Ledger{db: db} }
 
 // Items 列出本组商品。
 func (r *Ledger) Items(ctx context.Context, familyID uint64) ([]model.Item, error) {
-	var list []model.Item
+	list := []model.Item{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, name, cost, created_at
 		   FROM items WHERE family_id = ? ORDER BY id`, familyID)
@@ -271,7 +271,7 @@ func (r *Ledger) SendTransfer(ctx context.Context, familyID, fromID, toID uint64
 
 // Transfers 列出本组赠送记录。
 func (r *Ledger) Transfers(ctx context.Context, familyID uint64, limit int) ([]model.Transfer, error) {
-	var list []model.Transfer
+	list := []model.Transfer{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, from_member_id, to_member_id, amount, note, created_at, revoked_at
 		   FROM transfers WHERE family_id = ? ORDER BY id DESC LIMIT ?`, familyID, limit)

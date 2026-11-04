@@ -35,8 +35,13 @@ class ScreenReportWorker @AssistedInject constructor(
         val deviceToken = tokenStore.deviceTokenOnce()
         if (deviceToken.isNullOrBlank()) return Result.success()
 
-        // 夜间时段配置来自服务端；拿不到就用 0–7 点的默认值
-        val rule = runCatching { apiClient.service.screenRules().data?.items?.firstOrNull() }.getOrNull()
+        // 夜间时段配置来自服务端，**取本机登录成员自己的那条**。
+        // 原来直接 firstOrNull()，等于随便抓一条别人的规则——多成员家庭会算错夜间判定。
+        val myId = tokenStore.memberIdOnce() ?: 0L
+        val rule = runCatching { apiClient.service.screenRules().data?.items }
+            .onFailure { android.util.Log.w("ScreenReport", "读取屏幕规则失败", it) }
+            .getOrNull()
+            ?.let { list -> list.firstOrNull { it.memberId == myId } ?: list.firstOrNull() }
         val nightStart = rule?.nightStartHour
         val nightEnd = rule?.nightEndHour
         val nightMax = rule?.nightMaxMin

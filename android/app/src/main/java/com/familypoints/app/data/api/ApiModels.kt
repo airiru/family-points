@@ -317,7 +317,10 @@ data class RuleSaveReq(
 data class DeviceReportReq(
     @SerialName("report_date") val reportDate: String,
     @SerialName("total_min") val totalMin: Int,
-    @SerialName("night_min") val nightMin: Int = 0,
+    // 必须可空：kotlinx 默认 encodeDefaults=false，Int 默认值 0 会被**直接省略**，
+    // 服务端收到的是「没带 night_min」→ 当成未判定，夜间永远不加分。
+    // 改成 Int? 后，传 0 与默认值 null 不同，才会真正编码进去。
+    @SerialName("night_min") val nightMin: Int? = null,
 )
 
 @Serializable

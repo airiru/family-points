@@ -213,7 +213,13 @@ data class ItemList(val items: List<ItemView> = emptyList())
 data class RuleList(val items: List<RuleView> = emptyList())
 
 @kotlinx.serialization.Serializable
-data class ScreenRuleList(val items: List<ScreenRuleView> = emptyList())
+data class ScreenRuleList(
+    // 后端返回的是 screen_rules，不是 items —— 写错的话 decode 成空列表，
+    // 上报 Worker 拿不到夜间配置，night_min 永远是 null（且被 runCatching 吞掉不报错）
+    @kotlinx.serialization.SerialName("screen_rules") val items: List<ScreenRuleView> = emptyList(),
+)
 
 @kotlinx.serialization.Serializable
-data class ScreenReportList(val items: List<ScreenReportView> = emptyList())
+data class ScreenReportList(
+    @kotlinx.serialization.SerialName("reports") val items: List<ScreenReportView> = emptyList(),
+)

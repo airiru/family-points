@@ -49,7 +49,7 @@ func (r *Family) Members(ctx context.Context, familyID uint64, includeHidden boo
 	}
 	q += ` ORDER BY id`
 
-	var list []model.Member
+	list := []model.Member{}
 	if err := r.db.SelectContext(ctx, &list, q, familyID); err != nil {
 		return nil, err
 	}

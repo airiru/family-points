@@ -25,7 +25,7 @@ func NewScreen(db *sqlx.DB) *Screen { return &Screen{db: db} }
 
 // Rules 列出本组规则。
 func (r *Screen) Rules(ctx context.Context, familyID uint64) ([]model.Rule, error) {
-	var list []model.Rule
+	list := []model.Rule{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, name, points, streaks, member_ids, created_at
 		   FROM rules WHERE family_id = ? ORDER BY id`, familyID)
@@ -109,7 +109,7 @@ func (r *Screen) ScreenRuleByMember(ctx context.Context, familyID, memberID uint
 
 // ScreenRules 列出本组全部屏幕时间规则。
 func (r *Screen) ScreenRules(ctx context.Context, familyID uint64) ([]model.ScreenRule, error) {
-	var list []model.ScreenRule
+	list := []model.ScreenRule{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, member_id, threshold_min, bonus_points, penalty_points, enabled,
 		        night_start_hour, night_end_hour, night_max_min, night_rule_id
@@ -178,7 +178,7 @@ func (r *Screen) TouchDevice(ctx context.Context, id uint64) error {
 
 // Devices 列出本组设备。
 func (r *Screen) Devices(ctx context.Context, familyID uint64) ([]model.Device, error) {
-	var list []model.Device
+	list := []model.Device{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, member_id, name, token_hash, revoked, created_at, last_seen_at
 		   FROM devices WHERE family_id = ? ORDER BY id`, familyID)
@@ -404,13 +404,23 @@ func (r *Screen) ReportByDate(ctx context.Context, familyID, memberID uint64, da
 }
 
 // Reports 列出某成员的结算历史（倒序）。
+// Reports 上报历史。memberID=0 表示全组（后台跨成员查看用）。
+//
+// 注意：memberID 是**可选**过滤，不能直接写进 WHERE —— 传 0 会永远查不到数据。
 func (r *Screen) Reports(ctx context.Context, familyID, memberID uint64, limit int) ([]model.ScreenReport, error) {
-	var list []model.ScreenReport
-	err := r.db.SelectContext(ctx, &list,
-		`SELECT id, family_id, member_id, report_date, total_min, night_min, night_ok, points,
-		        record_id, night_record_id, source, revision, reported_at, updated_at
-		   FROM screen_reports WHERE member_id = ? AND family_id = ?
-		  ORDER BY report_date DESC LIMIT ?`, memberID, familyID, limit)
+	q := `SELECT id, family_id, member_id, report_date, total_min, night_min, night_ok, points,
+	             record_id, night_record_id, source, revision, reported_at, updated_at
+	        FROM screen_reports WHERE family_id = ?`
+	args := []any{familyID}
+	if memberID != 0 {
+		q += ` AND member_id = ?`
+		args = append(args, memberID)
+	}
+	q += ` ORDER BY report_date DESC, member_id ASC LIMIT ?`
+	args = append(args, limit)
+
+	list := []model.ScreenReport{}
+	err := r.db.SelectContext(ctx, &list, q, args...)
 	return list, err
 }
 
