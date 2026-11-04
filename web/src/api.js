@@ -12,6 +12,11 @@ export const token = {
 let onUnauthorized = null
 export function setUnauthorizedHandler(fn) { onUnauthorized = fn }
 
+// 「尚未改初始密码」是 403，不是 401。单独挂一个处理器，
+// 否则每个页面都要各自处理，实际表现就是「满屏 403、无处可去」。
+let onMustChangePassword = null
+export function setMustChangePasswordHandler(fn) { onMustChangePassword = fn }
+
 export async function api(path, { method = 'GET', body, raw = false } = {}) {
   const headers = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
@@ -37,7 +42,12 @@ export async function api(path, { method = 'GET', body, raw = false } = {}) {
 
   const data = await res.json().catch(() => null)
   if (!data) throw new Error('响应不是合法 JSON（HTTP ' + res.status + '）')
-  if (!data.ok) throw new Error(data.error || '请求失败（HTTP ' + res.status + '）')
+  if (!data.ok) {
+    if (res.status === 403 && onMustChangePassword && String(data.error || '').includes('初始密码')) {
+      onMustChangePassword()
+    }
+    throw new Error(data.error || '请求失败（HTTP ' + res.status + '）')
+  }
   return data.data
 }
 

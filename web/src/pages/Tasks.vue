@@ -9,10 +9,16 @@ const members = ref([])
 const loading = ref(true)
 
 const nameOf = id => (members.value.find(m => m.id === id) || {}).name || ('#' + id)
+// 后端只有 open / taken / closed 三态：任务通过投票后直接置 closed，
+// 用 completed_by 区分「已完成」和「发布者关闭」——不存在 status==='done'。
+const isDone = t => t.status === 'closed' && !!t.completed_by
+const isCancelled = t => t.status === 'closed' && !t.completed_by
+
 const stats = computed(() => ({
   open: tasks.value.filter(t => t.status === 'open').length,
   taken: tasks.value.filter(t => t.status === 'taken').length,
-  done: tasks.value.filter(t => t.status === 'done').length,
+  done: tasks.value.filter(isDone).length,
+  cancelled: tasks.value.filter(isCancelled).length,
 }))
 
 async function load() {
@@ -29,14 +35,21 @@ async function load() {
 }
 onMounted(load)
 
-const statusTag = s => ({ open: ['gray', '待接取'], taken: ['blue', '进行中'], done: ['ok', '已完成'], closed: ['gray', '已关闭'] }[s] || ['gray', s])
+const statusTag = t => {
+  if (t.status === 'open') return ['gray', '待接取']
+  if (t.status === 'taken') return ['blue', '进行中']
+  if (isDone(t)) return ['ok', '已完成']
+  if (isCancelled(t)) return ['gray', '已关闭']
+  return ['gray', t.status]
+}
 </script>
 
 <template>
-  <div class="grid g3" style="margin-bottom:16px">
+  <div class="grid g4" style="margin-bottom:16px">
     <div class="stat"><div class="k">待接取</div><div class="v">{{ stats.open }}</div></div>
     <div class="stat"><div class="k">进行中</div><div class="v">{{ stats.taken }}</div></div>
     <div class="stat"><div class="k">已完成</div><div class="v">{{ stats.done }}</div></div>
+    <div class="stat"><div class="k">已关闭</div><div class="v">{{ stats.cancelled }}</div></div>
   </div>
 
   <div class="card">
@@ -51,7 +64,7 @@ const statusTag = s => ({ open: ['gray', '待接取'], taken: ['blue', '进行�
           <td class="num">{{ t.points }}</td>
           <td>{{ nameOf(t.publisher_id) }}</td>
           <td class="muted">{{ t.assignee_id ? nameOf(t.assignee_id) : '—' }}</td>
-          <td><span class="tag" :class="statusTag(t.status)[0]">{{ statusTag(t.status)[1] }}</span></td>
+          <td><span class="tag" :class="statusTag(t)[0]">{{ statusTag(t)[1] }}</span></td>
           <td class="muted">{{ t.due_at ? fmtTime(t.due_at) : '—' }}</td>
           <td class="muted">{{ fmtTime(t.created_at) }}</td>
         </tr>

@@ -3,6 +3,8 @@ import { token } from './api'
 
 const routes = [
   { path: '/login', component: () => import('./pages/Login.vue'), meta: { public: true } },
+  // 改密页：需要 token（不是 public），但走独立布局，不显示侧边栏
+  { path: '/change-password', component: () => import('./pages/ChangePassword.vue'), meta: { bare: true } },
   { path: '/', component: () => import('./pages/Overview.vue'), meta: { title: '总览', group: '总览' } },
   { path: '/members', component: () => import('./pages/Members.vue'), meta: { title: '成员管理', group: '家庭' } },
   { path: '/rules', component: () => import('./pages/Rules.vue'), meta: { title: '睡觉规则', group: '家庭' } },

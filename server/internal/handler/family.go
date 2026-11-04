@@ -35,6 +35,7 @@ func (h *Family) AppInfo(c *gin.Context) {
 		"name":                   f.Name,
 		"invite_code":            f.InviteCode,
 		"invite_code_expires_at": f.InviteCodeExpiresAt,
+		"created_at":             f.CreatedAt,
 	})
 }
 
@@ -73,6 +74,7 @@ func (h *Family) AdminInfo(c *gin.Context) {
 		"name":                   f.Name,
 		"invite_code":            f.InviteCode,
 		"invite_code_expires_at": f.InviteCodeExpiresAt,
+		"created_at":             f.CreatedAt,
 	})
 }
 

@@ -43,6 +43,9 @@ const ready = ref(false)
 const fam = computed(() => currentFamily())
 
 onMounted(async () => {
+  // 冷启动时路由还没解析完，route.path 仍是 '/'，布局会先挂载一次。
+  // 没有 token 就别发请求——否则每次打开 /#/login 都会白打两个 401。
+  if (!token.get()) { ready.value = true; return }
   try {
     await Promise.all([loadMe(), loadFamilies()])
   } catch (e) {
@@ -85,7 +88,10 @@ function logout() {
 
       <div class="foot">
         管理员 {{ store.me ? store.me.username : '—' }}<br />
-        <span style="color:#8A6A45" v-if="store.me && store.me.must_change_password">⚠ 尚未修改初始密码</span>
+        <span style="color:#8A6A45" v-if="store.me && store.me.must_change_password">
+          ⚠ 尚未修改初始密码 ·
+          <a href="javascript:;" style="color:var(--primary)" @click="router.push('/change-password')">去修改</a>
+        </span>
         <span v-else>仅管理员使用 · 成员端请用 App</span>
       </div>
     </aside>

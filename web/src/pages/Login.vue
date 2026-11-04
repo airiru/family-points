@@ -18,6 +18,12 @@ async function submit() {
   try {
     const d = await api('/admin/login', { method: 'POST', body: { username: username.value, password: password.value } })
     token.set(d.token.access_token, username.value)
+    // 首次登录必须先改密：此时除 /admin/password 外全部 403，
+    // 所以不能先 loadMe()（那会抛「请先修改初始密码」并停在登录页）。
+    if (d.token.must_change_password) {
+      router.replace('/change-password')
+      return
+    }
     await loadMe()
     router.replace(route.query.next || '/')
   } catch (e) {

@@ -39,6 +39,9 @@ button{font-family:inherit}
 /* ---------- 通用 ---------- */
 .card{background:#fff;border:1px solid var(--line);border-radius:14px}
 .card.pad{padding:16px 18px}
+/* .pad 也单独使用（卡片内分区），必须自带内边距——
+   只定义 .card.pad 会让 16 处卡片内区块全部贴边。 */
+.pad{padding:16px 18px}
 .card-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
 .card-h h3{margin:0;font-size:14px;font-weight:700}
 .card-h .sp{flex:1}
@@ -57,7 +60,7 @@ button{font-family:inherit}
 .sp{flex:1}
 
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:10px;padding:9px 15px;font-size:13px;font-weight:650;cursor:pointer;
-  background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;box-shadow:0 6px 14px -8px rgba(255,122,61,.9)}
+  background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;box-shadow:0 6px 14px -8px rgba(255,122,61,.9);flex:none;white-space:nowrap}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.ghost{background:#fff;color:#3A4150;border:1px solid var(--line);box-shadow:none}
 .btn.ghost:hover{border-color:#D6DBE6}
