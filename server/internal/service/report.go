@@ -156,16 +156,18 @@ func (s *Report) Ranking(ctx context.Context, me *model.Member, typ, period stri
 		return nil, "", err
 	}
 
+	// 连续天数一次算全组（原来在循环里逐成员查，是 N+1）
+	streaks, err := s.report.Streaks(ctx, *me.FamilyID, time.Now())
+	if err != nil {
+		return nil, "", err
+	}
+
 	out := make([]RankingRow, 0, len(rows))
 	for _, r := range rows {
-		streak, err := s.report.CurrentStreak(ctx, *me.FamilyID, r.MemberID, time.Now())
-		if err != nil {
-			return nil, "", err
-		}
 		out = append(out, RankingRow{
 			MemberID: r.MemberID, Name: r.Name, Avatar: r.Avatar,
 			Score: r.Score, FrozenScore: r.FrozenScore,
-			PeriodScore: r.PeriodScore, Streak: streak,
+			PeriodScore: r.PeriodScore, Streak: streaks[r.MemberID],
 		})
 	}
 	return out, label, nil

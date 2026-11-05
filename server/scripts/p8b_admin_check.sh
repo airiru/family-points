@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # P8b 后台管理接口 + CSV 导出 验收
 set -u
+. "$(dirname "$0")/lib_admin.sh"
 B=http://127.0.0.1:8080
 RUN=$(date +%s)
 TOOL=/tmp/devtool.exe
@@ -13,7 +14,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 reg() { curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
   -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"name\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"; }
 
-A_AT=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d '{"username":"admins","password":"admins123"}' | jget "['data']['token']['access_token']")
+A_AT=$(admin_login "$B")
 AH="Authorization: Bearer $A_AT"
 
 echo "== 1. 造数据 =="

@@ -139,42 +139,67 @@ func (r *Report) Trend(ctx context.Context, familyID, memberID uint64, from, to 
 	return list, err
 }
 
-// CurrentStreak 计算某成员当前连续「夜间达标」天数。
+// streakLookbackDays 是回溯窗口：连续天数最多看这么多天，足够覆盖任何真实连签。
+const streakLookbackDays = 400
+
+// Streaks 一次性算出全组每个成员当前的连续「夜间达标」天数。
 //
-// 口径（12.4）：最近一条结算行必须是今天或昨天且达标，否则视为中断（当日未上报 = 未达标）。
-func (r *Report) CurrentStreak(ctx context.Context, familyID, memberID uint64, today time.Time) (int, error) {
+// 为什么是批量：榜单要给全组每个成员显示连续天数，逐个成员查一次就是 N+1 ——
+// 每次往返都要付一次数据库 RTT，成员越多越慢（实测 4 人 2.0–4.7s）。
+// 这里只查一次，按 member_id 分组在内存里算。
+//
+// 口径（12.4）：最近一条结算行必须是今天或昨天且达标，否则视为中断
+// （当日未上报 = 未达标）。没有任何达标记录的成员不出现在结果里（取值为零值 0）。
+func (r *Report) Streaks(ctx context.Context, familyID uint64, today time.Time) (map[uint64]int, error) {
 	var rows []struct {
+		MemberID   uint64    `db:"member_id"`
 		ReportDate time.Time `db:"report_date"`
 		NightOK    *bool     `db:"night_ok"`
 	}
 	if err := r.db.SelectContext(ctx, &rows,
-		`SELECT report_date, night_ok FROM screen_reports
-		  WHERE member_id = ? AND family_id = ?
-		  ORDER BY report_date DESC LIMIT 400`, memberID, familyID); err != nil {
-		return 0, err
+		`SELECT member_id, report_date, night_ok FROM screen_reports
+		  WHERE family_id = ? AND report_date >= ?
+		  ORDER BY member_id ASC, report_date DESC`,
+		familyID, today.AddDate(0, 0, -streakLookbackDays)); err != nil {
+		return nil, err
 	}
-	if len(rows) == 0 {
-		return 0, nil
-	}
-	// 最近一条必须是今天或昨天，否则已经断了
-	latest := rows[0].ReportDate
+
+	out := make(map[uint64]int, 8)
 	yesterday := today.AddDate(0, 0, -1)
-	if !sameDate(latest, today) && !sameDate(latest, yesterday) {
-		return 0, nil
-	}
-	streak := 0
-	expect := latest
-	for _, row := range rows {
-		if !sameDate(row.ReportDate, expect) {
-			break
+	var (
+		curID  uint64
+		seen   bool
+		expect time.Time // 零值 = 该成员已中断，后续行全部跳过
+		streak int
+	)
+	flush := func() {
+		if seen && streak > 0 {
+			out[curID] = streak
 		}
-		if row.NightOK == nil || !*row.NightOK {
-			break
+	}
+	for _, row := range rows {
+		if !seen || row.MemberID != curID {
+			flush()
+			curID, seen, streak = row.MemberID, true, 0
+			// 最近一条必须是今天或昨天，否则已经断了
+			if !sameDate(row.ReportDate, today) && !sameDate(row.ReportDate, yesterday) {
+				expect = time.Time{}
+				continue
+			}
+			expect = row.ReportDate
+		}
+		if expect.IsZero() {
+			continue
+		}
+		if !sameDate(row.ReportDate, expect) || row.NightOK == nil || !*row.NightOK {
+			expect = time.Time{} // 断档或未达标，本成员到此为止
+			continue
 		}
 		streak++
 		expect = expect.AddDate(0, 0, -1)
 	}
-	return streak, nil
+	flush()
+	return out, nil
 }
 
 // UnreadNotifications 未读通知数（概览页用）。

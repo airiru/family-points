@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # P8 审计日志 + 站内通知 验收
 set -u
+. "$(dirname "$0")/lib_admin.sh"
 B=http://127.0.0.1:8080
 RUN=$(date +%s)
 TOOL=/tmp/devtool.exe
@@ -21,7 +22,7 @@ M=$(reg "m8$RUN" "小孩" false); M_AT=$(echo "$M" | jget "['data']['token']['ac
 curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"
 FID=$(curl -s $B/api/app/family -H "Authorization: Bearer $L_AT" | jget "['data']['id']")
 grant "l8$RUN" 100
-A_AT=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d '{"username":"admins","password":"admins123"}' | jget "['data']['token']['access_token']")
+A_AT=$(admin_login "$B")
 echo "  组=$FID"
 
 echo "== 2. 触发若干写操作（应各留一条审计）=="

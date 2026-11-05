@@ -59,7 +59,7 @@ Android 客户端与 Web 后台均已实现。**剩下的是部署（19.5–19.7
 |---|---|---|
 | 存储 | KV 单键 `state` | **MySQL 8**（InnoDB / utf8mb4，20 张表） |
 | 后端 | Cloudflare Worker (JS) | **Go + Gin + sqlx**，自建服务器 |
-| Web | 前端应用（双角色） | **管理后台**（仅 `admins`，无成员视图，14 页） |
+| Web | 前端应用（双角色） | **管理后台**（仅 `admins`，无成员视图，**15 页**） |
 | Android | 无 | **Kotlin + Compose 原生**（成员端，16 个界面，3 个仅组长可见） |
 | 部署 | Cloudflare Pages | **自建服务器**：Nginx + Docker Compose（**未做**） |
 
@@ -224,11 +224,14 @@ go run ./cmd/api                             # :8080
 cd web && npm install && npm run dev         # :5173，/api 代理到 8080
 
 # Android
-cd android && JAVA_HOME=/d/tools/jdk-21.0.2 /d/tools/gradle-8.9/bin/gradle assembleDebug
+cd android && ./gradlew assembleDebug      # wrapper 已入库，不需要本机装 Gradle
+# JAVA_HOME 必须是 JDK 17 或 21（JDK 25 被 AGP 8.7 拒绝）
 ```
 
-**版本组合（已验证，别乱升）**：AGP 8.7.3 + **JDK 21**（JDK 25 被 AGP 拒绝）+
-Gradle 8.9 + compileSdk 35 + minSdk 26。Web 依赖用 npmmirror 源。
+**版本组合（两台机器各自验证过，别乱升）**：AGP 8.7.3 + **JDK 17 / 21 均可** +
+Gradle 8.9（wrapper，distributionUrl 指向华为云镜像）+ compileSdk 35 + minSdk 26。
+本机 JDK 在 `E:/tools/jdk-17.0.21.0.2+1`，另一台是 `/d/tools/jdk-21.0.2`——
+**路径按机器现场找，不要照抄**。Web 依赖用 npmmirror 源。
 
 **部署链路尚未实现**：目标为 Go 二进制 + MySQL + Nginx，Docker Compose 编排；
 schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrations/`）。
@@ -255,10 +258,23 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
   **不阻塞功能开发**；开发期默认口径：开放注册（限流/验证码不实现但留挂载点）、
   一律 `localhost`、MySQL 本机。
 - **两项曾未选型，现已定**：Web 用 **Vue 3**（已实现）；Android `minSdk` = **26**（已构建验证）。
-- **Web 12 个功能页只验证了「可编译 + 登录通」**，未逐页点击核对数据；
+- **Web 15 个页面已逐页点检**（2026-11-04，Edge 无头真实登录遍历）：0 控制台错误、
+  0 失败请求；过程中修掉 4 个真问题（缺改密页导致登录死锁、`.pad` 无内边距、
+  任务「已完成」统计用了不存在的 `status==='done'`、按钮被 flex 压成竖排）。
   Android 未做趋势图折线（接口已接）。
+- **仍未验证 / 未做**（2026-11-05 核对磁盘）：
+  ① **后台没有 logout 接口**——前端只能丢 token，refresh 仍在有效期内（5.4.4 只完成一半）；
+  ② **token 自动刷新未实测**——access 2h，测试期间没到期，刷新重放路径没触发过；
+  ③ **券核销投票全链路未验**——需多账号轮换；
+  ④ ~~榜单 N+1~~ **已修**（2026-11-05）：`repo.Report.Streaks` 一次查全组，
+  4 人家庭 2.0–4.7s → 1.0–1.6s；剩余 ~1.2s 是远端 MySQL 两次往返 RTT，
+  要再压只能加缓存或把库搬到应用同机。
 - **README.md 已整体失效**（2026-11-03）：描述的是已删除的 v1。
   **不必逐条纠错**——v3 稳定后整份重写。
+- **回归脚本的管理员密码**（2026-11-05）：脚本会改管理员密码（p2 改密流程、p8b 也改），
+  写死一个值必然在某个时点集体假红。已统一走 `scripts/lib_admin.sh` 的 `admin_login()`：
+  先试 `ADMIN_PASSWORD` 环境变量，再兜底 `admins1234 / admins123 / admins`。
+  **新写验收脚本一律 source 它，不要自己拼登录 curl。**
 - **本地环境两个坑**（2026-11-04 实测）：
   ① 本机 `http_proxy` 会吞掉 localhost 请求并返回误导性 502，排查一律加 `curl --noproxy '*'`；
   ② `p8b_admin_check.sh` 会把默认管理员密码改成 `admins123`，跑完回归需

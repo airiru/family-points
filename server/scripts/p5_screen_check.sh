@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # P5 睡觉规则 + 屏幕时间结算验收
 set -u
+. "$(dirname "$0")/lib_admin.sh"
 B=http://127.0.0.1:8080
 RUN=$(date +%s)
 pass=0; fail=0
@@ -44,7 +45,7 @@ chk "开始=结束 → 400" "400" "$(code -X POST $B/api/app/screen-rule/save -H
 echo "== 3. 给小孩建默认规则 + 设备令牌 =="
 RULE_ID=$(echo "$RULE" | jget "['data']['rules'][0]['id']")
 chk "给小孩配规则 → 200" "200" "$(code -X POST $B/api/app/screen-rule/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"threshold_min\":120,\"bonus_points\":2,\"penalty_points\":3,\"night_start_hour\":0,\"night_end_hour\":7,\"night_max_min\":0,\"night_rule_id\":$RULE_ID}")"
-A_AT=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d '{"username":"admins","password":"admins123"}' | jget "['data']['token']['access_token']")
+A_AT=$(admin_login "$B")
 DEV=$(curl -s -X POST $B/api/admin/family/$FID/device -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"name\":\"小孩手机\"}")
 TOKEN=$(echo "$DEV" | jget "['data']['token']")
 DEV_ID=$(echo "$DEV" | jget "['data']['device_id']")

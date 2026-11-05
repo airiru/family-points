@@ -216,7 +216,8 @@ CREATE TABLE IF NOT EXISTS screen_reports (
   revision        INT          NOT NULL DEFAULT 1,
   reported_at     DATETIME(3)  NOT NULL,
   updated_at      DATETIME(3)  NULL,
-  UNIQUE KEY uk_member_date (member_id, report_date)
+  UNIQUE KEY uk_member_date (member_id, report_date),
+  KEY idx_family_date (family_id, report_date)   -- 榜单批量算连续天数用（全组一次扫描）
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 设备令牌

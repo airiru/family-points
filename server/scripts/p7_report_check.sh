@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # P7 概览 / 记录查询 / 两个榜 / 趋势 验收
 set -u
+. "$(dirname "$0")/lib_admin.sh"
 B=http://127.0.0.1:8080
 RUN=$(date +%s)
 TOOL=/tmp/devtool.exe
@@ -25,7 +26,7 @@ M1=$(reg "m7$RUN" "小孩" false); M1_AT=$(echo "$M1" | jget "['data']['token'][
 curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $M1_AT" -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"
 FID=$(curl -s $B/api/app/family -H "Authorization: Bearer $L_AT" | jget "['data']['id']")
 grant "l7$RUN" 50
-A_AT=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d '{"username":"admins","password":"admins123"}' | jget "['data']['token']['access_token']")
+A_AT=$(admin_login "$B")
 DEV=$(curl -s -X POST $B/api/admin/family/$FID/device -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M1_ID,\"name\":\"测试机\"}")
 TOKEN=$(echo "$DEV" | jget "['data']['token']")
 # 三天屏幕上报：每天 +2（日总量）+2（夜间）= +4

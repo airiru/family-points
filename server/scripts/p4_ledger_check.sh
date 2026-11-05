@@ -2,6 +2,7 @@
 # P4 账目核心验收（所有积分变动都要留流水）
 # 依赖：/tmp/devtool（测试脚手架，只改余额不写流水，用于准备初始余额）
 set -u
+. "$(dirname "$0")/lib_admin.sh"
 B=http://127.0.0.1:8080
 RUN=$(date +%s)
 TOOL=/tmp/devtool.exe
@@ -73,7 +74,7 @@ chk "流水正好 3 条" "3" "$TOTAL"
 
 echo "== 8. 撤销功能暂不做：接口必须不存在 =="
 FID=$(curl -s $B/api/app/family -H "Authorization: Bearer $L_AT" | jget "['data']['id']")
-A_AT=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' -d '{"username":"admins","password":"admins123"}' | jget "['data']['token']['access_token']")
+A_AT=$(admin_login "$B")
 chk "撤销兑换接口 → 404" "404" "$(code -X POST $B/api/admin/family/$FID/item/redeem/revoke -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d '{"redemption_id":1}')"
 chk "撤销赠送接口 → 404" "404" "$(code -X POST $B/api/admin/family/$FID/transfer/revoke -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d '{"transfer_id":1}')"
 
