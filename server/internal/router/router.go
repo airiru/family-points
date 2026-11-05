@@ -52,12 +52,17 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		api.POST("/admin/refresh", authHandler.RefreshAdmin)
 		api.POST("/app/login", authHandler.LoginMember)
 		api.POST("/app/refresh", authHandler.RefreshMember)
+
+		// 前台登出：只要 access 有效就能调，不要求已入组
+		appAuth := r.Group("/api/app", mw.RequireMember())
+		appAuth.POST("/logout", authHandler.LogoutMember)
 	}
 
 	// 后台：只认 admin token
 	admin := r.Group("/api/admin", mw.RequireAdmin())
 	{
 		admin.GET("/me", authHandler.MeAdmin)
+		admin.POST("/logout", authHandler.LogoutAdmin)
 		admin.POST("/password", authHandler.ChangeAdminPassword)
 
 		// 管理员跨组：family_id 只能走路径参数（4.3 第 3 条）

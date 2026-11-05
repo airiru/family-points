@@ -32,7 +32,7 @@ var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_]{3,20}$`)
 // TokenPair 是登录/刷新成功后返回给客户端的一对 token。
 type TokenPair struct {
 	AccessToken      string `json:"access_token"`
-	AccessExpiresIn  int64  `json:"access_expires_in"`  // 秒
+	AccessExpiresIn  int64  `json:"access_expires_in"` // 秒
 	RefreshToken     string `json:"refresh_token"`
 	RefreshExpiresIn int64  `json:"refresh_expires_in"` // 秒
 	TokenType        string `json:"token_type"`         // 固定 "Bearer"
@@ -242,6 +242,23 @@ func (s *Auth) ChangeMemberPassword(ctx context.Context, memberID uint64, oldPas
 		return err
 	}
 	return s.repo.RevokeAllForSubject(ctx, model.SubjectMember, memberID)
+}
+
+// Logout 登出：吊销该主体的**全部** refresh token。
+//
+// 为什么不是「只吊销本次传上来的那一条」：
+//
+//	refresh 是无状态的 30 天凭证，前端「丢 token」并不等于服务端失效——
+//	拿到过 refresh 的人仍能换出新的 access（文档 5.4.4 此前正是这个缺口）。
+//	按主体全量吊销，语义上「退出登录 = 该账号所有会话下线」，
+//	单设备多开也不会留下可用凭证。
+//
+// 调用方必须是已认证的主体（access token 未过期），所以不需要再验密码。
+func (s *Auth) Logout(ctx context.Context, subjectType string, subjectID uint64) error {
+	if subjectType != model.SubjectAdmin && subjectType != model.SubjectMember {
+		return ErrTokenInvalid
+	}
+	return s.repo.RevokeAllForSubject(ctx, subjectType, subjectID)
 }
 
 // ChangeAdminPassword 改后台密码；同时清掉 must_change_password。

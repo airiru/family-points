@@ -159,6 +159,34 @@ func (h *Auth) changePassword(c *gin.Context, do func(oldPwd, newPwd string) err
 	httpx.OK(c, gin.H{"relogin_required": true})
 }
 
+// LogoutAdmin POST /api/admin/logout —— 吊销该管理员全部 refresh token。
+func (h *Auth) LogoutAdmin(c *gin.Context) {
+	a, ok := middleware.CurrentAdmin(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	if err := h.svc.Logout(c.Request.Context(), model.SubjectAdmin, a.ID); err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"revoked": true})
+}
+
+// LogoutMember POST /api/app/logout —— 吊销该成员全部 refresh token。
+func (h *Auth) LogoutMember(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	if err := h.svc.Logout(c.Request.Context(), model.SubjectMember, m.ID); err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"revoked": true})
+}
+
 // MeAdmin GET /api/admin/me
 func (h *Auth) MeAdmin(c *gin.Context) {
 	admin, ok := middleware.CurrentAdmin(c)

@@ -479,6 +479,10 @@ CREATE TABLE refresh_tokens (
    - 密码/用户名长度 → 只由后端校验并返回错误（原本三处各写一套：4 位 / 6 位 / 8 位）
    ⇒ 前端可以做的只有：**空值提示、两次输入一致性、输入格式（纯数字）**这类纯表单问题。
    判据：**同一规则如果在两处实现，迟早会漂 —— 只留后端一处。**
+8. **登出必须吊销 refresh**（2026-11-05 定）：refresh 是无状态凭证，
+   前端「把 token 从本地删掉」**不等于**服务端失效——拿到过 refresh 的人仍能换出 access。
+   ⇒ `POST /api/admin/logout` / `/api/app/logout` 按主体**全量吊销**，
+   语义是「该账号所有会话下线」。前端登出按钮必须先调接口，再清本地。
 
 ---
 
@@ -534,7 +538,7 @@ CREATE TABLE refresh_tokens (
 | 5.4.1 | **系统自带一个默认管理员账号** | ✅ `go run ./cmd/migrate -seed-admin`，取 `ADMIN_USERNAME`/`ADMIN_PASSWORD`（开发库为 `admins`/`admins`）；**已有管理员则跳过**，幂等 |
 | 5.4.2 | **默认账号首次登录强制改密** | ✅ 未改密前除改密接口外全部拒绝；Web 14.1a 承接 |
 | 5.4.3 | 运营方可在后台新增 / 停用管理员账号 | ✅ `/api/admin/accounts`（列表/新建/停用）+ Web 14.13 |
-| 5.4.4 | 后台登录 / 退出 | ⚠️ 登录 ✅ `/api/admin/login`；**退出未做**（无 logout 路由，靠前端丢 token + refresh 过期） |
+| 5.4.4 | 后台登录 / 退出 | ✅ 登录 `/api/admin/login`；退出 `POST /api/admin/logout`（**吊销该管理员全部 refresh**） |
 | 5.4.5 | 修改密码 | ✅ `POST /api/admin/password` + Web 14.1a |
 | 5.4.6 | Token 刷新（Access 2h + Refresh 30d） | ✅ `/api/admin/refresh`、`/api/app/refresh`；refresh 存哈希、可吊销、轮换 |
 | 5.4.7 | **可管理所有家庭组的所有内容** | ✅ 成员、规则、任务、商品、设备、数据、审计（14 节 13 个页面） |
@@ -1212,6 +1216,7 @@ App 的「屏幕时间」页除了今日总时长，还要能看到**每小时**
 | 15.1.1 | `/api/register` | POST | 注册账号；可传 `createFamily` 顺带创建家庭组（**只成为组长，不产生后台身份**） |
 | 15.1.2 | `/api/admin/login` | POST | 后台登录 |
 | 15.1.3 | `/api/app/login` | POST | 前台登录 |
+| 15.1.3a | `/api/app/logout` | POST | 前台登出（吊销该成员全部 refresh；需 access，不要求已入组） |
 | 15.1.4 | `/api/admin/refresh` | POST | 后台 token 刷新 |
 | 15.1.5 | `/api/app/refresh` | POST | 前台 token 刷新 |
 | 15.1.6 | `/api/app/family/join` | POST | 凭邀请码加入家庭组（需前台 token，`family_id` 为空） |
@@ -1221,6 +1226,7 @@ App 的「屏幕时间」页除了今日总时长，还要能看到**每小时**
 | # | 接口 | 方法 | 说明 |
 |---|---|---|---|
 | 15.2.1 | `/api/admin/password` | POST | 改密码 |
+| 15.2.1a | `/api/admin/logout` | POST | 后台登出（吊销该管理员全部 refresh） |
 | 15.2.2 | `/api/admin/family` | GET/POST | 查看 / 改名 |
 | 15.2.3 | `/api/admin/family/:family_id/invite` | POST | 按用户名把已注册用户拉进该组 |
 | 15.2.4 | `/api/admin/family/transfer-admin` | POST | 移交管理员 |
@@ -2244,6 +2250,13 @@ CREATE TABLE family_star_logs (
 116. `global_vote` 到期评分家庭数 < 3 → 自动 `rejected`，不发星。
 117. 全服榜响应中**不含**成员名、个人积分、`records`、明文 `family_id`。
 118. `stars_public=0` 的家庭不上榜，但 `stars` 仍正常增长。
+119. **登出后，登出前签发的 refresh token 重放必须返回 401**（后台与前台各一条）。
+120. 登出只吊销该主体的 refresh，**不影响其他账号**；同账号其他设备的 refresh 一并失效。
+121. 登出后旧 access token 在到期前**仍可用**（JWT 无状态，这是已知且接受的代价）。
+122. 未带 token 调 logout 返回 **401**；前台 token 打后台 logout 返回 **401**。
+123. 登出后重新登录可正常使用，账号不被锁死。
+124. **Web 后台 access 过期时自动刷新并重放原请求**，用户不被打断；
+     并发多个请求同时 401 时**只发起一次刷新**（并发去重）。
 
 ### 25.8 Android 界面（实现时登记进 13 节，界面数 15 → 17）
 

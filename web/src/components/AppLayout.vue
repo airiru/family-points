@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { token } from '../api'
+import { api, token } from '../api'
 import { store, loadMe, loadFamilies, selectFamily, resetStore, currentFamily } from '../store'
 import { toastErr } from '../toast'
 
@@ -55,7 +55,10 @@ onMounted(async () => {
   }
 })
 
-function logout() {
+async function logout() {
+  // 必须通知后端：只丢本地 token 的话 refresh 仍有效 30 天，
+  // 等于「退出」只是个假动作。
+  try { await api('/admin/logout', { method: 'POST' }) } catch { /* 网络失败也要放行本地登出 */ }
   token.clear()
   resetStore()
   router.replace('/login')

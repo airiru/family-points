@@ -23,7 +23,16 @@ async function submit() {
       method: 'POST',
       body: { old_password: oldPwd.value, new_password: newPwd.value },
     })
-    // 改密成功后 must_change_password 已清零，重新拉一次身份即可正常进后台
+    // 改密会**吊销该账号全部 refresh token**（后端一步到位），
+    // 所以本地存的旧 refresh 此刻已失效。若不重新登录，
+    // 当前 access 还能用 2h，但到期后就再也换不出新 token —— 用户会莫名被踢。
+    // 这里直接用刚设置的新密码重新登录，拿一对全新的 token。
+    const d = await api('/admin/login', {
+      method: 'POST',
+      body: { username: token.name(), password: newPwd.value },
+    })
+    token.set(d.token.access_token, token.name(), d.token.refresh_token)
+
     await Promise.all([loadMe(), loadFamilies()])
     router.replace('/')
   } catch (e) {
@@ -33,7 +42,8 @@ async function submit() {
   }
 }
 
-function logout() {
+async function logout() {
+  try { await api('/admin/logout', { method: 'POST' }) } catch { /* 忽略 */ }
   token.clear()
   router.replace('/login')
 }
