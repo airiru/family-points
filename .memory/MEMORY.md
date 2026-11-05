@@ -34,8 +34,8 @@
 | `server/migrations/` | **单一 `0001_init`**（已 squash，20 张表）+ `embed.go` |
 | `server/scripts/` | **10 个验收脚本** p1–p8b + p9_coupon |
 | `android/` | Kotlin + Compose，**19 个 .kt**，已真实构建出 APK |
-| `web/` | Vue 3 + Vite，**14 个页面**（含 Login），仅管理员 |
-| `docs/features.md` | **2165 行**，1–25 节，功能唯一事实源 |
+| `web/` | Vue 3 + Vite，**15 个页面**（含 Login + 改密页），仅管理员 |
+| `docs/features.md` | **约 2170 行**，1–25 节，功能唯一事实源 |
 | `README.md` | **已整体失效**（顶部有失效声明），待重写 |
 
 **阶段进度**：P1 认证 → P2 多租户 → P3 家庭组 → P4 账目 → P5 屏幕时间 →
