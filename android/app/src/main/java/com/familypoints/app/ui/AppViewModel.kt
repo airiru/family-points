@@ -220,6 +220,8 @@ class AppViewModel @Inject constructor(
 
     fun logout() {
         viewModelScope.launch {
+            // 先通知服务端吊销 refresh（失败也要放行本地登出，否则断网就退不出去）
+            runCatching { api.logout() }
             tokenStore.clear()
             _session.value = Session.LoggedOut
             _members.value = emptyList()

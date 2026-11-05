@@ -483,6 +483,10 @@ CREATE TABLE refresh_tokens (
    前端「把 token 从本地删掉」**不等于**服务端失效——拿到过 refresh 的人仍能换出 access。
    ⇒ `POST /api/admin/logout` / `/api/app/logout` 按主体**全量吊销**，
    语义是「该账号所有会话下线」。前端登出按钮必须先调接口，再清本地。
+   **两端都已落实**（2026-11-05）：Web `AppLayout` / `ChangePassword`、
+   Android `AppViewModel.logout()` 均先 `runCatching { api.logout() }` 再清本地
+   （网络失败放行本地登出，否则断网就退不出去）。
+   真机实测：登出后该成员 `refresh_tokens` 全部 `revoked_at` 非空。
 
 ---
 

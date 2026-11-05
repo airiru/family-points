@@ -30,6 +30,11 @@ interface ApiService {
     @POST("api/app/password")
     suspend fun changePassword(@Body body: PasswordReq): Envelope<Unit>
 
+    /** 登出：服务端会吊销该成员**全部** refresh token（docs 4.3 第 8 条）。
+     *  只清本地 token 是假登出——refresh 还能用 30 天。 */
+    @POST("api/app/logout")
+    suspend fun logout(): Envelope<Unit>
+
     // ---------- 家庭组 ----------
     @POST("api/app/family/join")
     suspend fun join(@Body body: JoinReq): Envelope<Unit>
