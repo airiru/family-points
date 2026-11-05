@@ -27,11 +27,10 @@ curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $M
 FID=$(curl -s $B/api/app/family -H "Authorization: Bearer $L_AT" | jget "['data']['id']")
 grant "l7$RUN" 50
 A_AT=$(admin_login "$B")
-DEV=$(curl -s -X POST $B/api/admin/family/$FID/device -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M1_ID,\"name\":\"测试机\"}")
-TOKEN=$(echo "$DEV" | jget "['data']['token']")
-# 三天屏幕上报：每天 +2（日总量）+2（夜间）= +4
+# 三天屏幕上报：每天 +2（日总量）+2（夜间）= +4（2026-11-05 起走成员登录态）
 for d in "$D1" "$D2" "$TODAY"; do
-  curl -s -o /dev/null -X POST $B/api/device/screen/report -H "X-Device-Token: $TOKEN" -H 'Content-Type: application/json' -d "{\"report_date\":\"$d\",\"total_min\":60,\"night_min\":0}"
+  curl -s -o /dev/null -X POST $B/api/app/screen/report -H "Authorization: Bearer $M1_AT" -H 'Content-Type: application/json' \
+    -d "{\"device_key\":\"p7dev\",\"device_model\":\"Test\",\"report_date\":\"$d\",\"total_min\":60,\"night_min\":0}"
 done
 echo "  今天=$TODAY 前两天=$D1 / $D2"
 

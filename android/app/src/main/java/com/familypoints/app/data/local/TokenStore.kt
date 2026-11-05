@@ -31,12 +31,10 @@ class TokenStore @Inject constructor(
         val MEMBER_NAME = stringPreferencesKey("member_name")
         val ROLE = stringPreferencesKey("role")
         val FAMILY_ID = stringPreferencesKey("family_id")
-        val DEVICE_TOKEN = stringPreferencesKey("device_token")
     }
 
     val accessToken: Flow<String?> = context.dataStore.data.map { it[Keys.ACCESS] }
     val refreshToken: Flow<String?> = context.dataStore.data.map { it[Keys.REFRESH] }
-    val deviceToken: Flow<String?> = context.dataStore.data.map { it[Keys.DEVICE_TOKEN] }
     val memberId: Flow<Long?> = context.dataStore.data.map { it[Keys.MEMBER_ID]?.toLongOrNull() }
     val role: Flow<String?> = context.dataStore.data.map { it[Keys.ROLE] }
     val familyId: Flow<Long?> = context.dataStore.data.map { it[Keys.FAMILY_ID]?.toLongOrNull() }
@@ -44,7 +42,6 @@ class TokenStore @Inject constructor(
     suspend fun accessTokenOnce(): String? = accessToken.first()
     suspend fun refreshTokenOnce(): String? = refreshToken.first()
     suspend fun memberIdOnce(): Long? = memberId.first()
-    suspend fun deviceTokenOnce(): String? = deviceToken.first()
 
     suspend fun saveSession(
         access: String,
@@ -73,10 +70,6 @@ class TokenStore @Inject constructor(
 
     suspend fun updateRole(role: String) {
         context.dataStore.edit { it[Keys.ROLE] = role }
-    }
-
-    suspend fun saveDeviceToken(token: String) {
-        context.dataStore.edit { it[Keys.DEVICE_TOKEN] = token }
     }
 
     suspend fun clear() {

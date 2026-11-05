@@ -17,6 +17,7 @@ import (
 	"familypoints/server/internal/db"
 	"familypoints/server/internal/handler"
 	"familypoints/server/internal/middleware"
+	"familypoints/server/internal/notify"
 	"familypoints/server/internal/repo"
 	"familypoints/server/internal/router"
 	"familypoints/server/internal/service"
@@ -54,16 +55,18 @@ func main() {
 	familySvc := service.NewFamily(familyRepo)
 	familyHandler := handler.NewFamily(familySvc)
 
-	ledgerSvc := service.NewLedger(repo.NewLedger(conn), familyRepo)
+	// 站内通知（旁路）：各 service 用它发「待投票 / 结果 / 到账」提醒
+	notifier := notify.New(repo.NewNotification(conn), familyRepo)
+
+	ledgerSvc := service.NewLedger(repo.NewLedger(conn), familyRepo, notifier)
 	ledgerHandler := handler.NewLedger(ledgerSvc)
 
 	screenRepo := repo.NewScreen(conn)
 	screenSvc := service.NewScreen(screenRepo, familyRepo)
 	screenHandler := handler.NewScreen(screenSvc)
-	deviceMW := middleware.NewDevice(screenRepo)
 
 	taskRepo := repo.NewTask(conn)
-	taskSvc := service.NewTask(taskRepo)
+	taskSvc := service.NewTask(taskRepo, notifier)
 	taskHandler := handler.NewTask(taskSvc)
 
 	reportSvc := service.NewReport(repo.NewReport(conn), familyRepo)
@@ -76,7 +79,7 @@ func main() {
 	adminSvc := service.NewAdmin(familyRepo, authRepo, screenRepo, repo.NewLedger(conn), repo.NewReport(conn), taskRepo)
 	adminHandler := handler.NewAdmin(adminSvc)
 
-	couponSvc := service.NewCoupon(repo.NewCoupon(conn))
+	couponSvc := service.NewCoupon(repo.NewCoupon(conn), notifier)
 	couponHandler := handler.NewCoupon(couponSvc)
 
 	notifRepo := repo.NewNotification(conn)
@@ -85,7 +88,7 @@ func main() {
 
 	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler,
 		screenHandler, taskHandler, reportHandler, auditHandler, notifHandler,
-		adminHandler, couponHandler, authMW, deviceMW)
+		adminHandler, couponHandler, authMW)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
@@ -42,7 +42,9 @@ import com.familypoints.app.ui.screens.LoginScreen
 import com.familypoints.app.ui.screens.ManageMembersScreen
 import com.familypoints.app.ui.screens.MemberDetailScreen
 import com.familypoints.app.ui.screens.NotificationsScreen
+import com.familypoints.app.ui.screens.ProfileEditScreen
 import com.familypoints.app.ui.screens.ProfileScreen
+import com.familypoints.app.ui.screens.ScreenTabScreen
 import com.familypoints.app.ui.screens.RecordsScreen
 import com.familypoints.app.ui.screens.RegisterScreen
 import com.familypoints.app.ui.screens.ScreenTimeScreen
@@ -57,6 +59,7 @@ object Routes {
     const val REGISTER = "register"
     const val JOIN = "join"
 
+    const val SCREEN = "screen"
     const val BOARD = "board"
     const val TASK = "task"
     const val SHOP = "shop"
@@ -69,6 +72,7 @@ object Routes {
     const val TASK_DETAIL = "taskDetail/{id}"
     const val VOTE = "vote"
     const val SCREEN_TIME = "screenTime"
+    const val PROFILE_EDIT = "profileEdit"
     const val MANAGE_MEMBERS = "manageMembers"
     const val SLEEP_RULE = "sleepRule"
     const val GOODS = "goods"
@@ -80,11 +84,12 @@ object Routes {
 
 private data class TabItem(val route: String, val label: String, val icon: ImageVector)
 
+// 2026-11-05：屏幕时间提到积分榜前面作为独立 tab；通知移到「我的」里
 private val tabs = listOf(
+    TabItem(Routes.SCREEN, "屏幕", Icons.Filled.PhoneAndroid),
     TabItem(Routes.BOARD, "积分榜", Icons.Filled.BarChart),
     TabItem(Routes.TASK, "任务", Icons.Filled.Checklist),
     TabItem(Routes.SHOP, "商城", Icons.Filled.Storefront),
-    TabItem(Routes.NOTIFY, "通知", Icons.Filled.Notifications),
     TabItem(Routes.ME, "我的", Icons.Filled.Person),
 )
 
@@ -138,9 +143,10 @@ private fun MainNav(vm: AppViewModel) {
     ) { padding ->
         NavHost(
             navController = nav,
-            startDestination = Routes.BOARD,
+            startDestination = Routes.SCREEN,
             modifier = Modifier.padding(padding),
         ) {
+            composable(Routes.SCREEN) { ScreenTabScreen(vm, nav) }
             composable(Routes.BOARD) { BoardScreen(vm, nav) }
             composable(Routes.TASK) { TaskListScreen(vm, nav) }
             composable(Routes.SHOP) { ShopScreen(vm, nav) }
@@ -163,6 +169,7 @@ private fun MainNav(vm: AppViewModel) {
             }
             composable(Routes.VOTE) { VoteScreen(vm, nav) }
             composable(Routes.SCREEN_TIME) { ScreenTimeScreen(vm, nav) }
+            composable(Routes.PROFILE_EDIT) { ProfileEditScreen(vm, nav) }
             composable(Routes.MANAGE_MEMBERS) { ManageMembersScreen(vm, nav) }
             composable(Routes.SLEEP_RULE) { SleepRuleScreen(vm, nav) }
             composable(Routes.GOODS) { GoodsScreen(vm, nav) }

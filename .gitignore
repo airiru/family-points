@@ -16,3 +16,6 @@
 .vscode/
 .DS_Store
 Thumbs.db
+
+# 验收脚本编译的临时二进制
+server/devtool.exe

@@ -5,7 +5,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"familypoints/server/internal/auth"
 	"familypoints/server/internal/httpx"
 	"familypoints/server/internal/middleware"
 	"familypoints/server/internal/model"
@@ -119,93 +118,16 @@ func (h *Screen) AppScreenReports(c *gin.Context) {
 	httpx.OK(c, gin.H{"reports": list})
 }
 
-// ---------- 设备（管理员，跨组）----------
+// ---------- 上报（成员登录态，无需设备令牌）----------
 
-// AdminCreateDevice POST /api/admin/family/:family_id/device —— 生成设备令牌。
+// AppReport POST /api/app/screen/report
 //
-// **明文令牌只在这里返回一次**，库里只有 SHA-256。
-func (h *Screen) AdminCreateDevice(c *gin.Context) {
-	fid, ok := pathFamilyID(c)
+// 2026-11-05 起不再要求设备令牌：登录成员即可上报，设备用 device_key + 型号区分。
+// 一个成员可以有多台设备，各自上报；服务端按「成员×日」汇总后再结算。
+func (h *Screen) AppReport(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
 	if !ok {
-		return
-	}
-	var in struct {
-		MemberID uint64 `json:"member_id"`
-		Name     string `json:"name"`
-	}
-	if err := c.ShouldBindJSON(&in); err != nil {
-		httpx.BadRequest(c, "请求体格式不正确")
-		return
-	}
-	if in.MemberID == 0 {
-		httpx.BadRequest(c, "缺少 member_id")
-		return
-	}
-	raw, hash, err := auth.NewRefresh() // 复用随机串生成：32 字节 → hex
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	dev, err := h.svc.CreateDevice(c.Request.Context(), fid, in.MemberID, in.Name, raw, hash)
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	auditCrossFamily(c, "admin.device.create", fid)
-	c.Set("audit_family_id", fid)
-	recordAudit(c, "device.create", "device", &dev.ID, nil, gin.H{"member_id": dev.MemberID})
-	httpx.OK(c, gin.H{
-		"device_id": dev.ID,
-		"member_id": dev.MemberID,
-		"name":      dev.Name,
-		"token":     raw, // 只此一次
-	})
-}
-
-// AdminDevices GET /api/admin/family/:family_id/device
-func (h *Screen) AdminDevices(c *gin.Context) {
-	fid, ok := pathFamilyID(c)
-	if !ok {
-		return
-	}
-	list, err := h.svc.Devices(c.Request.Context(), fid)
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	httpx.OK(c, gin.H{"devices": list})
-}
-
-// AdminRevokeDevice POST /api/admin/family/:family_id/device/revoke
-func (h *Screen) AdminRevokeDevice(c *gin.Context) {
-	fid, ok := pathFamilyID(c)
-	if !ok {
-		return
-	}
-	var in struct {
-		DeviceID uint64 `json:"device_id"`
-	}
-	if err := c.ShouldBindJSON(&in); err != nil {
-		httpx.BadRequest(c, "请求体格式不正确")
-		return
-	}
-	if err := h.svc.RevokeDevice(c.Request.Context(), fid, in.DeviceID); err != nil {
-		fail(c, err)
-		return
-	}
-	auditCrossFamily(c, "admin.device.revoke", fid)
-	c.Set("audit_family_id", fid)
-	recordAudit(c, "device.revoke", "device", &in.DeviceID, nil, nil)
-	httpx.OK(c, gin.H{"revoked": true, "device_id": in.DeviceID})
-}
-
-// ---------- 上报（设备令牌）----------
-
-// DeviceReport POST /api/device/screen/report
-func (h *Screen) DeviceReport(c *gin.Context) {
-	dev, ok := middleware.CurrentDevice(c)
-	if !ok {
-		httpx.Unauthorized(c, "缺少设备上下文")
+		httpx.Unauthorized(c, "未登录")
 		return
 	}
 	var in service.ReportInput
@@ -213,7 +135,7 @@ func (h *Screen) DeviceReport(c *gin.Context) {
 		httpx.BadRequest(c, "请求体格式不正确")
 		return
 	}
-	res, err := h.svc.Report(c.Request.Context(), dev, in)
+	res, err := h.svc.Report(c.Request.Context(), m, in)
 	if err != nil {
 		fail(c, err)
 		return
@@ -232,4 +154,37 @@ func (h *Screen) DeviceReport(c *gin.Context) {
 		body["awards"] = res.Awards
 	}
 	httpx.OK(c, body)
+}
+
+// AppFamilyDay GET /api/app/screen/family?date=YYYY-MM-DD
+//
+// 全组当天屏幕时间：每人汇总 + 各自设备明细。用于「查看家庭成员的屏幕时间」。
+func (h *Screen) AppFamilyDay(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	date := c.DefaultQuery("date", "")
+	view, err := h.svc.FamilyDay(c.Request.Context(), m, date)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, view)
+}
+
+// AppDevices GET /api/app/screen/devices —— 本人上报过的设备。
+func (h *Screen) AppDevices(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	list, err := h.svc.DevicesOfMember(c.Request.Context(), m)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"devices": list})
 }

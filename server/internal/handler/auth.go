@@ -216,6 +216,7 @@ func (h *Auth) MeMember(c *gin.Context) {
 		"family_id":    m.FamilyID,
 		"score":        m.Score,
 		"frozen_score": m.FrozenScore,
+		"avatar":       m.Avatar,
 	})
 }
 

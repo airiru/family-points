@@ -28,8 +28,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.Lifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,6 +68,7 @@ import com.familypoints.app.ui.theme.GreenSoft
 import com.familypoints.app.ui.theme.Ink
 import com.familypoints.app.ui.theme.Line
 import com.familypoints.app.ui.theme.Primary
+import com.familypoints.app.util.DeviceInfo
 import com.familypoints.app.ui.theme.PrimarySoft
 import com.familypoints.app.ui.theme.Red
 import com.familypoints.app.ui.theme.Sub
@@ -73,6 +78,7 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
     val session by vm.session.collectAsStateWithLifecycle()
     val me = (session as? Session.Ready)?.me
     val familyName by vm.familyName.collectAsStateWithLifecycle()
+    val unread by vm.unread.collectAsStateWithLifecycle()
     var confirmLogout by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.loadOverview() }
@@ -87,7 +93,7 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
-                CardBox {
+                CardBox(modifier = Modifier.clickable { nav.navigate(Routes.PROFILE_EDIT) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Avatar(me?.avatar, size = 52)
                         Spacer(Modifier.width(12.dp))
@@ -111,13 +117,26 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                             )
                             Text("可用积分", fontSize = 11.sp, color = Sub)
                         }
+                        Spacer(Modifier.width(6.dp))
+                        Text("›", fontSize = 18.sp, color = Sub)
                     }
+                    Text(
+                        "点头像可修改名称与头像",
+                        fontSize = 11.sp, color = Sub,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                 }
             }
 
             item {
                 CardBox {
                     MenuItem("🎁", "赠送积分", "把积分转给其他成员") { nav.navigate(Routes.GIFT) }
+                    Divider(color = Line)
+                    MenuItem(
+                        "🔔", "通知",
+                        if (unread > 0) "有 $unread 条未读" else "投票提醒与结果",
+                        badge = unread,
+                    ) { nav.navigate(Routes.NOTIFY) }
                     Divider(color = Line)
                     MenuItem("📱", "屏幕时间", "今日使用与上报状态") { nav.navigate(Routes.SCREEN_TIME) }
                     Divider(color = Line)
@@ -165,7 +184,7 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
 }
 
 @Composable
-private fun MenuItem(icon: String, title: String, subtitle: String, onClick: () -> Unit) {
+private fun MenuItem(icon: String, title: String, subtitle: String, badge: Int = 0, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -184,6 +203,21 @@ private fun MenuItem(icon: String, title: String, subtitle: String, onClick: () 
         Column(Modifier.weight(1f)) {
             Text(title, fontWeight = FontWeight.Medium, fontSize = 14.sp)
             if (subtitle.isNotBlank()) Text(subtitle, fontSize = 11.5.sp, color = Sub)
+        }
+        if (badge > 0) {
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Red)
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    if (badge > 99) "99+" else "$badge",
+                    color = androidx.compose.ui.graphics.Color.White,
+                    fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.width(6.dp))
         }
         Text("›", fontSize = 18.sp, color = Sub)
     }
@@ -262,7 +296,7 @@ fun NotificationsScreen(vm: AppViewModel, nav: NavHostController) {
 }
 
 @Composable
-fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
+fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = false) {
     val context = LocalContext.current
     val reader = remember { UsageStatsReader(context) }
     var hasPermission by remember { mutableStateOf(reader.hasPermission()) }
@@ -272,9 +306,8 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
     var days by remember { mutableStateOf<List<DayUsage>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var pickedHour by remember { mutableStateOf<Int?>(null) }
-    val deviceToken by vm.deviceToken.collectAsStateWithLifecycle()
-    var tokenInput by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val familyScreen by vm.familyScreen.collectAsStateWithLifecycle()
 
     // 夜间时段必须用**本机登录成员自己的规则**：写死 0–7 会和实际计分口径不一致
     // （多成员家庭里小学生和初中生的睡觉时间点本来就可以不同，见 docs 25 条）。
@@ -294,10 +327,8 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
     val latestReport = reports.firstOrNull { it.reportDate.take(10) == yesterdayDate }
     val nightVerdict: Boolean? = latestReport?.nightOk
 
-    // 「已同步」不能靠猜：只有「有权限 + 配了设备令牌」才可能上报成功。
-    // 之前这里用 loadOverview() 是否成功来推断，结果是**永远显示已同步**，
-    // 而没有设备令牌时 Worker 会直接 return，根本不会上报。
-    val synced = hasPermission && !deviceToken.isNullOrBlank()
+    // 2026-11-05：上报只需登录态 + 使用情况权限，不再需要设备令牌
+    val synced = hasPermission
 
     // 读事件流要遍历全部 UsageEvents，放主线程会卡首帧，统一丢 IO。
     suspend fun reload() {
@@ -317,10 +348,28 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
     LaunchedEffect(nightStart, nightEnd) {
         hasPermission = reader.hasPermission()
         if (hasPermission) reload()
+        vm.loadFamilyScreen()
+    }
+
+    // 从系统设置授权后返回：Activity 不会重建，必须监听 ON_RESUME 重新检测，
+    // 否则页面一直停在「需要权限」，用户以为没生效（2026-11-05 反馈）。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val ok = reader.hasPermission()
+                hasPermission = ok
+                if (ok) {
+                    scope.launch { reload(); vm.loadFamilyScreen() }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
 
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader(title = "屏幕时间", onBack = { nav.popBackStack() })
+        ScreenHeader(title = "屏幕时间", onBack = if (asTab) null else ({ nav.popBackStack() }))
 
         LazyColumn(
             modifier = Modifier
@@ -446,11 +495,8 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
                             Column(Modifier.weight(1f)) {
                                 Text("上报状态", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                 Text(
-                                    when {
-                                        !hasPermission -> "缺少使用情况访问权限"
-                                        deviceToken.isNullOrBlank() -> "未配置设备令牌，无法上报"
-                                        else -> "已配置设备令牌，按计划自动上报"
-                                    },
+                                    if (!hasPermission) "缺少使用情况访问权限"
+                                    else "已授权，按计划自动上报（设备：${DeviceInfo.model()}）",
                                     fontSize = 12.sp,
                                     color = Sub,
                                 )
@@ -472,32 +518,72 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
                     }
                 }
 
-                if (deviceToken.isNullOrBlank()) {
-                    item {
-                        CardBox {
-                            Text("配置设备令牌", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+
+                item {
+                    CardBox {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("家庭成员", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Spacer(Modifier.weight(1f))
                             Text(
-                                "屏幕时间只接受设备令牌上报（成员登录态打不进这个接口）。" +
-                                    "请让管理员在 Web 后台「设备管理」里为这个成员生成一个令牌，" +
-                                    "粘贴到下面——明文只显示一次，存好再关。",
-                                fontSize = 12.sp,
-                                color = Sub,
-                                lineHeight = 18.sp,
-                                modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+                                familyScreen?.date ?: "",
+                                fontSize = 11.5.sp, color = Sub,
                             )
-                            OutlinedTextField(
-                                value = tokenInput,
-                                onValueChange = { tokenInput = it },
-                                label = { Text("设备令牌") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Spacer(Modifier.height(10.dp))
-                            Button(
-                                onClick = { vm.saveDeviceToken(tokenInput) },
-                                modifier = Modifier.fillMaxWidth().height(44.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = androidx.compose.ui.graphics.Color.White),
-                            ) { Text("保存并立即上报") }
+                        }
+                        Text(
+                            "每人的当日总时长与各设备明细。多台设备相加后判定。",
+                            fontSize = 11.5.sp, color = Sub,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+                val fam = familyScreen?.members.orEmpty()
+                if (fam.isEmpty()) {
+                    item { EmptyState("还没有人上报，今晚 21:00 后会出现") }
+                } else {
+                    items(fam, key = { "fm-${it.memberId}" }) { m ->
+                        CardBox {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(m.name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                    Text(
+                                        if (m.totalMin >= 60) "${m.totalMin / 60} 小时 ${m.totalMin % 60} 分"
+                                        else "${m.totalMin} 分钟",
+                                        fontSize = 12.sp, color = Sub,
+                                    )
+                                }
+                                Pill(
+                                    when {
+                                        m.nightOk == true -> "按时睡"
+                                        m.nightOk == false -> "超时"
+                                        else -> "待结算"
+                                    },
+                                    when {
+                                        m.nightOk == true -> Green
+                                        m.nightOk == false -> Red
+                                        else -> Sub
+                                    },
+                                    when {
+                                        m.nightOk == true -> GreenSoft
+                                        m.nightOk == false -> Color(0xFFFFEAEA)
+                                        else -> MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                                )
+                            }
+                            if (m.devices.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                m.devices.forEach { d ->
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text("📱", fontSize = 12.sp)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(d.deviceModel.ifBlank { "设备" }, fontSize = 12.sp, color = Sub)
+                                        Spacer(Modifier.weight(1f))
+                                        Text("${d.totalMin} 分", fontSize = 12.sp, color = Sub)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -718,4 +804,10 @@ private fun DailyCard(days: List<DayUsage>, loading: Boolean) {
             modifier = Modifier.padding(top = 6.dp),
         )
     }
+}
+
+/** 底部导航的「屏幕」tab：与详情页同一套内容，只是不带返回键。 */
+@Composable
+fun ScreenTabScreen(vm: AppViewModel, nav: NavHostController) {
+    ScreenTimeScreen(vm, nav, asTab = true)
 }

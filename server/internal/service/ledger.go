@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"familypoints/server/internal/model"
+	"familypoints/server/internal/notify"
 	"familypoints/server/internal/repo"
 )
 
@@ -21,13 +22,14 @@ var (
 
 // Ledger 是账目服务。
 type Ledger struct {
+	notifier *notify.Service
 	ledger   *repo.Ledger
 	families *repo.Family
 }
 
 // NewLedger 构造。
-func NewLedger(l *repo.Ledger, f *repo.Family) *Ledger {
-	return &Ledger{ledger: l, families: f}
+func NewLedger(l *repo.Ledger, f *repo.Family, n *notify.Service) *Ledger {
+	return &Ledger{ledger: l, families: f, notifier: n}
 }
 
 // ---------- 商品 ----------
@@ -127,6 +129,8 @@ func (s *Ledger) Send(ctx context.Context, me *model.Member, toID uint64, amount
 		}
 		return nil, err
 	}
+	// 受赠方收到通知（旁路，失败不影响转账）
+	s.notifier.TransferIn(ctx, *me.FamilyID, toID, amount, me.Name)
 	return t, nil
 }
 

@@ -5,7 +5,8 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.familypoints.app.data.api.ApiClient
-import com.familypoints.app.data.api.DeviceReportReq
+import com.familypoints.app.data.api.ScreenReportReq
+import com.familypoints.app.util.DeviceInfo
 import com.familypoints.app.data.local.TokenStore
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -16,7 +17,8 @@ import dagger.assisted.AssistedInject
  * 上报的是「昨天」的完整数据：昨天 0 点到现在这一天的夜间段都已结束，
  * 数字是确定的，不会因为当天还在用手机而反复变化。
  *
- * 幂等由服务端保证：`UNIQUE(member_id, report_date)` + 后报覆盖。
+ * 幂等由服务端保证：`UNIQUE(member_id, device_key, report_date)` + 后报覆盖；
+ * 多台设备各自上报，服务端按「成员×日」相加后再结算。
  * 所以这个 Worker 重试是安全的，失败重试不会重复计分。
  */
 @HiltWorker
@@ -32,8 +34,8 @@ class ScreenReportWorker @AssistedInject constructor(
         // 没授权就没法采集，直接成功返回——否则会无限重试
         if (!reader.hasPermission()) return Result.success()
 
-        val deviceToken = tokenStore.deviceTokenOnce()
-        if (deviceToken.isNullOrBlank()) return Result.success()
+        // 2026-11-05：不再需要设备令牌，登录态即可上报
+        if (tokenStore.accessTokenOnce().isNullOrBlank()) return Result.success()
 
         // 夜间时段配置来自服务端，**取本机登录成员自己的那条**。
         // 原来直接 firstOrNull()，等于随便抓一条别人的规则——多成员家庭会算错夜间判定。
@@ -68,9 +70,10 @@ class ScreenReportWorker @AssistedInject constructor(
         }
 
         return runCatching {
-            val resp = apiClient.service.deviceReport(
-                deviceToken,
-                DeviceReportReq(
+            val resp = apiClient.service.screenReport(
+                ScreenReportReq(
+                    deviceKey = DeviceInfo.key(applicationContext),
+                    deviceModel = DeviceInfo.model(),
                     reportDate = reportDate,
                     totalMin = total.totalMinutes,
                     nightMin = nightMinutes,

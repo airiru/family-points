@@ -2,7 +2,6 @@ package com.familypoints.app.data.api
 
 import retrofit2.http.Body
 import retrofit2.http.GET
-import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Query
 
@@ -185,16 +184,23 @@ interface ApiService {
         @Query("limit") limit: Int = 30,
     ): Envelope<ScreenReportList>
 
-    // ---------- 设备上报（独立鉴权，不走拦截器） ----------
-    @POST("api/device/screen/report")
-    suspend fun deviceReport(
-        @Header("X-Device-Token") token: String,
-        @Body body: DeviceReportReq,
-    ): Envelope<Unit>
+    // ---------- 屏幕时间上报（成员登录态，无需设备令牌） ----------
+    @POST("api/app/screen/report")
+    suspend fun screenReport(@Body body: ScreenReportReq): Envelope<ScreenReportResult>
+
+    @GET("api/app/screen/family")
+    suspend fun screenFamily(@Query("date") date: String? = null): Envelope<FamilyScreenView>
+
+    // ---------- 个人资料 ----------
+    @POST("api/app/me/profile")
+    suspend fun updateProfile(@Body body: ProfileReq): Envelope<MeView>
 }
 
 @kotlinx.serialization.Serializable
-data class PasswordReq(val password: String)
+data class PasswordReq(
+    @kotlinx.serialization.SerialName("old_password") val oldPassword: String,
+    @kotlinx.serialization.SerialName("new_password") val newPassword: String,
+)
 
 @kotlinx.serialization.Serializable
 data class ConfirmReq(val confirm: Boolean = true)

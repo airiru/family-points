@@ -1,5 +1,6 @@
 package com.familypoints.app.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familypoints.app.data.api.ApiClient
@@ -7,6 +8,7 @@ import com.familypoints.app.data.api.CouponIdReq
 import com.familypoints.app.data.api.CouponView
 import com.familypoints.app.data.api.CouponVoteReq
 import com.familypoints.app.data.api.CreateTaskReq
+import com.familypoints.app.data.api.FamilyScreenView
 import com.familypoints.app.data.api.HiddenReq
 import com.familypoints.app.data.api.ItemIdReq
 import com.familypoints.app.data.api.ItemSaveReq
@@ -18,6 +20,8 @@ import com.familypoints.app.data.api.MemberBrief
 import com.familypoints.app.data.api.MemberIdReq
 import com.familypoints.app.data.api.NotificationReadReq
 import com.familypoints.app.data.api.NotificationView
+import com.familypoints.app.data.api.PasswordReq
+import com.familypoints.app.data.api.ProfileReq
 import com.familypoints.app.data.api.RankingRow
 import com.familypoints.app.data.api.RecordView
 import com.familypoints.app.data.api.RedeemReq
@@ -54,6 +58,8 @@ sealed interface Session {
     data class NoFamily(val me: MeView) : Session
     data class Ready(val me: MeView) : Session
 }
+
+private const val TAG = "AppViewModel"
 
 @HiltViewModel
 class AppViewModel @Inject constructor(
@@ -124,13 +130,8 @@ class AppViewModel @Inject constructor(
     private val _screenReports = MutableStateFlow<List<ScreenReportView>>(emptyList())
     val screenReports: StateFlow<List<ScreenReportView>> = _screenReports.asStateFlow()
 
-    /** 设备令牌：屏幕时间上报的唯一凭证，由管理员在后台签发。null = 还没配置。 */
-    private val _deviceToken = MutableStateFlow<String?>(null)
-    val deviceToken: StateFlow<String?> = _deviceToken.asStateFlow()
-
     init {
         restoreSession()
-        viewModelScope.launch { _deviceToken.value = tokenStore.deviceTokenOnce() }
     }
 
     // ---------------- 会话 ----------------
@@ -477,24 +478,49 @@ class AppViewModel @Inject constructor(
 
     fun showMessage(msg: String) { _message.value = msg }
 
-    /**
-     * 保存设备令牌并立刻上报一次。
-     *
-     * 令牌由管理员在 Web 后台为某成员生成（明文只显示一次），家长把它填到孩子这台设备上。
-     * 之所以不让 App 自助申请：屏幕时间只认设备令牌，成员能自签就能伪造数据（12 节）。
-     */
-    fun saveDeviceToken(raw: String) {
-        val t = raw.trim()
-        if (t.isBlank()) {
-            showMessage("令牌不能为空")
-            return
+    // ---------------- 家庭屏幕详情（2026-11-05） ----------------
+
+    /** 全组当天屏幕时间：每人汇总 + 各设备明细。 */
+    private val _familyScreen = MutableStateFlow<FamilyScreenView?>(null)
+    val familyScreen: StateFlow<FamilyScreenView?> = _familyScreen.asStateFlow()
+
+    fun loadFamilyScreen(date: String? = null) = launchBusy(showBusy = false) {
+        runCatching { api.screenFamily(date).data }
+            .onSuccess { _familyScreen.value = it }
+            .onFailure { Log.w(TAG, "读取家庭屏幕详情失败", it) }
+    }
+
+    // ---------------- 个人资料 ----------------
+
+    /** 改密码：成功后该账号全部 refresh 失效，必须重新登录（后端会吊销）。 */
+    fun changePassword(oldPwd: String, newPwd: String, onDone: () -> Unit = {}) = launchBusy {
+        val resp = api.changePassword(PasswordReq(oldPassword = oldPwd, newPassword = newPwd))
+        if (!resp.ok) {
+            showMessage(resp.error ?: "修改失败")
+            return@launchBusy
         }
-        viewModelScope.launch {
-            tokenStore.saveDeviceToken(t)
-            _deviceToken.value = t
-            scheduler.runNow() // 不用等 21:00，保存后立刻补算一次
-            showMessage("设备令牌已保存，正在上报昨天的数据…")
+        showMessage("密码已修改，请用新密码重新登录")
+        tokenStore.clear()
+        _session.value = Session.LoggedOut
+        onDone()
+    }
+
+
+    /** 改自己的名称 / 头像；成功后同步刷新 session 里的 me。 */
+    fun updateProfile(name: String, avatar: String, onDone: () -> Unit = {}) = launchBusy {
+        val resp = api.updateProfile(ProfileReq(name = name, avatar = avatar))
+        if (!resp.ok) {
+            showMessage(resp.error ?: "保存失败")
+            return@launchBusy
         }
+        val me = resp.data
+        if (me != null) {
+            val cur = (_session.value as? Session.Ready)?.me
+            if (cur != null) _session.value = Session.Ready(me.copy(familyId = cur.familyId ?: me.familyId))
+        }
+        showMessage("已保存")
+        loadOverview()
+        onDone()
     }
 
     private fun launchBusy(showBusy: Boolean = true, block: suspend () -> Unit) {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"familypoints/server/internal/model"
+	"familypoints/server/internal/notify"
 	"familypoints/server/internal/repo"
 )
 
@@ -14,10 +15,13 @@ import (
 const couponVoteWindow = 24 * time.Hour
 
 // Coupon 是商品券服务。
-type Coupon struct{ coupons *repo.Coupon }
+type Coupon struct {
+	coupons  *repo.Coupon
+	notifier *notify.Service
+}
 
 // NewCoupon 构造。
-func NewCoupon(c *repo.Coupon) *Coupon { return &Coupon{coupons: c} }
+func NewCoupon(c *repo.Coupon, n *notify.Service) *Coupon { return &Coupon{coupons: c, notifier: n} }
 
 // List 返回「我的券」（含三种状态）。
 func (s *Coupon) List(ctx context.Context, me *model.Member) ([]model.Coupon, error) {
@@ -52,7 +56,12 @@ func (s *Coupon) Use(ctx context.Context, me *model.Member, couponID uint64) (*m
 	if voters == 0 {
 		return s.coupons.RedeemDirect(ctx, familyID, couponID, me.ID)
 	}
-	return s.coupons.Use(ctx, familyID, couponID, me.ID, time.Now().Add(couponVoteWindow))
+	c, err := s.coupons.Use(ctx, familyID, couponID, me.ID, time.Now().Add(couponVoteWindow))
+	if err != nil {
+		return nil, err
+	}
+	s.notifier.CouponPending(ctx, familyID, me.ID, c)
+	return c, nil
 }
 
 // Vote 核销投票。申请人没有投票权，一人一票。
@@ -63,7 +72,16 @@ func (s *Coupon) Vote(ctx context.Context, me *model.Member, couponID uint64, vo
 	if vote != "approve" && vote != "reject" {
 		return nil, fmt.Errorf("%w：vote 只能是 approve 或 reject", ErrInvalidInput)
 	}
-	return s.coupons.Vote(ctx, *me.FamilyID, couponID, me.ID, vote)
+	res, err := s.coupons.Vote(ctx, *me.FamilyID, couponID, me.ID, vote)
+	if err != nil {
+		return nil, err
+	}
+	if res.Status == "redeemed" || res.Status == "unused" {
+		if c, err := s.coupons.ByID(ctx, *me.FamilyID, couponID); err == nil {
+			s.notifier.CouponDecided(ctx, *me.FamilyID, c.MemberID, couponID, c.ItemName, res.Status)
+		}
+	}
+	return res, nil
 }
 
 // Detail 返回某张券及其投票明细。

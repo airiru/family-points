@@ -324,15 +324,61 @@ data class RuleSaveReq(
     val streaks: List<StreakTier> = emptyList(),
 )
 
-/** 设备上报（X-Device-Token 鉴权，无 JWT）。 */
+/** 屏幕时间上报（2026-11-05 起走成员登录态，不再需要设备令牌）。 */
 @Serializable
-data class DeviceReportReq(
+data class ScreenReportReq(
+    // 设备标识：同一账号多设备时用于区分，服务端按「成员×日」汇总
+    @SerialName("device_key") val deviceKey: String,
+    @SerialName("device_model") val deviceModel: String,
     @SerialName("report_date") val reportDate: String,
     @SerialName("total_min") val totalMin: Int,
     // 必须可空：kotlinx 默认 encodeDefaults=false，Int 默认值 0 会被**直接省略**，
     // 服务端收到的是「没带 night_min」→ 当成未判定，夜间永远不加分。
     // 改成 Int? 后，传 0 与默认值 null 不同，才会真正编码进去。
     @SerialName("night_min") val nightMin: Int? = null,
+)
+
+@Serializable
+data class ScreenReportResult(
+    val changed: Boolean = false,
+    @SerialName("report_date") val reportDate: String = "",
+    @SerialName("total_min") val totalMin: Int = 0,
+    val points: Int = 0,
+    val revision: Int = 0,
+)
+
+/** 家庭屏幕详情：每人汇总 + 各设备明细。 */
+@Serializable
+data class FamilyScreenView(
+    val date: String = "",
+    val members: List<FamilyMemberDay> = emptyList(),
+)
+
+@Serializable
+data class FamilyMemberDay(
+    @SerialName("member_id") val memberId: Long = 0,
+    val name: String = "",
+    val role: String = "",
+    @SerialName("total_min") val totalMin: Int = 0,
+    @SerialName("night_min") val nightMin: Int? = null,
+    @SerialName("night_ok") val nightOk: Boolean? = null,
+    val points: Int = 0,
+    val devices: List<DeviceDay> = emptyList(),
+)
+
+@Serializable
+data class DeviceDay(
+    @SerialName("device_key") val deviceKey: String = "",
+    @SerialName("device_model") val deviceModel: String = "",
+    @SerialName("total_min") val totalMin: Int = 0,
+    @SerialName("night_min") val nightMin: Int? = null,
+)
+
+/** 个人资料更新（名称 / 头像）。 */
+@Serializable
+data class ProfileReq(
+    val name: String = "",
+    val avatar: String = "",
 )
 
 @Serializable

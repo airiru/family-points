@@ -154,15 +154,24 @@ func (r *ScreenRule) NightEnabled() bool {
 }
 
 // Device 是设备令牌（只存 SHA-256 哈希）。
-type Device struct {
-	ID         uint64     `db:"id" json:"id"`
-	FamilyID   uint64     `db:"family_id" json:"family_id"`
-	MemberID   uint64     `db:"member_id" json:"member_id"`
-	Name       string     `db:"name" json:"name"`
-	TokenHash  string     `db:"token_hash" json:"-"`
-	Revoked    bool       `db:"revoked" json:"revoked"`
-	CreatedAt  time.Time  `db:"created_at" json:"created_at"`
-	LastSeenAt *time.Time `db:"last_seen_at" json:"last_seen_at"`
+// MemberDevice 是一台上报过屏幕时间的设备（2026-11-05 起无令牌）。
+type MemberDevice struct {
+	ID          uint64    `db:"id" json:"id"`
+	FamilyID    uint64    `db:"family_id" json:"-"`
+	MemberID    uint64    `db:"member_id" json:"member_id"`
+	DeviceKey   string    `db:"device_key" json:"device_key"`
+	DeviceModel string    `db:"device_model" json:"device_model"`
+	FirstSeenAt time.Time `db:"first_seen_at" json:"first_seen_at"`
+	LastSeenAt  time.Time `db:"last_seen_at" json:"last_seen_at"`
+}
+
+// DeviceDayReport 是「某成员某天某设备」的原始上报（家庭详情用）。
+type DeviceDayReport struct {
+	MemberID    uint64 `db:"member_id" json:"member_id"`
+	DeviceKey   string `db:"device_key" json:"device_key"`
+	DeviceModel string `db:"device_model" json:"device_model"`
+	TotalMin    int    `db:"total_min" json:"total_min"`
+	NightMin    *int   `db:"night_min" json:"night_min"`
 }
 
 // ScreenReport 是一天的屏幕时间结算行（幂等载体）。

@@ -271,6 +271,32 @@ func (h *Family) AppSetHidden(c *gin.Context) {
 	httpx.OK(c, gin.H{"member_id": in.MemberID, "hidden": in.Hidden})
 }
 
+// AppUpdateProfile POST /api/app/me/profile —— 改自己的名称 / 头像。
+func (h *Family) AppUpdateProfile(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		Name   string `json:"name"`
+		Avatar string `json:"avatar"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	updated, err := h.svc.UpdateMyProfile(c.Request.Context(), m, in.Name, in.Avatar)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{
+		"id": updated.ID, "name": updated.Name, "avatar": updated.Avatar,
+		"role": updated.Role, "family_id": updated.FamilyID,
+	})
+}
+
 // AppRenameFamily POST /api/app/family/rename —— 组长改家庭组名。
 func (h *Family) AppRenameFamily(c *gin.Context) {
 	m, ok := middleware.CurrentMember(c)

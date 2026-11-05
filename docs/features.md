@@ -354,18 +354,31 @@ CREATE TABLE screen_reports (
   KEY idx_family_date (family_id, report_date)                -- 榜单批量算连续天数用（全组一次扫描）
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 设备令牌
-CREATE TABLE devices (
+-- 成员设备（无令牌，仅用于区分与展示）
+CREATE TABLE member_devices (
+  id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id     BIGINT UNSIGNED NOT NULL,
+  member_id     BIGINT UNSIGNED NOT NULL,
+  device_key    VARCHAR(64)  NOT NULL,
+  device_model  VARCHAR(64)  NOT NULL,
+  first_seen_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  last_seen_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_member_device (member_id, device_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 按设备的当日原始上报（多设备各一行，汇总后才进 screen_reports 结算）
+CREATE TABLE screen_device_reports (
   id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   family_id    BIGINT UNSIGNED NOT NULL,
   member_id    BIGINT UNSIGNED NOT NULL,
-  name         VARCHAR(32)  NOT NULL,
-  token_hash   CHAR(64)     NOT NULL,
-  revoked      TINYINT(1)   NOT NULL DEFAULT 0,
-  created_at   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  last_seen_at DATETIME(3)  NULL,
-  KEY idx_token (token_hash),
-  KEY idx_family (family_id)
+  device_key   VARCHAR(64)  NOT NULL,
+  device_model VARCHAR(64)  NOT NULL,
+  report_date  DATE         NOT NULL,
+  total_min    INT          NOT NULL,
+  night_min    INT          NULL,
+  reported_at  DATETIME(3)  NOT NULL,
+  updated_at   DATETIME(3)  NULL,
+  UNIQUE KEY uk_member_device_date (member_id, device_key, report_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Refresh Token（可吊销；原文不落库，只存 SHA-256）
@@ -895,7 +908,7 @@ SELECT member_id, SUM(points) AS period_score
 | **重复上报** | **后报覆盖**：同一天多次上报，以最后一次为准，按新值重算积分 |
 | **上报值语义** | **当天累计总时长**（不是增量）。客户端不得传增量，服务端也不做累加 |
 | 幂等 | `UNIQUE(member_id, report_date)` 保证一天只有一行；重复提交走覆盖逻辑而非拒绝 |
-| 认证 | **仅设备令牌**（`X-Device-Token` 头）；手动上传已移除 |
+| 认证 | **成员登录态**（2026-11-05 起）；设备令牌机制**已删除**，手动上传仍不允许 |
 | 数据来源 | 只有 `auto`（设备自动上报） |
 
 > **覆盖示例**（对应 19.3 的结论）：
@@ -923,7 +936,7 @@ SELECT member_id, SUM(points) AS period_score
 
 ```sql
 BEGIN;
-  -- 1. 校验身份（设备令牌 或 管理员 JWT），得到 family_id / member_id
+  -- 1. 校验成员 JWT，得到 family_id / member_id；客户端自报 device_key + device_model
   SELECT family_id, member_id FROM devices
    WHERE token_hash = ? AND revoked = 0 FOR UPDATE;
 
@@ -1143,13 +1156,16 @@ App 的「屏幕时间」页除了今日总时长，还要能看到**每小时**
 | 13.9 | **任务** | 发布任务（分值、截止时间）、**接取**、放弃接取、提交、我的任务 | 全部 |
 | 13.10 | **任务投票** | 待投票列表、同意/反对、实时票数（X/Y） | 全部（**发布者除外**） |
 | 13.11 | 通知中心 | 未读列表、点击跳转、标记已读 | 全部 |
-| 13.12 | 屏幕时间状态 | 权限状态、今日时长、**今日每小时分布**、**近 7 天每日时长**、上报状态、设备令牌 | 全部 |
-| 13.13 | 设置 | 账号、家庭组信息、退出、改密码、头像（**预设**） | 全部 |
+| 13.12 | 屏幕时间（底部 tab，在积分榜前） | 权限状态、今日时长、每小时分布、近 7 天、**家庭成员详情（每人 + 各设备）**、上报状态 | 全部 |
+| 13.13 | **个人设置**（点「我的」头像进入） | 改名称、选头像（预设 emoji）、改密码 | 全部 |
 | 13.14 | **成员管理** | 邀请已注册用户加入、踢出成员、待处理邀请、**生成 / 重置邀请码** | **仅组长** |
 | 13.15 | **睡觉规则配置** | 睡觉时间点、允许时长、连续奖励档位 | **仅组长** |
 | 13.16 | **商品管理** | 商品增删改 | **仅组长** |
 
-**共 16 个界面**，其中 3 个（13.14–13.16）仅组长可见。
+**共 17 个界面**，其中 3 个（13.14–13.16）仅组长可见。
+
+> **导航改版（2026-11-05）**：底部 tab 改为 **屏幕 / 积分榜 / 任务 / 商城 / 我的**，
+> 屏幕时间提到第一位并作为独立 tab；**通知从 tab 移入「我的」**（带未读角标）。
 > 未来升级还会加 2 个界面（全服任务、家庭星榜，见 25 节），当前**不做**。
 
 > **组长的管理能力放在前台**，不需要登录 Web 后台——这是本次权限重划的核心：
@@ -1183,7 +1199,6 @@ App 的「屏幕时间」页除了今日总时长，还要能看到**每小时**
 | 14.8 | 统计 | 积分榜、得分榜（周/月）、积分趋势图 |
 | 14.9 | 审计日志 | 按成员/动作/时间筛选，查看 before/after |
 | 14.10 | 屏幕时间 | 查看上报历史（**只读，无手动录入**） |
-| 14.11 | 设备管理 | 列表、生成令牌、吊销 |
 | 14.12 | 家庭组设置 | 组名、移交管理员 |
 | 14.13 | **管理员账号** | 列表、新建（首次登录强制改密）、停用（5.4.3） |
 
@@ -1211,7 +1226,7 @@ App 的「屏幕时间」页除了今日总时长，还要能看到**每小时**
 
 - `/api/admin/*` —— 仅接受 `typ='admin'` 的 token
 - `/api/app/*` —— 仅接受 `typ='member'` 的 token（组长与成员同池，靠 `role` 区分）
-- `/api/device/*` —— 仅接受设备令牌
+- ~~`/api/device/*`~~ —— **已删除**（2026-11-05）；上报改走 `/api/app/screen/report`，用成员登录态
 
 ### 15.1 公开接口（无需鉴权）
 
@@ -1258,8 +1273,6 @@ App 的「屏幕时间」页除了今日总时长，还要能看到**每小时**
 | 15.2.15 | `/api/admin/family/:family_id` | GET | 跨组查看单个家庭组（**family_id 只能走路径参数**） |
 | 15.2.16 | `/api/admin/family/:family_id/members` | GET | 跨组查看成员（含被隐藏的） |
 | 15.2.19 | `/api/admin/me` | GET | 当前管理员信息（含 `must_change_password`） |
-| 15.2.20 | `/api/admin/family/:family_id/device` | POST/GET | 生成设备令牌（明文只返回一次）/ 列出设备 |
-| 15.2.21 | `/api/admin/family/:family_id/device/revoke` | POST | 吊销设备令牌（吊销后上报立即 401） |
 
 > **已移除**：`/api/admin/score/*`（记一笔）、`/api/admin/screen/report-manual`（手动录入）。
 > 接口层**直接删除，返回 404**，不是隐藏。
@@ -1317,11 +1330,13 @@ App 的「屏幕时间」页除了今日总时长，还要能看到**每小时**
 | 15.3.40 | `/api/app/coupons/pending` | GET | 本组待我核销的券（投票入口） |
 | 15.3.41 | `/api/app/coupon/detail` | GET | 券详情 + 核销投票明细（`coupon_id`） |
 
-### 15.4 设备接口（设备令牌）
+### 15.4 屏幕上报接口（成员登录态，2026-11-05 起无需令牌）
 
 | # | 接口 | 方法 | 说明 |
 |---|---|---|---|
-| 15.4.1 | `/api/device/screen/report` | POST | 上报当天累计时长（`total_min`）与夜间时长（`night_min`）；**后报覆盖**，`report_date` 缺省按归属日推算 |
+| 15.4.1 | `/api/app/screen/report` | POST | 上报当天累计时长（`total_min`）与夜间时长（`night_min`）+ `device_key` / `device_model`；**按设备后报覆盖**，`report_date` 缺省按归属日推算 |
+| 15.4.2 | `/api/app/screen/family` | GET | 全组某天屏幕时间：每人汇总 + 各设备明细（`?date=YYYY-MM-DD`） |
+| 15.4.3 | `/api/app/screen/devices` | GET | 本人上报过的设备列表 |
 
 > **越权测试基线**：前台 token 打任一 `/api/admin/*` 必须 401；
 > 后台 token 打任一 `/api/app/*` 必须 401；
@@ -1880,7 +1895,12 @@ FROM task_votes WHERE submission_id=?;
 **Android**
 102. 未授权 `PACKAGE_USAGE_STATS` 时给出引导，不崩溃。
 103. 杀后台后打开 App 能补齐遗漏日期。
-104. 设备令牌吊销后立即 401。
+104. 上报**不再需要设备令牌**：登录成员即可上报；未登录 401，缺 `device_key` 400。
+105. **多设备相加后结算**：同一成员同一天两台设备（30 + 20）→ 结算行 `total_min = 50`，只产生 1 条结算行。
+106. 家庭屏幕详情返回**全组成员**（没上报的也在，total=0），每人的 `devices` 列出各设备型号与时长。
+107. 个人资料可改名称/头像；空名称+空头像 400，名称超 32 字 400。
+108. 站内通知在业务节点真实产生：任务提交→其他成员收到 `task_submitted`；任务出结果→完成者收到 `task_decided`；
+    券核销发起→其他成员收到 `coupon_pending`；核销出结果→申请人收到 `coupon_decided`；赠送到账→受赠方收到 `transfer_in`。
 
 **2026-11-03 四项决策（19.11 / 19.13 / 19.14 / 19.15）**
 105. **任务提交只有文字说明且必填**：请求体不接收图片字段；`task_submissions` 表无 `image_url` 列；

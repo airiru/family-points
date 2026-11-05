@@ -25,7 +25,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 	reportHandler *handler.Report, auditHandler *handler.Audit,
 	notifHandler *handler.Notification, adminHandler *handler.Admin,
 	couponHandler *handler.Coupon,
-	mw *middleware.Auth, deviceMW *middleware.Device) *gin.Engine {
+	mw *middleware.Auth) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -70,9 +70,6 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.GET("/family/:family_id/members", familyHandler.AdminMembers)
 
 		// 设备令牌（屏幕时间上报的唯一凭证）
-		admin.POST("/family/:family_id/device", screenHandler.AdminCreateDevice)
-		admin.GET("/family/:family_id/device", screenHandler.AdminDevices)
-		admin.POST("/family/:family_id/device/revoke", screenHandler.AdminRevokeDevice)
 
 		// 审计日志（append-only，只读查询）
 		admin.GET("/audit/list", auditHandler.AdminList)
@@ -134,6 +131,8 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		inFamily.POST("/family/transfer-leader", familyHandler.AppTransferLeader)
 		inFamily.POST("/member/hidden", familyHandler.AppSetHidden)
 		inFamily.POST("/member/rename", familyHandler.AppRenameMember)
+		// 个人资料：名称 / 头像（2026-11-05）
+		inFamily.POST("/me/profile", familyHandler.AppUpdateProfile)
 
 		// 商城
 		inFamily.GET("/item/list", ledgerHandler.AppItems)
@@ -157,6 +156,10 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		inFamily.GET("/screen-rule", screenHandler.AppScreenRules)
 		inFamily.POST("/screen-rule/save", screenHandler.AppSaveScreenRule)
 		inFamily.GET("/screen/reports", screenHandler.AppScreenReports)
+		// 上报改用成员登录态，不再需要设备令牌（2026-11-05）
+		inFamily.POST("/screen/report", screenHandler.AppReport)
+		inFamily.GET("/screen/family", screenHandler.AppFamilyDay)
+		inFamily.GET("/screen/devices", screenHandler.AppDevices)
 
 		// 任务：发布（冻结）→ 接取 → 提交 → 全员投票
 		inFamily.POST("/task/create", taskHandler.AppCreateTask)
@@ -178,12 +181,6 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		// 站内通知
 		inFamily.GET("/notification/list", notifHandler.AppList)
 		inFamily.POST("/notification/read", notifHandler.AppRead)
-	}
-
-	// 设备上报：只认 X-Device-Token（19 条：屏幕时间唯一写入路径）
-	device := r.Group("/api/device", deviceMW.Require())
-	{
-		device.POST("/screen/report", screenHandler.DeviceReport)
 	}
 
 	return r

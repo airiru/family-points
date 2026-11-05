@@ -12,10 +12,11 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 reg() { curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
   -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"name\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"; }
 score() { curl -s $B/api/app/me -H "Authorization: Bearer $1" | jget "['data']['score']"; }
-# 上报：report <token> <date> <total> <night>
+# 上报：report <member_token> <date> <total> <night> [device_key] [model]
+# 2026-11-05 起不再需要设备令牌，改用成员登录态 + 客户端自报设备标识。
 report() {
-  curl -s -X POST $B/api/device/screen/report -H "X-Device-Token: $1" -H 'Content-Type: application/json' \
-    -d "{\"report_date\":\"$2\",\"total_min\":$3,\"night_min\":$4}"
+  curl -s -X POST $B/api/app/screen/report -H "Authorization: Bearer $1" -H 'Content-Type: application/json' \
+    -d "{\"device_key\":\"${5:-devA}\",\"device_model\":\"${6:-Pixel-Test}\",\"report_date\":\"$2\",\"total_min\":$3,\"night_min\":$4}"
 }
 
 echo "== 1. 建组时自动写入默认配置 =="
@@ -46,12 +47,10 @@ echo "== 3. 给小孩建默认规则 + 设备令牌 =="
 RULE_ID=$(echo "$RULE" | jget "['data']['rules'][0]['id']")
 chk "给小孩配规则 → 200" "200" "$(code -X POST $B/api/app/screen-rule/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"threshold_min\":120,\"bonus_points\":2,\"penalty_points\":3,\"night_start_hour\":0,\"night_end_hour\":7,\"night_max_min\":0,\"night_rule_id\":$RULE_ID}")"
 A_AT=$(admin_login "$B")
-DEV=$(curl -s -X POST $B/api/admin/family/$FID/device -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"name\":\"小孩手机\"}")
-TOKEN=$(echo "$DEV" | jget "['data']['token']")
-DEV_ID=$(echo "$DEV" | jget "['data']['device_id']")
-chk "设备令牌已生成" "True" "$([ ${#TOKEN} -eq 64 ] && echo True || echo False)"
-chk "无令牌上报 → 401" "401" "$(code -X POST $B/api/device/screen/report -H 'Content-Type: application/json' -d '{"total_min":10}')"
-chk "错误令牌上报 → 401" "401" "$(code -X POST $B/api/device/screen/report -H 'X-Device-Token: deadbeef' -H 'Content-Type: application/json' -d '{"total_min":10}')"
+# 2026-11-05：设备令牌已删除，成员登录态即可上报
+chk "未登录上报 → 401" "401" "$(code -X POST $B/api/app/screen/report -H 'Content-Type: application/json' -d '{"device_key":"x","total_min":10}')"
+chk "缺 device_key → 400" "400" "$(code -X POST $B/api/app/screen/report -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d '{"total_min":10}')"
+TOKEN="$M_AT"
 
 echo "== 4. 连续 4 天上报（含第 3 天档位奖励）=="
 R1=$(report "$TOKEN" 2026-10-01 60 0); chk "第1天 日总量 +2" "2" "$(echo "$R1" | jget "['data']['day_points']")"
@@ -88,9 +87,20 @@ chk "第3天记录带 streak_award" "True" "$(echo "$REC" | python -c "import sy
 chk "覆盖后 10-20 只有 1 条结算行（一天一行）" "1" "$(curl -s "$B/api/app/screen/reports?member_id=$M_ID" -H "Authorization: Bearer $L_AT" | python -c "import sys,json;d=json.load(sys.stdin);r=[x for x in d['data']['reports'] if x['report_date'].startswith('2026-10-20')];print(len(r))")"
 chk "覆盖后 10-20 的流水只有 2 条（日+夜，旧的已回滚）" "2" "$(echo "$REC" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['occurred_at'].startswith('2026-10-20')))")"
 
-echo "== 7. 吊销设备后上报失败 =="
-chk "吊销设备 → 200" "200" "$(code -X POST $B/api/admin/family/$FID/device/revoke -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"device_id\":$DEV_ID}")"
-chk "吊销后上报 → 401" "401" "$(code -X POST $B/api/device/screen/report -H "X-Device-Token: $TOKEN" -H 'Content-Type: application/json' -d '{"total_min":10}')"
+echo "== 7. 多设备：相加后结算 =="
+# 同一天两台设备：A 报 30，B 报 20 → 汇总 50，按 50 判定（阈值 120 不达标，不加分）
+report "$M_AT" 2026-10-25 30 0 devA 手机 >/dev/null
+R2=$(report "$M_AT" 2026-10-25 20 0 devB 平板)
+chk "多设备相加 = 50" "50" "$(echo "$R2" | jget "['data']['total_min']")"
+chk "同日只产生 1 条结算行" "1" "$(curl -s "$B/api/app/screen/reports?member_id=$M_ID" -H "Authorization: Bearer $L_AT" | python -c "import sys,json;d=json.load(sys.stdin);r=[x for x in d['data']['reports'] if x['report_date'].startswith('2026-10-25')];print(len(r))")"
+
+echo "== 8. 家庭屏幕详情（成员可看全组）=="
+FAM=$(curl -s "$B/api/app/screen/family?date=2026-10-25" -H "Authorization: Bearer $M_AT")
+chk "家庭详情 200 且含 2 人" "2" "$(echo "$FAM" | python -c "import sys,json;d=json.load(sys.stdin);print(len(d['data']['members']))")"
+chk "小孩当天汇总 50" "50" "$(echo "$FAM" | python -c "import sys,json;d=json.load(sys.stdin);print([m['total_min'] for m in d['data']['members'] if m['member_id']==$M_ID][0])")"
+chk "小孩有 2 台设备明细" "2" "$(echo "$FAM" | python -c "import sys,json;d=json.load(sys.stdin);print(len([m for m in d['data']['members'] if m['member_id']==$M_ID][0]['devices']))")"
+chk "设备明细含型号" "True" "$(echo "$FAM" | python -c "import sys,json;d=json.load(sys.stdin);ms=[m for m in d['data']['members'] if m['member_id']==$M_ID][0]['devices'];print(any(x['device_model'] in ('手机','平板') for x in ms))")"
+chk "本人设备列表 2 台" "2" "$(curl -s "$B/api/app/screen/devices" -H "Authorization: Bearer $M_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(len(d['data']['devices']))")"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"

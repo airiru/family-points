@@ -9,16 +9,18 @@ import (
 	"unicode/utf8"
 
 	"familypoints/server/internal/model"
+	"familypoints/server/internal/notify"
 	"familypoints/server/internal/repo"
 )
 
 // Task 是任务服务。
 type Task struct {
+	notifier *notify.Service
 	tasks *repo.Task
 }
 
 // NewTask 构造。
-func NewTask(t *repo.Task) *Task { return &Task{tasks: t} }
+func NewTask(t *repo.Task, n *notify.Service) *Task { return &Task{tasks: t, notifier: n} }
 
 // TaskDetail 是任务详情（含提交与票数）。
 type TaskDetail struct {
@@ -117,7 +119,15 @@ func (s *Task) Submit(ctx context.Context, me *model.Member, taskID uint64, note
 	if utf8.RuneCountInString(note) > 255 {
 		return nil, fmt.Errorf("%w：提交说明最多 255 个字符", ErrInvalidInput)
 	}
-	return s.tasks.Submit(ctx, *me.FamilyID, taskID, me.ID, note)
+	sub, err := s.tasks.Submit(ctx, *me.FamilyID, taskID, me.ID, note)
+	if err != nil {
+		return nil, err
+	}
+	// 旁路通知：失败不影响提交（notify 内部只记日志）
+	if t, err := s.tasks.ByID(ctx, *me.FamilyID, taskID); err == nil {
+		s.notifier.TaskSubmitted(ctx, *me.FamilyID, me.ID, t)
+	}
+	return sub, nil
 }
 
 // Vote 投票（同意 / 反对）。一人一票，不可改。
@@ -125,5 +135,14 @@ func (s *Task) Vote(ctx context.Context, me *model.Member, submissionID uint64, 
 	if vote != "approve" && vote != "reject" {
 		return nil, fmt.Errorf("%w：vote 只能是 approve 或 reject", ErrInvalidInput)
 	}
-	return s.tasks.Vote(ctx, *me.FamilyID, submissionID, me.ID, vote)
+	res, err := s.tasks.Vote(ctx, *me.FamilyID, submissionID, me.ID, vote)
+	if err != nil {
+		return nil, err
+	}
+	if res.Status == "approved" || res.Status == "rejected" {
+		if t, err := s.tasks.ByID(ctx, *me.FamilyID, res.TaskID); err == nil {
+			s.notifier.TaskDecided(ctx, *me.FamilyID, res.CompleterID, res.TaskID, t.Title, res.Status)
+		}
+	}
+	return res, nil
 }

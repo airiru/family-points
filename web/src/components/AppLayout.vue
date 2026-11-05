@@ -33,7 +33,6 @@ const groups = [
   {
     name: '系统',
     items: [
-      { path: '/devices', title: '设备管理', icon: '🔑' },
       { path: '/accounts', title: '管理员账号', icon: '👤' },
     ],
   },

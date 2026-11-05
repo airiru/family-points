@@ -15,13 +15,13 @@ import (
 
 // 家庭组相关的业务错误。handler 统一映射成状态码。
 var (
-	ErrNotLeader        = errors.New("只有组长可以执行该操作")
-	ErrAlreadyInFamily  = errors.New("你已经加入了家庭组")
-	ErrInviteCodeInvalid = errors.New("邀请码无效或已过期")
-	ErrBanned           = errors.New("你已被该家庭组禁止加入")
+	ErrNotLeader          = errors.New("只有组长可以执行该操作")
+	ErrAlreadyInFamily    = errors.New("你已经加入了家庭组")
+	ErrInviteCodeInvalid  = errors.New("邀请码无效或已过期")
+	ErrBanned             = errors.New("你已被该家庭组禁止加入")
 	ErrLeaderMustTransfer = errors.New("组长不能直接退出，请先转让组长")
-	ErrConfirmRequired  = errors.New("该操作不可撤销，需要二次确认")
-	ErrCannotTargetSelf = errors.New("不能对自己执行该操作")
+	ErrConfirmRequired    = errors.New("该操作不可撤销，需要二次确认")
+	ErrCannotTargetSelf   = errors.New("不能对自己执行该操作")
 )
 
 // Family 是家庭组服务。
@@ -210,6 +210,30 @@ func (s *Family) RenameFamily(ctx context.Context, me *model.Member, name string
 }
 
 // RenameMember 成员改名（本人或组长可改）。records.member_name 是快照，历史不受影响。
+// UpdateMyProfile 更新自己的资料（名称 / 头像）。
+//
+// 名称长度上限与注册一致（32 字符），头像只接受**预设标识**（≤16 字节，通常是 emoji）。
+func (s *Family) UpdateMyProfile(ctx context.Context, me *model.Member, name, avatar string) (*model.Member, error) {
+	name = strings.TrimSpace(name)
+	avatar = strings.TrimSpace(avatar)
+	if name != "" {
+		n := utf8.RuneCountInString(name)
+		if n == 0 || n > 32 {
+			return nil, fmt.Errorf("%w：名称需 1–32 个字符", ErrInvalidInput)
+		}
+	}
+	if avatar != "" && len(avatar) > 16 {
+		return nil, fmt.Errorf("%w：头像标识过长", ErrInvalidInput)
+	}
+	if name == "" && avatar == "" {
+		return nil, fmt.Errorf("%w：名称与头像至少改一项", ErrInvalidInput)
+	}
+	if err := s.families.UpdateProfile(ctx, me.ID, name, avatar); err != nil {
+		return nil, err
+	}
+	return s.families.MemberInFamily(ctx, *me.FamilyID, me.ID)
+}
+
 func (s *Family) RenameMember(ctx context.Context, me *model.Member, targetID uint64, name string) error {
 	if targetID != me.ID && me.Role != model.RoleLeader {
 		return ErrNotLeader

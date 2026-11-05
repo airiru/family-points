@@ -50,13 +50,6 @@ func recordAudit(c *gin.Context, action, targetType string, targetID *uint64, be
 			}
 		}
 	}
-	if d, ok := middleware.CurrentDevice(c); ok {
-		id := d.MemberID
-		e.OperatorID = &id
-		e.OperatorType = "device"
-		fid := d.FamilyID
-		e.FamilyID = &fid
-	}
 	auditor.Write(c.Request.Context(), e)
 }
 

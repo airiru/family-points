@@ -223,17 +223,34 @@ CREATE TABLE IF NOT EXISTS screen_reports (
   KEY idx_family_date (family_id, report_date)   -- 榜单批量算连续天数用（全组一次扫描）
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 设备令牌
-CREATE TABLE IF NOT EXISTS devices (
+-- 按设备的当日原始上报（多设备各自一行；汇总后才进 screen_reports 结算）
+CREATE TABLE IF NOT EXISTS screen_device_reports (
   id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   family_id    BIGINT UNSIGNED NOT NULL,
   member_id    BIGINT UNSIGNED NOT NULL,
-  name         VARCHAR(32)  NOT NULL,
-  token_hash   CHAR(64)     NOT NULL,
-  revoked      TINYINT(1)   NOT NULL DEFAULT 0,
-  created_at   DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  last_seen_at DATETIME(3)  NULL,
-  KEY idx_token (token_hash),
+  device_key   VARCHAR(64)  NOT NULL,
+  device_model VARCHAR(64)  NOT NULL,
+  report_date  DATE         NOT NULL,
+  total_min    INT          NOT NULL,
+  night_min    INT          NULL,
+  reported_at  DATETIME(3)  NOT NULL,
+  updated_at   DATETIME(3)  NULL,
+  UNIQUE KEY uk_member_device_date (member_id, device_key, report_date),
+  KEY idx_family_date (family_id, report_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 设备令牌
+-- 成员设备（2026-11-05）：不再有令牌，设备只用来「区分」和「展示」。
+-- 上报走成员登录态，客户端自报 device_key（Android ID 之类）+ 型号。
+CREATE TABLE IF NOT EXISTS member_devices (
+  id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id     BIGINT UNSIGNED NOT NULL,
+  member_id     BIGINT UNSIGNED NOT NULL,
+  device_key    VARCHAR(64)  NOT NULL,        -- 客户端生成的稳定标识
+  device_model  VARCHAR(64)  NOT NULL,        -- 展示用：如 NOH-AN80
+  first_seen_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  last_seen_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_member_device (member_id, device_key),
   KEY idx_family (family_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

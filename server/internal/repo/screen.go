@@ -144,64 +144,86 @@ func (r *Screen) SaveScreenRule(ctx context.Context, in model.ScreenRule) error 
 	return err
 }
 
-// ---------- 设备令牌 ----------
+// ---------- 设备（无令牌，仅用于区分与展示） ----------
 
-// CreateDevice 保存设备（只存哈希）。
-func (r *Screen) CreateDevice(ctx context.Context, familyID, memberID uint64, name, tokenHash string) (*model.Device, error) {
-	res, err := r.db.ExecContext(ctx,
-		`INSERT INTO devices (family_id, member_id, name, token_hash) VALUES (?, ?, ?, ?)`,
-		familyID, memberID, name, tokenHash)
-	if err != nil {
-		return nil, err
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-	return &model.Device{ID: uint64(id), FamilyID: familyID, MemberID: memberID, Name: name}, nil
-}
-
-// DeviceByTokenHash 用令牌哈希查设备（只返回未吊销的）。
-func (r *Screen) DeviceByTokenHash(ctx context.Context, hash string) (*model.Device, error) {
-	var d model.Device
-	err := r.db.GetContext(ctx, &d,
-		`SELECT id, family_id, member_id, name, token_hash, revoked, created_at, last_seen_at
-		   FROM devices WHERE token_hash = ? AND revoked = 0`, hash)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &d, nil
-}
-
-// TouchDevice 记录设备最近活跃时间。
-func (r *Screen) TouchDevice(ctx context.Context, id uint64) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE devices SET last_seen_at = NOW(3) WHERE id = ?`, id)
+// UpsertDevice 记录/更新一台设备（按 member_id + device_key 幂等）。
+func (r *Screen) UpsertDevice(ctx context.Context, familyID, memberID uint64, deviceKey, model string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO member_devices (family_id, member_id, device_key, device_model)
+		 VALUES (?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE device_model = VALUES(device_model), last_seen_at = NOW(3)`,
+		familyID, memberID, deviceKey, model)
 	return err
 }
 
-// Devices 列出本组设备。
-func (r *Screen) Devices(ctx context.Context, familyID uint64) ([]model.Device, error) {
-	list := []model.Device{}
+// DevicesOfMember 列出某成员上报过的设备。
+func (r *Screen) DevicesOfMember(ctx context.Context, memberID uint64) ([]model.MemberDevice, error) {
+	list := []model.MemberDevice{}
 	err := r.db.SelectContext(ctx, &list,
-		`SELECT id, family_id, member_id, name, token_hash, revoked, created_at, last_seen_at
-		   FROM devices WHERE family_id = ? ORDER BY id`, familyID)
+		`SELECT id, family_id, member_id, device_key, device_model, first_seen_at, last_seen_at
+		   FROM member_devices WHERE member_id = ? ORDER BY id`, memberID)
 	return list, err
 }
 
-// RevokeDevice 吊销设备令牌。
-func (r *Screen) RevokeDevice(ctx context.Context, familyID, id uint64) error {
-	res, err := r.db.ExecContext(ctx,
-		`UPDATE devices SET revoked = 1 WHERE id = ? AND family_id = ?`, id, familyID)
+// DevicesOfFamily 列出全组设备（家庭屏幕详情用）。
+func (r *Screen) DevicesOfFamily(ctx context.Context, familyID uint64) ([]model.MemberDevice, error) {
+	list := []model.MemberDevice{}
+	err := r.db.SelectContext(ctx, &list,
+		`SELECT id, family_id, member_id, device_key, device_model, first_seen_at, last_seen_at
+		   FROM member_devices WHERE family_id = ? ORDER BY member_id, id`, familyID)
+	return list, err
+}
+
+// UpsertDeviceReport 写入/覆盖某设备某天的原始上报（幂等键：member+device+date）。
+func (r *Screen) UpsertDeviceReport(ctx context.Context, familyID, memberID uint64, deviceKey, model string,
+	date time.Time, totalMin int, nightMin *int) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO screen_device_reports
+		   (family_id, member_id, device_key, device_model, report_date, total_min, night_min, reported_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3))
+		 ON DUPLICATE KEY UPDATE
+		   device_model = VALUES(device_model), total_min = VALUES(total_min),
+		   night_min = VALUES(night_min), updated_at = NOW(3)`,
+		familyID, memberID, deviceKey, model, date.Format("2006-01-02"), totalMin, nightMin)
+	return err
+}
+
+// AggregateDay 汇总某成员某天**全部设备**的时长（多设备相加，2026-11-05 拍板）。
+func (r *Screen) AggregateDay(ctx context.Context, memberID uint64, date time.Time) (total int, night *int, err error) {
+	var row struct {
+		Total int  `db:"total"`
+		Night *int `db:"night"`
+	}
+	err = r.db.GetContext(ctx, &row,
+		`SELECT COALESCE(SUM(total_min), 0) AS total, SUM(night_min) AS night
+		   FROM screen_device_reports WHERE member_id = ? AND report_date = ?`,
+		memberID, date.Format("2006-01-02"))
 	if err != nil {
-		return err
+		return 0, nil, err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return row.Total, row.Night, nil
+}
+
+// ReportsOfFamilyDate 取全组某天的结算行（家庭屏幕详情用）。
+func (r *Screen) ReportsOfFamilyDate(ctx context.Context, familyID uint64, date time.Time) ([]model.ScreenReport, error) {
+	list := []model.ScreenReport{}
+	err := r.db.SelectContext(ctx, &list,
+		`SELECT id, family_id, member_id, report_date, total_min, night_min, night_ok, points,
+		        record_id, night_record_id, source, revision, reported_at, updated_at
+		   FROM screen_reports WHERE family_id = ? AND report_date = ?`,
+		familyID, dateOnly(date))
+	return list, err
+}
+
+// DeviceReportsOfDay 列出某成员某天各设备明细（家庭详情用）。
+func (r *Screen) DeviceReportsOfDay(ctx context.Context, familyID uint64, date time.Time) ([]model.DeviceDayReport, error) {
+	list := []model.DeviceDayReport{}
+	err := r.db.SelectContext(ctx, &list,
+		`SELECT member_id, device_key, device_model, total_min, night_min
+		   FROM screen_device_reports
+		  WHERE family_id = ? AND report_date = ?
+		  ORDER BY member_id, total_min DESC`, familyID, date.Format("2006-01-02"))
+	return list, err
 }
 
 // ---------- 结算 ----------
@@ -328,8 +350,8 @@ func (r *Screen) Settle(ctx context.Context, p SettleParams) (*SettleResult, err
 	occurred := date.Add(12 * time.Hour)
 	dayRecordID, err := insertRecord(ctx, tx, recordRow{
 		FamilyID: p.FamilyID, MemberID: p.MemberID, MemberName: memberName,
-		Title:   fmt.Sprintf("屏幕时间 %d 分钟（阈值 %d）", p.TotalMin, p.Rule.ThresholdMin),
-		Points:  dayPoints, Source: model.SourceScreen, OccurredAt: occurred, AddedAt: now,
+		Title:  fmt.Sprintf("屏幕时间 %d 分钟（阈值 %d）", p.TotalMin, p.Rule.ThresholdMin),
+		Points: dayPoints, Source: model.SourceScreen, OccurredAt: occurred, AddedAt: now,
 	})
 	if err != nil {
 		return nil, err

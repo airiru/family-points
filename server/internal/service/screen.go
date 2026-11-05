@@ -17,7 +17,7 @@ import (
 
 // 屏幕时间相关业务错误。
 var (
-	ErrScreenRuleMissing = errors.New("该成员还没有屏幕时间规则")
+	ErrScreenRuleMissing  = errors.New("该成员还没有屏幕时间规则")
 	ErrNightConfigInvalid = errors.New("夜间时段配置不合法")
 	ErrDeviceTokenInvalid = errors.New("设备令牌无效或已吊销")
 )
@@ -85,9 +85,9 @@ type SaveScreenRuleInput struct {
 	PenaltyPoints int    `json:"penalty_points"`
 	Enabled       *bool  `json:"enabled"`
 	// 三项同时传或同时不传；不传 = 不启用夜间判定
-	NightStartHour *int   `json:"night_start_hour"`
-	NightEndHour   *int   `json:"night_end_hour"`
-	NightMaxMin    *int   `json:"night_max_min"`
+	NightStartHour *int    `json:"night_start_hour"`
+	NightEndHour   *int    `json:"night_end_hour"`
+	NightMaxMin    *int    `json:"night_max_min"`
 	NightRuleID    *uint64 `json:"night_rule_id"`
 	// 未按时睡觉的扣分口径（2026-11-05）：超出部分按单位向上取整，每单位扣 N 分
 	NightPenaltyUnitMin *int `json:"night_penalty_unit_min"` // 30 或 60，缺省 30
@@ -188,20 +188,32 @@ func (s *Screen) ScreenRules(ctx context.Context, familyID uint64) ([]model.Scre
 
 // ReportInput 是设备上报的入参。total_min 是**当天累计总时长**，不是增量。
 type ReportInput struct {
-	ReportDate string `json:"report_date"` // 可选，缺省为「归属日」（见下）
-	TotalMin   int    `json:"total_min"`
-	NightMin   *int   `json:"night_min"`
+	// 设备标识（2026-11-05 起由客户端自报，不再需要设备令牌）
+	DeviceKey   string `json:"device_key"`
+	DeviceModel string `json:"device_model"`
+	ReportDate  string `json:"report_date"` // 可选，缺省为「归属日」（见下）
+	TotalMin    int    `json:"total_min"`
+	NightMin    *int   `json:"night_min"`
 }
 
 // Report 处理一次设备上报并返回结算结果。
 //
 // 归属日（12.4）：夜间时段跨零点时按**开始日**归属。若当前时间早于 night_end_hour，
 // 说明这次上报的夜间数据属于「前一天」，report_date 缺省值要减一天。
-func (s *Screen) Report(ctx context.Context, d *model.Device, in ReportInput) (*repo.SettleResult, error) {
+func (s *Screen) Report(ctx context.Context, me *model.Member, in ReportInput) (*repo.SettleResult, error) {
+	if !me.InFamily() {
+		return nil, ErrNotInFamily
+	}
 	if in.TotalMin < 0 || (in.NightMin != nil && *in.NightMin < 0) {
 		return nil, fmt.Errorf("%w：分钟数不能为负", ErrInvalidInput)
 	}
-	rule, err := s.screen.ScreenRuleByMember(ctx, d.FamilyID, d.MemberID)
+	if in.DeviceKey == "" {
+		return nil, fmt.Errorf("%w：缺少 device_key（设备标识）", ErrInvalidInput)
+	}
+	if len(in.DeviceKey) > 64 || len(in.DeviceModel) > 64 {
+		return nil, fmt.Errorf("%w：device_key / device_model 过长", ErrInvalidInput)
+	}
+	rule, err := s.screen.ScreenRuleByMember(ctx, *me.FamilyID, me.ID)
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			return nil, ErrScreenRuleMissing
@@ -219,21 +231,31 @@ func (s *Screen) Report(ctx context.Context, d *model.Device, in ReportInput) (*
 
 	var nightRule *model.Rule
 	if rule.NightEnabled() && rule.NightRuleID != nil {
-		nightRule, err = s.screen.RuleByID(ctx, d.FamilyID, *rule.NightRuleID)
+		nightRule, err = s.screen.RuleByID(ctx, *me.FamilyID, *rule.NightRuleID)
 		if err != nil {
 			return nil, fmt.Errorf("%w：夜间规则不存在（night_rule_id=%d）", ErrNightConfigInvalid, *rule.NightRuleID)
 		}
 	}
 
-	res, err := s.screen.Settle(ctx, repo.SettleParams{
-		FamilyID: d.FamilyID, MemberID: d.MemberID, ReportDate: date,
-		TotalMin: in.TotalMin, NightMin: in.NightMin, Rule: rule, NightRule: nightRule,
-	})
+	// 1) 记录设备 + 该设备当天的原始上报（幂等：member+device+date）
+	if err := s.screen.UpsertDevice(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel); err != nil {
+		return nil, err
+	}
+	if err := s.screen.UpsertDeviceReport(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel,
+		date, in.TotalMin, in.NightMin); err != nil {
+		return nil, err
+	}
+
+	// 2) 汇总该成员当天**所有设备**，再结算（多设备相加，2026-11-05 拍板）
+	total, night, err := s.screen.AggregateDay(ctx, me.ID, date)
 	if err != nil {
 		return nil, err
 	}
-	_ = s.screen.TouchDevice(ctx, d.ID)
-	return res, nil
+
+	return s.screen.Settle(ctx, repo.SettleParams{
+		FamilyID: *me.FamilyID, MemberID: me.ID, ReportDate: date,
+		TotalMin: total, NightMin: night, Rule: rule, NightRule: nightRule,
+	})
 }
 
 // resolveReportDate 解析上报归属日。
@@ -268,22 +290,90 @@ func (s *Screen) Reports(ctx context.Context, me *model.Member, memberID uint64,
 	return s.screen.Reports(ctx, *me.FamilyID, memberID, limit)
 }
 
-// ---------- 设备 ----------
+// ---------- 家庭屏幕详情（2026-11-05） ----------
 
-// CreateDevice 生成设备令牌（管理员，跨组）。返回的明文令牌只出现这一次。
-func (s *Screen) CreateDevice(ctx context.Context, familyID, memberID uint64, name, rawToken, tokenHash string) (*model.Device, error) {
-	if name == "" {
-		name = "设备"
+// FamilyMemberDay 是一个成员某天的屏幕时间汇总（含各设备明细）。
+type FamilyMemberDay struct {
+	MemberID uint64                  `json:"member_id"`
+	Name     string                  `json:"name"`
+	Role     string                  `json:"role"`
+	TotalMin int                     `json:"total_min"`
+	NightMin *int                    `json:"night_min"`
+	NightOK  *bool                   `json:"night_ok"`
+	Points   int                     `json:"points"`
+	Devices  []model.DeviceDayReport `json:"devices"`
+}
+
+// FamilyDayView 是全组某天的屏幕时间视图。
+type FamilyDayView struct {
+	Date    string            `json:"date"`
+	Members []FamilyMemberDay `json:"members"`
+}
+
+// FamilyDay 返回全组某天每人的屏幕时间 + 设备明细。
+//
+// 组内所有成员都能看（需求：可以查看家庭成员的屏幕时间详情）。
+// 没上报的人也列出来（total=0），否则界面会「少人」，看起来像数据丢了。
+func (s *Screen) FamilyDay(ctx context.Context, me *model.Member, rawDate string) (*FamilyDayView, error) {
+	if !me.InFamily() {
+		return nil, ErrNotInFamily
 	}
-	return s.screen.CreateDevice(ctx, familyID, memberID, name, tokenHash)
+	date := time.Now()
+	if rawDate != "" {
+		d, err := time.ParseInLocation("2006-01-02", rawDate, time.Local)
+		if err != nil {
+			return nil, fmt.Errorf("%w：date 需为 YYYY-MM-DD", ErrInvalidInput)
+		}
+		date = d
+	}
+	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+
+	members, err := s.family.Members(ctx, *me.FamilyID, true)
+	if err != nil {
+		return nil, err
+	}
+	reports, err := s.screen.ReportsOfFamilyDate(ctx, *me.FamilyID, date)
+	if err != nil {
+		return nil, err
+	}
+	devices, err := s.screen.DeviceReportsOfDay(ctx, *me.FamilyID, date)
+	if err != nil {
+		return nil, err
+	}
+
+	byMember := map[uint64]*model.ScreenReport{}
+	for i := range reports {
+		byMember[reports[i].MemberID] = &reports[i]
+	}
+	devByMember := map[uint64][]model.DeviceDayReport{}
+	for _, d := range devices {
+		devByMember[d.MemberID] = append(devByMember[d.MemberID], d)
+	}
+
+	view := &FamilyDayView{Date: date.Format("2006-01-02")}
+	for _, m := range members {
+		item := FamilyMemberDay{
+			MemberID: m.ID, Name: m.Name, Role: m.Role,
+			Devices: devByMember[m.ID],
+		}
+		if item.Devices == nil {
+			item.Devices = []model.DeviceDayReport{}
+		}
+		if r, ok := byMember[m.ID]; ok {
+			item.TotalMin = r.TotalMin
+			item.NightMin = r.NightMin
+			item.NightOK = r.NightOK
+			item.Points = r.Points
+		}
+		view.Members = append(view.Members, item)
+	}
+	return view, nil
 }
 
-// Devices 列出本组设备。
-func (s *Screen) Devices(ctx context.Context, familyID uint64) ([]model.Device, error) {
-	return s.screen.Devices(ctx, familyID)
-}
-
-// RevokeDevice 吊销设备。
-func (s *Screen) RevokeDevice(ctx context.Context, familyID, id uint64) error {
-	return s.screen.RevokeDevice(ctx, familyID, id)
+// DevicesOfMember 列出本人上报过的设备。
+func (s *Screen) DevicesOfMember(ctx context.Context, me *model.Member) ([]model.MemberDevice, error) {
+	if !me.InFamily() {
+		return nil, ErrNotInFamily
+	}
+	return s.screen.DevicesOfMember(ctx, me.ID)
 }

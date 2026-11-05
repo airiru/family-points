@@ -315,6 +315,24 @@ func (r *Family) TransferLeader(ctx context.Context, familyID, fromID, toID uint
 	return tx.Commit()
 }
 
+// UpdateProfile 更新成员个人资料（名称 / 头像）。
+//
+// 头像用**预设标识**（emoji 或色块 key），不做文件上传：
+// 家庭场景里上传链路（存储、限流、清理）成本远高于收益。
+func (r *Family) UpdateProfile(ctx context.Context, memberID uint64, name, avatar string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE members SET name = COALESCE(NULLIF(?, ''), name),
+		        avatar = COALESCE(NULLIF(?, ''), avatar)
+		  WHERE id = ?`, name, avatar, memberID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // RenameMember 成员改名（records.member_name 是快照，历史不受影响）。
 func (r *Family) RenameMember(ctx context.Context, familyID, memberID uint64, name string) error {
 	res, err := r.db.ExecContext(ctx,

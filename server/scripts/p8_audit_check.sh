@@ -32,14 +32,13 @@ curl -s -o /dev/null -X POST $B/api/app/item/redeem -H "Authorization: Bearer $L
 curl -s -o /dev/null -X POST $B/api/app/transfer/send -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"to_member_id\":$M_ID,\"amount\":7}"
 curl -s -o /dev/null -X POST $B/api/app/task/create -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"title":"倒垃圾","points":10}'
 curl -s -o /dev/null -X POST $B/api/app/rule/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"name":"按时睡觉","points":3,"streaks":[{"every":5,"bonus":8,"mode":"repeat"}]}'
-curl -s -o /dev/null -X POST $B/api/admin/family/$FID/device -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"name\":\"手机\"}"
 
 echo "== 3. 审计查询 =="
 AU=$(curl -s "$B/api/admin/audit/list?family_id=$FID&limit=100" -H "Authorization: Bearer $A_AT")
 TOTAL=$(echo "$AU" | jget "['data']['total']")
 echo "  本组审计 $TOTAL 条"
-chk "审计 ≥6 条" "True" "$([ "$TOTAL" -ge 6 ] && echo True || echo False)"
-for a in item.redeem transfer.send task.create rule.save device.create; do
+chk "审计 ≥5 条" "True" "$([ "$TOTAL" -ge 5 ] && echo True || echo False)"
+for a in item.redeem transfer.send task.create rule.save; do
   chk "有 $a 记录" "True" "$(echo "$AU" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['action']=='$a' for r in d['data']['items']))")"
 done
 chk "按 action 过滤只返回该动作" "1" "$(curl -s "$B/api/admin/audit/list?family_id=$FID&action=item.redeem" -H "Authorization: Bearer $A_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(len({r['action'] for r in d['data']['items']}))")"
