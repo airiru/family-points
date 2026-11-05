@@ -153,7 +153,8 @@ fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("密码（至少 4 位）") },
+                // 不在这里写长度规则：密码策略只由后端一处定义，前端只展示后端返回的错误
+                label = { Text("密码") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),

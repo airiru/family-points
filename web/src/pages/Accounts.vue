@@ -20,8 +20,8 @@ onMounted(load)
 
 async function create() {
   const u = form.value.username.trim()
-  if (u.length < 3) { toast('用户名至少 3 位'); return }
-  if (form.value.password.length < 8) { toast('密码至少 8 位'); return }
+  // 用户名/密码的长度策略**只在后端定义**（service/auth.go），这里不复制一份，
+  // 否则后端一改前端就漂（曾经三处各写一套：4 位 / 6 位 / 8 位）。
   try {
     await api('/admin/accounts', { method: 'POST', body: { username: u, password: form.value.password } })
     toast('已创建，该账号首次登录必须改密')

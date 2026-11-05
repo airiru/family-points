@@ -58,6 +58,8 @@ data class StateView(
     val me: MemberBrief = MemberBrief(0, ""),
     val members: List<MemberBrief> = emptyList(),
     @SerialName("unread_count") val unreadCount: Int = 0,
+    // 单笔可赠送上限（= 可用积分），由后端给出，前端不自己拿 score 当上限
+    @SerialName("transfer_max") val transferMax: Int = 0,
 )
 
 @Serializable
@@ -68,6 +70,8 @@ data class ItemView(
     val id: Long,
     val name: String,
     val cost: Int,
+    // 能不能换由后端算（余额可能已变），前端只展示
+    val affordable: Boolean = false,
 )
 
 @Serializable

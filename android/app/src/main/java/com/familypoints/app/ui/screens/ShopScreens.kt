@@ -118,7 +118,8 @@ fun ShopScreen(vm: AppViewModel, nav: NavHostController) {
             }
 
             items(items, key = { it.id }) { item ->
-                val affordable = (me?.score ?: 0) >= item.cost
+                // 可兑换与否由后端算（affordable），前端不自己比余额
+                val affordable = item.affordable
                 CardBox {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
@@ -200,6 +201,8 @@ fun GiftScreen(vm: AppViewModel, nav: NavHostController) {
     val members by vm.members.collectAsStateWithLifecycle()
     val session by vm.session.collectAsStateWithLifecycle()
     val me = (session as? Session.Ready)?.me
+    // 上限由后端 state 给出（transfer_max），前端不拿 score 自己当上限
+    val transferMax by vm.transferMax.collectAsStateWithLifecycle()
     var target by remember { mutableStateOf<com.familypoints.app.data.api.MemberBrief?>(null) }
 
     LaunchedEffect(Unit) { vm.loadOverview() }
@@ -263,7 +266,7 @@ fun GiftScreen(vm: AppViewModel, nav: NavHostController) {
     target?.let { m ->
         GiftDialog(
             targetName = m.name,
-            max = me?.score ?: 0,
+            max = transferMax,
             onDismiss = { target = null },
             onConfirm = { amount, note ->
                 vm.sendTransfer(m.id, amount, note)

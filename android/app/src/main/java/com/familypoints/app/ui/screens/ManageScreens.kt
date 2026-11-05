@@ -427,12 +427,14 @@ private fun RuleEditor(
         Spacer(Modifier.height(14.dp))
         Button(
             onClick = {
+                // 原样提交，**不在前端钳制**：输 25 点就该被后端拒绝并显示原因，
+                // 静默改成 23 只会让家长以为保存成功了。
                 onSave(
-                    bedtime.toIntOrNull()?.coerceIn(0, 23) ?: 0,
-                    wake.toIntOrNull()?.coerceIn(0, 23) ?: 7,
-                    maxMin.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+                    bedtime.toIntOrNull() ?: -1,
+                    wake.toIntOrNull() ?: -1,
+                    maxMin.toIntOrNull() ?: -1,
                     unitMin,
-                    penaltyPoints.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+                    penaltyPoints.toIntOrNull() ?: -1,
                 )
             },
             modifier = Modifier

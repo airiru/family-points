@@ -13,9 +13,9 @@ const err = ref('')
 
 async function submit() {
   err.value = ''
-  if (!oldPwd.value || !newPwd.value) { err.value = '请填写原密码与新密码'; return }
+  // 只校验「两次输入一致」这种纯表单问题；密码强度策略由后端判定并返回错误，
+  // 前端不再写一份长度规则（否则后端改了这里就骗人）。
   if (newPwd.value !== again.value) { err.value = '两次输入的新密码不一致'; return }
-  if (newPwd.value.length < 6) { err.value = '新密码至少 6 位'; return }
 
   loading.value = true
   try {

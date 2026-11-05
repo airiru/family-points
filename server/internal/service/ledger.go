@@ -37,6 +37,34 @@ func (s *Ledger) Items(ctx context.Context, familyID uint64) ([]model.Item, erro
 	return s.ledger.Items(ctx, familyID)
 }
 
+// ItemView 是成员端看到的商品：**能不能换由后端算**，前端只展示。
+//
+// 为什么不让前端比 `score >= cost`：余额是缓存值，两边各算一次必然出现
+// 「界面显示可兑换、点了却余额不足」。判定权统一在后端，前端只读这个字段。
+type ItemView struct {
+	ID         uint64 `json:"id"`
+	Name       string `json:"name"`
+	Cost       int    `json:"cost"`
+	Affordable bool   `json:"affordable"` // 当前可用积分是否够兑换
+}
+
+// ItemsFor 列出商品，并按**当前**成员的可用积分标注是否可兑换。
+// me 来自中间件（每请求从库里查，分数是新鲜的）。
+func (s *Ledger) ItemsFor(ctx context.Context, me *model.Member) ([]ItemView, error) {
+	items, err := s.ledger.Items(ctx, *me.FamilyID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ItemView, 0, len(items))
+	for _, it := range items {
+		out = append(out, ItemView{
+			ID: it.ID, Name: it.Name, Cost: it.Cost,
+			Affordable: me.Score >= it.Cost,
+		})
+	}
+	return out, nil
+}
+
 // SaveItem 新增/更新商品（组长）。
 func (s *Ledger) SaveItem(ctx context.Context, me *model.Member, id uint64, name string, cost int) (*model.Item, error) {
 	if err := requireLeader(me); err != nil {

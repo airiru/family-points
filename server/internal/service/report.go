@@ -30,6 +30,9 @@ type State struct {
 	Me          MemberBrief   `json:"me"`
 	Members     []MemberBrief `json:"members"`
 	UnreadCount int           `json:"unread_count"`
+	// TransferMax 是单笔可赠送上限（= 当前可用积分）。
+	// 由后端给出，前端不自己拿 score 当上限判断。
+	TransferMax int `json:"transfer_max"`
 }
 
 // FamilyBrief 是概览里的家庭组信息。
@@ -67,6 +70,7 @@ func (s *Report) State(ctx context.Context, me *model.Member) (*State, error) {
 		},
 		Members:     briefs,
 		UnreadCount: unread,
+		TransferMax: me.Score,
 	}, nil
 }
 

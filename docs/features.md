@@ -471,6 +471,14 @@ CREATE TABLE refresh_tokens (
    跨组访问先记应用日志，P8 换成写 `audit_logs`。
 6. **配置即租户数据**：睡觉时间点、连续奖励档位、阈值、分值等**全部按 `family_id` 隔离**，
    存在数据库表里（`rules` / `screen_rules`），**不得写成全局常量、环境变量或配置文件**。
+7. **业务判定只在后端**（2026-11-05 定）：前端（Android / Web）**只负责发送配置、展示服务端结果**，
+   **不得自己判断规则**。已经为此改掉的四处：
+   - 夜间是否达标 → 读 `screen_reports.night_ok`（原本前端算 `nightMinutes <= nightMax`）
+   - 商品能否兑换 → 读 `items[].affordable`（原本前端比 `score >= cost`）
+   - 赠送上限 → 读 `state.transfer_max`（原本前端拿 `score` 当上限）
+   - 密码/用户名长度 → 只由后端校验并返回错误（原本三处各写一套：4 位 / 6 位 / 8 位）
+   ⇒ 前端可以做的只有：**空值提示、两次输入一致性、输入格式（纯数字）**这类纯表单问题。
+   判据：**同一规则如果在两处实现，迟早会漂 —— 只留后端一处。**
 
 ---
 
@@ -1253,9 +1261,9 @@ App 的「屏幕时间」页除了今日总时长，还要能看到**每小时**
 | # | 接口 | 方法 | 说明 |
 |---|---|---|---|
 | 15.3.1 | `/api/app/password` | POST | 改自己的密码 |
-| 15.3.2 | `/api/app/state` | GET | 本组概览（不含全量记录） |
+| 15.3.2 | `/api/app/state` | GET | 本组概览（不含全量记录）；含 `transfer_max`（单笔可赠送上限，后端给） |
 | 15.3.3 | `/api/app/records` | GET | 记录分页 / 筛选 / 搜索（**只读**） |
-| 15.3.4 | `/api/app/item/list` | GET | 商城列表 |
+| 15.3.4 | `/api/app/item/list` | GET | 商城列表（含 `affordable`：后端按当前可用积分算的「能不能换」） |
 | 15.3.5 | `/api/app/item/redeem` | POST | 自助兑换（事务内扣分 + 写负分流水 + **生成商品券**） |
 | 15.3.6 | `/api/app/coupons` | GET | **我的券**列表（含状态与驳回次数） |
 | 15.3.7 | `/api/app/coupon/use` | POST | **使用券**：发起核销，进入投票（`unused → pending`） |

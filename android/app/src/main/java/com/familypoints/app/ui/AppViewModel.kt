@@ -91,6 +91,10 @@ class AppViewModel @Inject constructor(
     private val _items = MutableStateFlow<List<ItemView>>(emptyList())
     val items: StateFlow<List<ItemView>> = _items.asStateFlow()
 
+    /** 单笔可赠送上限，由后端 state 接口给出。 */
+    private val _transferMax = MutableStateFlow(0)
+    val transferMax: StateFlow<Int> = _transferMax.asStateFlow()
+
     private val _tasks = MutableStateFlow<List<TaskView>>(emptyList())
     val tasks: StateFlow<List<TaskView>> = _tasks.asStateFlow()
 
@@ -236,6 +240,7 @@ class AppViewModel @Inject constructor(
         _familyName.value = st.family.name
         _members.value = st.members.filter { !it.hidden }
         _unread.value = st.unreadCount
+        _transferMax.value = st.transferMax
         // 顺手把 me 的分数刷新到会话里
         _session.value = _session.value.let {
             when (it) {

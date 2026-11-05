@@ -25,7 +25,7 @@ func (h *Ledger) AppItems(c *gin.Context) {
 		httpx.Unauthorized(c, "未登录")
 		return
 	}
-	items, err := h.svc.Items(c.Request.Context(), *m.FamilyID)
+	items, err := h.svc.ItemsFor(c.Request.Context(), m)
 	if err != nil {
 		fail(c, err)
 		return
