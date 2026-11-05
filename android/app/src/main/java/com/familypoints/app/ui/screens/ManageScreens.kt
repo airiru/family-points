@@ -23,6 +23,7 @@ import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -278,7 +279,7 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
             item {
                 RuleEditor(
                     rule = current,
-                    onSave = { bedtime, wake, maxMin ->
+                    onSave = { bedtime, wake, maxMin, unitMin, penaltyPoints ->
                         val targetId = selectedId ?: current?.memberId ?: members.firstOrNull()?.id
                         if (targetId != null) {
                             vm.saveScreenRule(
@@ -290,6 +291,8 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
                                     nightStartHour = bedtime,
                                     nightEndHour = wake,
                                     nightMaxMin = maxMin,
+                                    nightPenaltyUnitMin = unitMin,
+                                    nightPenaltyPoints = penaltyPoints,
                                     enabled = true,
                                 )
                             )
@@ -345,11 +348,16 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
 @Composable
 private fun RuleEditor(
     rule: ScreenRuleView?,
-    onSave: (Int, Int, Int) -> Unit,
+    onSave: (Int, Int, Int, Int, Int) -> Unit,
 ) {
     var bedtime by remember(rule) { mutableStateOf((rule?.nightStartHour ?: 0).toString()) }
     var wake by remember(rule) { mutableStateOf((rule?.nightEndHour ?: 7).toString()) }
     var maxMin by remember(rule) { mutableStateOf((rule?.nightMaxMin ?: 0).toString()) }
+    // 扣分口径：单位 30/60 分钟，每单位扣 N 分（后端按「超出部分向上取整」计算）
+    var unitMin by remember(rule) { mutableStateOf(if (rule?.nightPenaltyUnitMin == 60) 60 else 30) }
+    var penaltyPoints by remember(rule) {
+        mutableStateOf((rule?.nightPenaltyPoints ?: 0).toString())
+    }
 
     CardBox {
         Text("判定条件", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
@@ -387,6 +395,35 @@ private fun RuleEditor(
             color = Sub,
             modifier = Modifier.padding(top = 8.dp),
         )
+
+        Spacer(Modifier.height(14.dp))
+        Text("未达标的扣分", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(30 to "每半小时", 60 to "每小时").forEach { (u, label) ->
+                FilterChip(
+                    selected = unitMin == u,
+                    onClick = { unitMin = u },
+                    label = { Text(label) },
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = penaltyPoints,
+            onValueChange = { penaltyPoints = it.filter { c -> c.isDigit() } },
+            label = { Text("每单位扣几分（0 = 不扣分）") },
+            singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            "超出允许分钟数的部分，按单位**向上取整**后每单位扣这么多分。" +
+                "例：允许 0 分钟、用了 100 分钟、单位半小时、每单位 2 分 → 4 个单位 → 扣 8 分。",
+            fontSize = 11.5.sp,
+            color = Sub,
+            modifier = Modifier.padding(top = 8.dp),
+        )
         Spacer(Modifier.height(14.dp))
         Button(
             onClick = {
@@ -394,6 +431,8 @@ private fun RuleEditor(
                     bedtime.toIntOrNull()?.coerceIn(0, 23) ?: 0,
                     wake.toIntOrNull()?.coerceIn(0, 23) ?: 7,
                     maxMin.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+                    unitMin,
+                    penaltyPoints.toIntOrNull()?.coerceAtLeast(0) ?: 0,
                 )
             },
             modifier = Modifier

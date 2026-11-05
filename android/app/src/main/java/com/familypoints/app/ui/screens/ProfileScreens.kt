@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.familypoints.app.screen.DayUsage
 import com.familypoints.app.screen.UsageStatsReader
 import com.familypoints.app.ui.AppViewModel
 import com.familypoints.app.ui.Avatar
@@ -52,9 +55,13 @@ import com.familypoints.app.ui.Pill
 import com.familypoints.app.ui.ScreenHeader
 import com.familypoints.app.ui.Session
 import com.familypoints.app.ui.nav.Routes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.familypoints.app.ui.theme.Blue
 import com.familypoints.app.ui.theme.Green
 import com.familypoints.app.ui.theme.GreenSoft
+import com.familypoints.app.ui.theme.Ink
 import com.familypoints.app.ui.theme.Line
 import com.familypoints.app.ui.theme.Primary
 import com.familypoints.app.ui.theme.PrimarySoft
@@ -261,23 +268,55 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
     var hasPermission by remember { mutableStateOf(reader.hasPermission()) }
     var todayMinutes by remember { mutableStateOf(0) }
     var nightMinutes by remember { mutableStateOf(0) }
+    // 近 7 天明细（最旧在前、今天在最后），一次 queryEvents 分桶得到
+    var days by remember { mutableStateOf<List<DayUsage>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var pickedHour by remember { mutableStateOf<Int?>(null) }
     val deviceToken by vm.deviceToken.collectAsStateWithLifecycle()
     var tokenInput by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+
+    // 夜间时段必须用**本机登录成员自己的规则**：写死 0–7 会和实际计分口径不一致
+    // （多成员家庭里小学生和初中生的睡觉时间点本来就可以不同，见 docs 25 条）。
+    val session by vm.session.collectAsStateWithLifecycle()
+    val rules by vm.screenRules.collectAsStateWithLifecycle()
+    val myId = (session as? Session.Ready)?.me?.id ?: 0L
+    val myRule = rules.firstOrNull { it.memberId == myId } ?: rules.firstOrNull()
+    val nightStart = myRule?.nightStartHour ?: 0
+    val nightEnd = myRule?.nightEndHour ?: 7
+    val nightMax = myRule?.nightMaxMin ?: 0
+
+    // ⚠️ 判定权在服务端：是否达标、扣多少分都由后端算（规则全部由后端判断）。
+    // 前端只展示结算行里的 night_ok；null = 还没上报/结算，显示「待结算」而不是猜一个。
+    val reports by vm.screenReports.collectAsStateWithLifecycle()
+    // 只认「昨天」那条结算行：更早的旧报告不能拿来显示今晚的达标状态
+    val yesterdayDate = reader.dateString(1)
+    val latestReport = reports.firstOrNull { it.reportDate.take(10) == yesterdayDate }
+    val nightVerdict: Boolean? = latestReport?.nightOk
 
     // 「已同步」不能靠猜：只有「有权限 + 配了设备令牌」才可能上报成功。
     // 之前这里用 loadOverview() 是否成功来推断，结果是**永远显示已同步**，
     // 而没有设备令牌时 Worker 会直接 return，根本不会上报。
     val synced = hasPermission && !deviceToken.isNullOrBlank()
 
-    LaunchedEffect(Unit) {
-        hasPermission = reader.hasPermission()
-        if (hasPermission) {
-            val from = reader.startOfDay(0)
-            val to = System.currentTimeMillis()
-            val r = reader.read(from, to, 0, 7, 0)
-            todayMinutes = r.totalMinutes
-            nightMinutes = r.nightMinutes
+    // 读事件流要遍历全部 UsageEvents，放主线程会卡首帧，统一丢 IO。
+    suspend fun reload() {
+        loading = true
+        val list = withContext(Dispatchers.IO) {
+            runCatching { reader.readBuckets(BUCKET_DAYS) }.getOrDefault(emptyList())
         }
+        days = list
+        val today = list.lastOrNull()
+        todayMinutes = today?.totalMinutes ?: 0
+        nightMinutes = today?.nightMinutes(nightStart, nightEnd) ?: 0
+        loading = false
+        vm.loadScreenReports() // 判定以服务端为准
+    }
+
+    // 规则加载完成后要重算一次夜间分钟数（规则是异步拿到的）
+    LaunchedEffect(nightStart, nightEnd) {
+        hasPermission = reader.hasPermission()
+        if (hasPermission) reload()
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -364,16 +403,41 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
-                                        if (nightMinutes == 0) "达标" else "未达标",
+                                        when (nightVerdict) {
+                                            true -> "达标"
+                                            false -> "未达标"
+                                            null -> "待结算"
+                                        },
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 15.sp,
-                                        color = if (nightMinutes == 0) Green else Red,
+                                        color = when (nightVerdict) {
+                                            true -> Green
+                                            false -> Red
+                                            null -> Sub
+                                        },
                                     )
-                                    Text("昨晚睡觉", fontSize = 11.5.sp, color = Sub)
+                                    Text(
+                                        "昨晚 · 上限 ${nightMax} 分钟",
+                                        fontSize = 11.5.sp,
+                                        color = Sub,
+                                    )
                                 }
                             }
                         }
                     }
+                }
+
+                item {
+                    HourlyCard(
+                        today = days.lastOrNull(),
+                        pickedHour = pickedHour,
+                        nightEnd = nightEnd,
+                        onPick = { pickedHour = it },
+                    )
+                }
+
+                item {
+                    DailyCard(days = days, loading = loading)
                 }
 
                 item {
@@ -445,7 +509,8 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
                         Text(
                             "每天 21:00 自动上报「昨天」的完整数据；打开 App 时也会补算一次。\n" +
                                 "重复上报会覆盖同一天的结果，不会重复计分。\n" +
-                                "夜间时段（0:00–7:00）的数据记在前一天账上。",
+                                "夜间时段（${nightStart}:00–${nightEnd}:00）的数据记在前一天账上。\n" +
+                                "是否达标、扣多少分**全部由服务端按规则计算**，本页只展示结果。",
                             fontSize = 12.sp,
                             color = Sub,
                             lineHeight = 19.sp,
@@ -456,12 +521,10 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
                 item {
                     Button(
                         onClick = {
-                            val from = reader.startOfDay(1)
-                            val to = reader.startOfDay(0)
-                            val r = reader.read(from, to, 0, 7, 0)
-                            todayMinutes = r.totalMinutes
-                            nightMinutes = r.nightMinutes
-                            vm.showMessage("已刷新本地统计")
+                            scope.launch {
+                                reload()
+                                vm.showMessage("已刷新本地统计")
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -472,5 +535,187 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController) {
             }
             item { Spacer(Modifier.height(12.dp)) }
         }
+    }
+}
+
+// ---------- 屏幕时间明细：每时 / 每日 ----------
+//
+// 数据全部来自设备本地（UsageStatsManager），服务端只存日总量、不存小时桶 ——
+// 上传 24 个桶 × 每人 × 每天没有实际用途，还让上报体从几十字节涨到几百字节。
+
+private const val BUCKET_DAYS = 7
+
+private fun fmtMinutes(min: Int): String =
+    if (min >= 60) "${min / 60}h${min % 60}m" else "${min}m"
+
+private fun dayLabel(date: String): String {
+    val today = java.time.LocalDate.now()
+    val d = runCatching { java.time.LocalDate.parse(date) }.getOrNull() ?: return date
+    return when (d) {
+        today -> "今天"
+        today.minusDays(1) -> "昨天"
+        else -> "%02d-%02d".format(d.monthValue, d.dayOfMonth)
+    }
+}
+
+/** 今日 24 小时分布。点柱子可看该小时的具体分钟数。 */
+@Composable
+private fun HourlyCard(
+    today: DayUsage?,
+    pickedHour: Int?,
+    nightEnd: Int,
+    onPick: (Int?) -> Unit,
+) {
+    val hourly = today?.hourlyMinutes ?: IntArray(24)
+    val maxMin = (hourly.maxOrNull() ?: 0).coerceAtLeast(1)
+    val peakHour = hourly.indices.maxByOrNull { hourly[it] } ?: 0
+
+    CardBox {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("今日每小时", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Spacer(Modifier.weight(1f))
+            Text(
+                pickedHour?.let {
+                    val end = (it + 1) % 24
+                    "%02d:00–%02d:00 · %d 分钟".format(it, end, hourly.getOrElse(it) { 0 })
+                } ?: "点柱子看该小时",
+                fontSize = 11.5.sp,
+                color = if (pickedHour == null) Sub else Primary,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(88.dp),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            for (h in 0..23) {
+                val v = hourly[h]
+                val frac = (v.toFloat() / maxMin).coerceIn(0f, 1f)
+                val color = when {
+                    pickedHour == h -> Ink
+                    v == 0 -> Line
+                    h < nightEnd -> Blue.copy(alpha = 0.45f) // 夜间时段，与「昨晚睡觉」呼应
+                    else -> Primary
+                }
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight(if (v == 0) 0.04f else frac.coerceAtLeast(0.08f))
+                        .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                        .background(color)
+                        .clickable { onPick(if (pickedHour == h) null else h) }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth()) {
+            listOf("0", "6", "12", "18", "23").forEachIndexed { i, label ->
+                Text(
+                    label,
+                    fontSize = 10.sp,
+                    color = Sub,
+                    modifier = Modifier.weight(1f),
+                    textAlign = when (i) {
+                        0 -> TextAlign.Start
+                        4 -> TextAlign.End
+                        else -> TextAlign.Center
+                    },
+                )
+            }
+        }
+
+        if (hourly.any { it > 0 }) {
+            Text(
+                "最多使用：${peakHour} 点 · ${hourly[peakHour]} 分钟",
+                fontSize = 11.5.sp,
+                color = Sub,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        } else {
+            Text(
+                "今天还没有使用记录",
+                fontSize = 11.5.sp,
+                color = Sub,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+/** 近 7 天每日总时长（今天在最上面）。 */
+@Composable
+private fun DailyCard(days: List<DayUsage>, loading: Boolean) {
+    CardBox {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("近 $BUCKET_DAYS 天每日", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Spacer(Modifier.weight(1f))
+            Text("按天累计", fontSize = 11.5.sp, color = Sub)
+        }
+        Spacer(Modifier.height(10.dp))
+
+        if (days.isEmpty()) {
+            Text(
+                if (loading) "正在统计…" else "暂无数据，需要先授予「使用情况访问」权限",
+                fontSize = 12.sp,
+                color = Sub,
+                lineHeight = 18.sp,
+            )
+            return@CardBox
+        }
+
+        val maxDay = (days.maxOfOrNull { it.totalMinutes } ?: 0).coerceAtLeast(1)
+        days.reversed().forEach { d ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    dayLabel(d.date),
+                    fontSize = 12.sp,
+                    color = if (dayLabel(d.date) == "今天") Ink else Sub,
+                    fontWeight = if (dayLabel(d.date) == "今天") FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier.width(48.dp),
+                )
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Line),
+                ) {
+                    if (d.totalMinutes > 0) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(d.totalMinutes.toFloat() / maxDay)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Primary),
+                        )
+                    }
+                }
+                Text(
+                    fmtMinutes(d.totalMinutes),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.width(58.dp),
+                )
+            }
+        }
+
+        Text(
+            "数值为设备本地统计，与服务端上报口径一致（排除桌面与系统界面）",
+            fontSize = 11.sp,
+            color = Sub,
+            lineHeight = 17.sp,
+            modifier = Modifier.padding(top = 6.dp),
+        )
     }
 }

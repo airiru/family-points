@@ -29,6 +29,36 @@ func DayPoints(totalMin, threshold, bonus, penalty int) int {
 	return -penalty
 }
 
+// NightPenalty 计算「未按时睡觉」的扣分（2026-11-05 新增）。
+//
+// 口径：超出允许分钟数的部分**按单位向上取整**，每单位扣 points 分。
+//   - unitMin 只能是 30 或 60（规则页只给这两个选项）
+//   - 不满一个单位也按一个单位算（用了 31 分钟、单位 30 → 2 个单位）
+//   - nightMin ≤ maxMin 时返回 0（达标不扣分）
+//   - points ≤ 0 表示「不扣分」，只保持「不加分 + 连续清零」
+//
+// 例：允许 0 分钟、用了 100 分钟、单位 30、每单位 2 分 → ceil(100/30)=4 → -8
+func NightPenalty(nightMin, maxMin, unitMin, points int) int {
+	if points <= 0 {
+		return 0
+	}
+	excess := nightMin - maxMin
+	if excess <= 0 {
+		return 0
+	}
+	unit := NormalizePenaltyUnit(unitMin)
+	units := (excess + unit - 1) / unit // 向上取整
+	return -units * points
+}
+
+// NormalizePenaltyUnit 把单位收敛到 30 / 60（非法值一律按 30 处理）。
+func NormalizePenaltyUnit(unitMin int) int {
+	if unitMin == 60 {
+		return 60
+	}
+	return 30
+}
+
 // NightAwards 按连续天数计算命中的档位（可能多个）。
 //
 // 语义（7.3）：

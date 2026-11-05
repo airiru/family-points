@@ -25,6 +25,7 @@ import com.familypoints.app.data.api.RegisterReq
 import com.familypoints.app.data.api.RenameMemberReq
 import com.familypoints.app.data.api.RuleSaveReq
 import com.familypoints.app.data.api.RuleView
+import com.familypoints.app.data.api.ScreenReportView
 import com.familypoints.app.data.api.ScreenRuleSaveReq
 import com.familypoints.app.data.api.ScreenRuleView
 import com.familypoints.app.data.api.StreakTier
@@ -114,6 +115,10 @@ class AppViewModel @Inject constructor(
 
     private val _inviteCode = MutableStateFlow<String?>(null)
     val inviteCode: StateFlow<String?> = _inviteCode.asStateFlow()
+
+    /** 本机成员的屏幕时间结算历史（服务端结果，含 night_ok 判定）。 */
+    private val _screenReports = MutableStateFlow<List<ScreenReportView>>(emptyList())
+    val screenReports: StateFlow<List<ScreenReportView>> = _screenReports.asStateFlow()
 
     /** 设备令牌：屏幕时间上报的唯一凭证，由管理员在后台签发。null = 还没配置。 */
     private val _deviceToken = MutableStateFlow<String?>(null)
@@ -219,6 +224,12 @@ class AppViewModel @Inject constructor(
     }
 
     // ---------------- 概览 ----------------
+
+    /** 拉取屏幕时间结算历史。判定（是否达标、扣多少分）全部以服务端返回为准。 */
+    fun loadScreenReports() = launchBusy(showBusy = false) {
+        runCatching { api.screenReports(limit = 14).data?.items.orEmpty() }
+            .onSuccess { _screenReports.value = it }
+    }
 
     fun loadOverview() = launchBusy(showBusy = false) {
         val st = api.state().data ?: return@launchBusy

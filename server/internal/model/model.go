@@ -143,6 +143,9 @@ type ScreenRule struct {
 	NightEndHour   *int    `db:"night_end_hour" json:"night_end_hour"`
 	NightMaxMin    *int    `db:"night_max_min" json:"night_max_min"`
 	NightRuleID    *uint64 `db:"night_rule_id" json:"night_rule_id"`
+	// 未按时睡觉的扣分口径（2026-11-05）：超出部分按单位向上取整，每单位扣 N 分
+	NightPenaltyUnitMin int `db:"night_penalty_unit_min" json:"night_penalty_unit_min"`
+	NightPenaltyPoints  int `db:"night_penalty_points" json:"night_penalty_points"`
 }
 
 // NightEnabled 判断是否启用了夜间判定（三项都配置了才算启用）。

@@ -197,7 +197,10 @@ CREATE TABLE IF NOT EXISTS screen_rules (
   night_start_hour TINYINT UNSIGNED NULL,
   night_end_hour   TINYINT UNSIGNED NULL,
   night_max_min    INT NULL,
-  night_rule_id    BIGINT UNSIGNED NULL
+  night_rule_id    BIGINT UNSIGNED NULL,
+  -- 未按时睡觉的扣分口径（2026-11-05）：超出部分按单位向上取整，每单位扣 N 分
+  night_penalty_unit_min INT NOT NULL DEFAULT 30,  -- 只能是 30 或 60
+  night_penalty_points   INT NOT NULL DEFAULT 0    -- 0 = 不扣分（只不加分 + 连续清零）
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 屏幕时间结算（幂等载体：UNIQUE(member_id, report_date)）

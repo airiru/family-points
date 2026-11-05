@@ -64,6 +64,10 @@ Manifest 已开 `usesCleartextTraffic`，开发期可直接用 HTTP。
 - `UsageStatsManager.queryEvents` 配对 `ACTIVITY_RESUMED/PAUSED` 自行累加（**不用 `INTERVAL_DAILY`**，避免按自然日切桶）
 - 排除桌面、系统 UI、设置与本应用自身
 - 区分总时长与夜间时段时长（支持跨零点）
+- **明细视图**（2026-11-05）：今日 24 小时分布（点柱子看该小时分钟数、标出峰值小时）+
+  近 7 天每日时长列表。一次 `queryEvents` 覆盖 7 天、按「天 × 小时」分桶，
+  逐天各查一次会重复扫描事件。**小时桶只在本地算、不上传**（服务端只存日总量）
+- 夜间时段取**本机登录成员自己的规则**（`screen_rules`），不是写死 0–7
 - WorkManager 每晚 21:00 上报「昨天」；**打开 App 时补算一次**（国产 ROM 杀后台的兜底）
 - 权限检测 + 跳转系统设置；未授权时 Worker 直接成功返回，不无限重试
 

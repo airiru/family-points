@@ -18,6 +18,29 @@ data class UsageResult(
 )
 
 /**
+ * 某一天的用量明细（按小时分桶）。
+ *
+ * @property date yyyy-MM-dd
+ * @property hourlyMinutes 长度 24，索引 = 小时（0–23），单位分钟
+ */
+data class DayUsage(
+    val date: String,
+    val hourlyMinutes: IntArray,
+) {
+    val totalMinutes: Int get() = hourlyMinutes.sum()
+
+    /** 夜间时段内的使用分钟数。支持跨零点（如 22 → 7）。 */
+    fun nightMinutes(startHour: Int, endHour: Int): Int {
+        if (startHour == endHour) return 0
+        return if (startHour < endHour) {
+            (startHour until endHour).sumOf { hourlyMinutes[it] }
+        } else {
+            ((startHour..23).toList() + (0 until endHour).toList()).sumOf { hourlyMinutes[it] }
+        }
+    }
+}
+
+/**
  * 读取全机使用时长。
  *
  * **不用 `queryUsageStats(INTERVAL_DAILY)`**：它按自然日切桶，
@@ -32,6 +55,10 @@ data class UsageResult(
 class UsageStatsReader @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
+    private companion object {
+        const val HOUR_MS = 60L * 60 * 1000
+    }
+
     private val usm: UsageStatsManager
         get() = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
 
@@ -112,6 +139,105 @@ class UsageStatsReader @Inject constructor(
             totalMinutes = (totalMs / 60_000L).toInt().coerceAtLeast(0),
             nightMinutes = (nightMs / 60_000L).toInt().coerceAtLeast(0),
         )
+    }
+
+    /**
+     * 读取最近 [days] 天（含今天）的用量，按「天 × 小时」分桶。
+     *
+     * 只查一次 `queryEvents`，把每段前台时间按小时边界切开分别累加——
+     * 逐天各查一次会重复扫描事件，24 小时再各查一次更慢。
+     *
+     * 返回列表**最旧在前、今天在最后**，便于直接画「近 7 天」。
+     * 小时桶按「段起始时刻」归属：一段 06:50–07:10 会拆成 06 点 10 分 + 07 点 10 分。
+     *
+     * 说明：小时边界按 `dayStart + h × 1h` 推算，遇到有夏令时的地区，
+     * 切换当天的某个小时会错位 1 小时（中国无夏令时，不影响本场景）。
+     */
+    fun readBuckets(days: Int): List<DayUsage> {
+        val n = days.coerceIn(1, 31)
+        if (!hasPermission()) return emptyList()
+
+        val dayStarts = LongArray(n) { startOfDay(n - 1 - it) } // 最旧在前
+        val windowFrom = dayStarts[0]
+        val windowTo = System.currentTimeMillis()
+        if (windowTo <= windowFrom) return emptyList()
+
+        val ms = Array(n) { LongArray(24) }
+        val excluded = excludedPackages()
+
+        fun dayIndexOf(ts: Long): Int {
+            // n ≤ 31，线性扫描足够；返回 -1 表示早于窗口，n 表示晚于窗口
+            for (i in n - 1 downTo 0) {
+                if (ts >= dayStarts[i]) return i
+            }
+            return -1
+        }
+
+        fun addInterval(rawStart: Long, rawEnd: Long) {
+            var cur = maxOf(rawStart, windowFrom)
+            val end = minOf(rawEnd, windowTo)
+            while (cur < end) {
+                val di = dayIndexOf(cur)
+                if (di < 0) {
+                    cur = dayStarts[0]
+                    continue
+                }
+                if (di >= n) break
+                val hour = ((cur - dayStarts[di]) / HOUR_MS).toInt().coerceIn(0, 23)
+                val hourEnd = dayStarts[di] + (hour + 1) * HOUR_MS
+                val segEnd = minOf(end, hourEnd)
+                if (segEnd <= cur) { // 兜底：DST 等异常下避免死循环
+                    cur += 1
+                    continue
+                }
+                ms[di][hour] += segEnd - cur
+                cur = segEnd
+            }
+        }
+
+        val events = usm.queryEvents(windowFrom, windowTo) ?: return emptyList()
+        var foregroundPkg: String? = null
+        var foregroundSince = 0L
+        val ev = UsageEvents.Event()
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(ev)
+            val ts = ev.timeStamp
+            when (ev.eventType) {
+                UsageEvents.Event.ACTIVITY_RESUMED -> {
+                    if (foregroundPkg != null && foregroundSince > 0 &&
+                        foregroundPkg?.let { it !in excluded } == true
+                    ) {
+                        addInterval(foregroundSince, ts)
+                    }
+                    foregroundPkg = ev.packageName
+                    foregroundSince = ts
+                }
+
+                UsageEvents.Event.ACTIVITY_PAUSED, UsageEvents.Event.ACTIVITY_STOPPED -> {
+                    if (foregroundPkg != null && ev.packageName == foregroundPkg && foregroundSince > 0) {
+                        if (foregroundPkg?.let { it !in excluded } == true) {
+                            addInterval(foregroundSince, ts)
+                        }
+                        foregroundPkg = null
+                        foregroundSince = 0
+                    }
+                }
+            }
+        }
+        // 区间结束时仍在前台：结算到当前
+        if (foregroundPkg != null && foregroundSince > 0 &&
+            foregroundPkg?.let { it !in excluded } == true
+        ) {
+            addInterval(foregroundSince, windowTo)
+        }
+
+        return List(n) { i ->
+            DayUsage(
+                date = dateString(n - 1 - i),
+                hourlyMinutes = IntArray(24) { h -> (ms[i][h] / 60_000L).toInt().coerceAtLeast(0) },
+            )
+        }
     }
 
     /** 某时刻是否落在夜间时段内。支持跨零点（如 22 → 7）。 */

@@ -96,7 +96,8 @@ func (r *Screen) ScreenRuleByMember(ctx context.Context, familyID, memberID uint
 	var it model.ScreenRule
 	err := r.db.GetContext(ctx, &it,
 		`SELECT id, family_id, member_id, threshold_min, bonus_points, penalty_points, enabled,
-		        night_start_hour, night_end_hour, night_max_min, night_rule_id
+		        night_start_hour, night_end_hour, night_max_min, night_rule_id,
+		        night_penalty_unit_min, night_penalty_points
 		   FROM screen_rules WHERE member_id = ? AND family_id = ?`, memberID, familyID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -112,7 +113,8 @@ func (r *Screen) ScreenRules(ctx context.Context, familyID uint64) ([]model.Scre
 	list := []model.ScreenRule{}
 	err := r.db.SelectContext(ctx, &list,
 		`SELECT id, family_id, member_id, threshold_min, bonus_points, penalty_points, enabled,
-		        night_start_hour, night_end_hour, night_max_min, night_rule_id
+		        night_start_hour, night_end_hour, night_max_min, night_rule_id,
+		        night_penalty_unit_min, night_penalty_points
 		   FROM screen_rules WHERE family_id = ? ORDER BY member_id`, familyID)
 	return list, err
 }
@@ -122,8 +124,9 @@ func (r *Screen) SaveScreenRule(ctx context.Context, in model.ScreenRule) error 
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO screen_rules
 		   (family_id, member_id, threshold_min, bonus_points, penalty_points, enabled,
-		    night_start_hour, night_end_hour, night_max_min, night_rule_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		    night_start_hour, night_end_hour, night_max_min, night_rule_id,
+		    night_penalty_unit_min, night_penalty_points)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   threshold_min = VALUES(threshold_min),
 		   bonus_points = VALUES(bonus_points),
@@ -132,9 +135,12 @@ func (r *Screen) SaveScreenRule(ctx context.Context, in model.ScreenRule) error 
 		   night_start_hour = VALUES(night_start_hour),
 		   night_end_hour = VALUES(night_end_hour),
 		   night_max_min = VALUES(night_max_min),
-		   night_rule_id = VALUES(night_rule_id)`,
+		   night_rule_id = VALUES(night_rule_id),
+		   night_penalty_unit_min = VALUES(night_penalty_unit_min),
+		   night_penalty_points = VALUES(night_penalty_points)`,
 		in.FamilyID, in.MemberID, in.ThresholdMin, in.BonusPoints, in.PenaltyPoints, in.Enabled,
-		in.NightStartHour, in.NightEndHour, in.NightMaxMin, in.NightRuleID)
+		in.NightStartHour, in.NightEndHour, in.NightMaxMin, in.NightRuleID,
+		scoring.NormalizePenaltyUnit(in.NightPenaltyUnitMin), in.NightPenaltyPoints)
 	return err
 }
 
@@ -276,6 +282,13 @@ func (r *Screen) Settle(ctx context.Context, p SettleParams) (*SettleResult, err
 	if p.Rule.NightEnabled() && p.NightMin != nil {
 		ok := *p.NightMin <= *p.Rule.NightMaxMin
 		nightOK = &ok
+		if !ok {
+			// 未达标：超出部分按单位向上取整，每单位扣 N 分（2026-11-05）
+			// 口径见 scoring.NightPenalty；points=0 时返回 0，即「只不加分 + 连续清零」
+			nightPoint = scoring.NightPenalty(
+				*p.NightMin, *p.Rule.NightMaxMin,
+				p.Rule.NightPenaltyUnitMin, p.Rule.NightPenaltyPoints)
+		}
 		if ok {
 			streak = 1 + countPrevStreak(ctx, tx, p.MemberID, date)
 			nightPoint = 0
@@ -330,7 +343,14 @@ func (r *Screen) Settle(ctx context.Context, p SettleParams) (*SettleResult, err
 	if nightOK != nil {
 		title := fmt.Sprintf("按时睡觉（夜间使用 %d 分钟，上限 %d）", *p.NightMin, *p.Rule.NightMaxMin)
 		if !*nightOK {
-			title = fmt.Sprintf("未按时睡觉：夜间使用 %d 分钟，超过 %d 分钟", *p.NightMin, *p.Rule.NightMaxMin)
+			over := *p.NightMin - *p.Rule.NightMaxMin
+			if over < 0 {
+				over = 0
+			}
+			unit := scoring.NormalizePenaltyUnit(p.Rule.NightPenaltyUnitMin)
+			units := (over + unit - 1) / unit
+			title = fmt.Sprintf("未按时睡觉：夜间使用 %d 分钟，超 %d 分钟（%d × %d 分钟）",
+				*p.NightMin, over, units, unit)
 		}
 		var awardJSON *string
 		if len(awards) > 0 {

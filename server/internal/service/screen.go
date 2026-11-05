@@ -89,6 +89,9 @@ type SaveScreenRuleInput struct {
 	NightEndHour   *int   `json:"night_end_hour"`
 	NightMaxMin    *int   `json:"night_max_min"`
 	NightRuleID    *uint64 `json:"night_rule_id"`
+	// 未按时睡觉的扣分口径（2026-11-05）：超出部分按单位向上取整，每单位扣 N 分
+	NightPenaltyUnitMin *int `json:"night_penalty_unit_min"` // 30 或 60，缺省 30
+	NightPenaltyPoints  *int `json:"night_penalty_points"`   // 每单位扣分，缺省 0（不扣）
 }
 
 // SaveScreenRule 保存某成员的屏幕时间规则（组长）。
@@ -127,12 +130,35 @@ func (s *Screen) SaveScreenRule(ctx context.Context, me *model.Member, in SaveSc
 		if *in.NightMaxMin < 0 {
 			return nil, fmt.Errorf("%w：允许分钟数不能为负", ErrNightConfigInvalid)
 		}
+		// night_rule_id 由**后端推导**，不要求前端传：每组只有一条规则（见 saveRuleForFamily），
+		// 让 App 去知道内部 ID 既没必要，也容易传错（历史上 App 一直没传，导致保存必 400）。
 		if in.NightRuleID == nil {
-			return nil, fmt.Errorf("%w：启用夜间判定必须指定 night_rule_id", ErrNightConfigInvalid)
+			existing, err := s.screen.RuleByFamily(ctx, *me.FamilyID)
+			if err != nil {
+				return nil, fmt.Errorf("%w：本组还没有睡觉规则，请先配置连续奖励档位", ErrNightConfigInvalid)
+			}
+			id := existing.ID
+			in.NightRuleID = &id
 		}
 		if _, err := s.screen.RuleByID(ctx, *me.FamilyID, *in.NightRuleID); err != nil {
 			return nil, fmt.Errorf("%w：night_rule_id 指向的规则不存在", ErrNightConfigInvalid)
 		}
+	}
+
+	// 扣分口径校验（2026-11-05）：单位只能是 30/60，分值不能为负
+	penaltyUnit := 30
+	if in.NightPenaltyUnitMin != nil {
+		if *in.NightPenaltyUnitMin != 30 && *in.NightPenaltyUnitMin != 60 {
+			return nil, fmt.Errorf("%w：扣分单位只能是 30 或 60 分钟", ErrNightConfigInvalid)
+		}
+		penaltyUnit = *in.NightPenaltyUnitMin
+	}
+	penaltyPoints := 0
+	if in.NightPenaltyPoints != nil {
+		if *in.NightPenaltyPoints < 0 {
+			return nil, fmt.Errorf("%w：每单位扣分不能为负", ErrNightConfigInvalid)
+		}
+		penaltyPoints = *in.NightPenaltyPoints
 	}
 
 	enabled := true
@@ -145,6 +171,7 @@ func (s *Screen) SaveScreenRule(ctx context.Context, me *model.Member, in SaveSc
 		PenaltyPoints: in.PenaltyPoints, Enabled: enabled,
 		NightStartHour: in.NightStartHour, NightEndHour: in.NightEndHour,
 		NightMaxMin: in.NightMaxMin, NightRuleID: in.NightRuleID,
+		NightPenaltyUnitMin: penaltyUnit, NightPenaltyPoints: penaltyPoints,
 	}
 	if err := s.screen.SaveScreenRule(ctx, rule); err != nil {
 		return nil, err

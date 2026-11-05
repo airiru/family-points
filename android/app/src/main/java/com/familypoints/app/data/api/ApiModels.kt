@@ -219,6 +219,9 @@ data class ScreenRuleView(
     @SerialName("night_start_hour") val nightStartHour: Int? = null,
     @SerialName("night_end_hour") val nightEndHour: Int? = null,
     @SerialName("night_max_min") val nightMaxMin: Int? = null,
+    // 未按时睡觉的扣分口径（2026-11-05）：单位 30/60 分钟，每单位扣 N 分
+    @SerialName("night_penalty_unit_min") val nightPenaltyUnitMin: Int = 30,
+    @SerialName("night_penalty_points") val nightPenaltyPoints: Int = 0,
     val enabled: Boolean = true,
 )
 
@@ -228,6 +231,8 @@ data class ScreenReportView(
     @SerialName("report_date") val reportDate: String = "",
     @SerialName("total_min") val totalMin: Int = 0,
     @SerialName("night_min") val nightMin: Int = 0,
+    // 判定结果由服务端给出（前端不自己算达标，见「规则全部由后端判断」）
+    @SerialName("night_ok") val nightOk: Boolean? = null,
     val points: Int = 0,
     val source: String = "auto",
     val revision: Int = 1,
@@ -300,6 +305,9 @@ data class ScreenRuleSaveReq(
     @SerialName("night_start_hour") val nightStartHour: Int,
     @SerialName("night_end_hour") val nightEndHour: Int,
     @SerialName("night_max_min") val nightMaxMin: Int,
+    // 只发配置值；怎么扣由后端算
+    @SerialName("night_penalty_unit_min") val nightPenaltyUnitMin: Int? = null,
+    @SerialName("night_penalty_points") val nightPenaltyPoints: Int? = null,
     val enabled: Boolean = true,
 )
 
