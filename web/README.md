@@ -32,7 +32,7 @@ npm run build    # 产物在 dist/
 src/
 ├── api.js            统一 fetch 封装：token、401 跳登录、CSV 下载
 ├── store.js          全局状态：当前管理员 + 当前家庭组（localStorage 记忆）
-├── router.js         16 条路由（含 1 条 catch-all redirect）+ 登录守卫
+├── router.js         15 条路由（14 页面 + 1 条 catch-all redirect）+ 登录守卫
 ├── toast.js          轻量提示
 ├── components/
 │   └── AppLayout.vue 侧边导航 + 顶部家庭组切换

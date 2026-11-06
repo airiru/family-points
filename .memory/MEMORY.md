@@ -3,6 +3,14 @@
 > 本文件是**每次会话开头必读**的提炼层，不是归档。上限约 50 KB，超了先归档再蒸馏。
 > 日志在 `.memory/YYYY-MM-DD.md`，**追加式**，不要覆盖。
 > 记忆是**线索不是事实**——凡能从磁盘验证的结论，动手前先去验证。
+>
+> ⚠️ **计数类信息（文件数 / 表数 / 页面数 / 脚本数 / 行数）一律不写死在提炼层**（2026-11-06 定）。
+> 每次加功能都会变，写死就必然滞后；11-06 实测一次就发现 7 处计数漂移。
+> 需要时现场跑：`find server -name '*.go' | wc -l`、
+> `find android/app/src/main/java -name '*.kt' | wc -l`、
+> `find web/src/pages -name '*.vue' | wc -l`、`ls server/scripts/*_check.sh | wc -l`、
+> `grep -c 'CREATE TABLE' server/migrations/0001_init.up.sql`、`wc -l < docs/features.md`。
+> 本文件只记**架构、不变量、决策理由、踩过的坑**；页面/界面口径以 `docs/features.md` 13/14 节为准。
 
 ## 〇、开发阶段铁律（2026-11-04 用户明确）
 
@@ -37,26 +45,28 @@
 - 文档：features 8.4（不变量）、12.1（余额下限）、10.5（澄清只约束主动支出）、
   23 节验收 123–127；行为锁在 `p5_screen_check.sh` 第 10 节。
 
-## 一、仓库现状：**v3 三层已全部落地**（2026-11-04 核对磁盘）
+## 一、仓库现状：**v3 三层已全部落地**（2026-11-06 复核磁盘）
 
 > 2026-11-03 用户拍板「一切从 0 开始」，v1 全套（Vue + Worker + KV）删除；
 > 2026-11-03 起 v3 从零实现，**截至 2026-11-04 已跑通端到端**。
 > 需要查阅旧 v1 实现时用 git 历史取回：`git show 46ff29e:worker/index.js`
 > （**46ff29e 是最后一次 v1 代码提交**）。
 
-| 目录 | 现状（磁盘实测） |
+| 目录 | 现状（定性；计数现场实测） |
 |---|---|
-| `server/` | Go + Gin + sqlx，**45 个 .go**，`internal/` 13 个子包（auth/config/db/handler/httpx/middleware/model/repo/router/scoring/service/audit） |
-| `server/migrations/` | **单一 `0001_init`**（已 squash，20 张表）+ `embed.go` |
-| `server/scripts/` | **10 个验收脚本** p1–p8b + p9_coupon |
-| `android/` | Kotlin + Compose，**19 个 .kt**，已真实构建出 APK |
-| `web/` | Vue 3 + Vite，**15 个页面**（含 Login + 改密页），仅管理员 |
-| `docs/features.md` | **约 2170 行**，1–25 节，功能唯一事实源 |
-| `README.md` | **已整体失效**（顶部有失效声明），待重写 |
+| `server/` | Go + Gin + sqlx，`internal/` 按职责分包：auth / config / db / handler / httpx / middleware / model / **notify** / repo / router / scoring / service / audit |
+| `server/migrations/` | **单一 `0001_init`**（已 squash）+ `embed.go`；表清单以 DDL 与 `migrate -verify` 为准 |
+| `server/scripts/` | `p1`–`p11` + `p8b` 验收脚本，另有 `api_audit.py`（**双向硬门禁**）与 `lib_admin.sh`（统一管理员登录） |
+| `android/` | Kotlin + Compose，已真实构建 APK；界面口径见 features 13 节（16 个，3 个仅组长可见） |
+| `web/` | Vue 3 + Vite，仅管理员；页面见 `web/src/pages/`（含 Login + 强制改密页，无成员只读视图） |
+| `docs/features.md` | 1–25 节，**功能唯一事实源**；含权限矩阵、接口清单、数据模型、验收要点 |
+| `README.md` | **2026-11-06 已整份重写为 v3 导航**：只讲「怎么跑起来 + 去哪查」，不复述业务细节 |
 
 **阶段进度**：P1 认证 → P2 多租户 → P3 家庭组 → P4 账目 → P5 屏幕时间 →
 P6 任务投票 → P7 榜单 → P8a 审计通知 → P8b 后台管理 → **P9 商品券** 全部完成；
-Android 客户端与 Web 后台均已实现。**剩下的是部署（19.5–19.7 挂起）。**
+Android 客户端与 Web 后台均已实现。11-06 又补了 Web 设备明细、Android 趋势折线、
+接口清单清理、README 重写与负余额不变量（见当日日志续1–续3）。
+**剩下的是部署（19.5–19.7 挂起）。**
 
 **v1 曾经是什么**（仅供对照，代码已不在盘上）：
 
@@ -73,10 +83,10 @@ Android 客户端与 Web 后台均已实现。**剩下的是部署（19.5–19.7
 
 | 维度 | v1（已删除） | v3（当前实现） |
 |---|---|---|
-| 存储 | KV 单键 `state` | **MySQL 8**（InnoDB / utf8mb4，20 张表） |
+| 存储 | KV 单键 `state` | **MySQL 8**（InnoDB / utf8mb4，单一 squash 迁移） |
 | 后端 | Cloudflare Worker (JS) | **Go + Gin + sqlx**，自建服务器 |
-| Web | 前端应用（双角色） | **管理后台**（仅 `admins`，无成员视图，**15 页**） |
-| Android | 无 | **Kotlin + Compose 原生**（成员端，16 个界面，3 个仅组长可见） |
+| Web | 前端应用（双角色） | **管理后台**（仅 `admins`，无成员视图） |
+| Android | 无 | **Kotlin + Compose 原生**（成员端，16 个界面 / 3 个仅组长可见，见 features 13 节） |
 | 部署 | Cloudflare Pages | **自建服务器**：Nginx + Docker Compose（**未做**） |
 
 **已定决策**（用户明确选择，不要重新讨论）：
@@ -88,6 +98,11 @@ Android 客户端与 Web 后台均已实现。**剩下的是部署（19.5–19.7
    `members`（Android 组长/成员，参与积分），互不通用、token 类型隔离。
 6. **前台没有管理员，只有组长 `leader`**：可发布/审核任务、记一笔；
    不能改成员/规则/设备、不能看审计（那是后台专属）。
+
+> ⚠️ **实施期修正（原文保留决策链，以 features 与代码为准）**：第 6 条的
+> 「记一笔」已整体移除（见第 18 条）、任务审核改为**全员投票**而非组长专属（第 26 条）；
+> 第 23 条里的「设备管理」随设备令牌机制一并删除（一之五）、
+> 「移交管理员」明确不做（15.2 清理记录）。这些是早期规划的措辞，不是当前功能。
 
 **v3 相对 v1 的关键变化**：取消 500 条记录截断；密码 SHA-256 → **bcrypt**（**无旧数据、不迁移**）；
 Token 改 **Access 2h + Refresh 30d**；并发兑换需事务 + `FOR UPDATE` 防超兑；
@@ -103,7 +118,8 @@ Token 改 **Access 2h + Refresh 30d**；并发兑换需事务 + `FOR UPDATE` 防
 >    幂等靠条件更新（受影响行数 0 = 已处理，ORM 的 `Save` 表达不了）、
 >    覆盖重算要 5–6 步同一事务、`FOR UPDATE` 加锁顺序、不能把 `pass_hash` 带出去。
 > 2. 本项目**只有一个数据库**（MySQL），不存在多方言需求 —— sqlx 不是为跨库，是为 SQL 可控。
-> 3. 现状规模：10 个 repo 文件、**157 条 SQL**、**31 处手写列清单**、12 处 `FOR UPDATE`。
+> 3. 现状规模：repo 层按领域分文件，SQL / 手写列清单 / `FOR UPDATE` 都在同一个目录里，
+>    量级现场 `grep` 统计即可（`grep -o 'FOR UPDATE' server/internal/repo/*.go | wc -l`）。
 >    换 ORM 等于重写整个 repo 层，风险远大于收益。
 >
 > ⚠️ **加字段时的规矩（重要，能防静默 bug）**：
@@ -155,7 +171,7 @@ Token 改 **Access 2h + Refresh 30d**；并发兑换需事务 + `FOR UPDATE` 防
 
 **~~v1 约定（已作废）~~**：
 
-1. ~~**单键全量状态**：`STATE_KEY = 'state'`…~~ → v3 是 MySQL 20 张表 + 事务。
+1. ~~**单键全量状态**：`STATE_KEY = 'state'`…~~ → v3 是 MySQL 关系型多表 + 事务。
 2. ~~**接口协议统一**：`{ ok, state?, error? }`…~~ → v3 是 `{ ok, data?, error? }`。
 3. ~~**鉴权是无状态 token**：HMAC 签在 `state.secret` 上，30 天…~~ → v3 是 JWT，Access 2h + Refresh 30d。
 4. ~~**权限收敛在后端**（非 admin 只放行 `item/redeemSelf`）~~ → v3 见第 9 条多租户隔离。
@@ -309,48 +325,87 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
 ## 四、记忆协议自身的落点
 
 - 权威源：`.memory/skills/memory-handoff/SKILL.md`（进仓库，可 review / 可回溯）
-- 已存在的工具级副本（2026-11-03 实测 **4 份**，**每次会话现场重算，不要引用本清单**）：
-  `~/.workbuddy-ai/skills/`、`~/.workbuddy/skills/`、`~/.dsh/skills/`、`~/.trae-cn/skills/`
+- 工具级副本**每次会话现场重算，不要引用任何清单**（份数会变：
+  11-06 就多出一份 `~/.gemini/skills/`）：
+  `ROOT=.memory/skills/memory-handoff/SKILL.md; for d in ~/.*/skills; do [ -d "$d/memory-handoff" ] || continue; diff --strip-trailing-cr -q "$ROOT" "$d/memory-handoff/SKILL.md" >/dev/null && echo "$d 一致" || echo "$d ★漂移"; done`
+- ⚠️ 副本是 **CRLF**、仓库权威源是 **LF**，直接 `diff -q` 会全报差异（假阳性）——
+  **必须带 `--strip-trailing-cr`**。11-06 实测全部工具级副本与权威源内容一致、无漂移。
 - 同步后必须逐份 `diff` 核验为空，不要只信脚本跑过了。
 
 ## 五、功能口径的单一事实源
 
 **`docs/features.md` 是功能清单的唯一依据**（2026-11-02 起）。它按「✅ 已实现 / ⬜ 待实现 /
 ⚠️ 需确认 / ⛔ 已知缺口」标注每一条，并含权限矩阵、接口清单、数据模型、验收要点。
-**README 已过时，不要拿它当功能依据**；两者冲突时以 `features.md` 与代码为准。
+**README（2026-11-06 重写后）只做导航与上手，不承载功能口径**；冲突时以 `features.md` 与代码为准。
 新增或修改功能后，须同步更新该文件的对应条目——它是给人 review 的交付物，不是草稿。
 
-## 六、已知待办 / 未修
+> ⚠️ **features 里有一部分 ⬜ 是 v1 时代的状态标记，v3 已实现但没回写**（11-06 抽查发现）：
+> 5.1.1–5.1.3 注册建组、6.x 成员管理若干条、16.2.6 `/healthz`、22.2.1 预设头像选择、
+> 22.2.4 榜单展示头像；22.1.1「待审提醒待补」也不准（`notify.TaskSubmitted` 已实现）。
+> **改状态标记前先查代码**，别把「文档滞后」当「功能没做」，也别把真缺口一起抹平。
+> 明确不做 / 挂起项（16 节部署、19.5–19.7、25 节全服任务、9.4/10.2.6 撤销、
+> 22.1.5 系统推送、22.2.2 自定义头像上传）**不是待办**。
 
-- **v3 三层已实现完毕**（2026-11-04 核对）：P1–P9 后端、Android 客户端、Web 后台全部落地，
-  P1–P9 验收 **269 项全过**。架构冻结为 MySQL 8 + Go + Web 后台 + Kotlin 原生，**不要再讨论换栈**。
-- **下一步是部署**（19.5–19.7 挂起中）：服务器规格、是否公开注册、域名备案。
-  **不阻塞功能开发**；开发期默认口径：开放注册（限流/验证码不实现但留挂载点）、
-  一律 `localhost`、MySQL 本机。
-- **两项曾未选型，现已定**：Web 用 **Vue 3**（已实现）；Android `minSdk` = **26**（已构建验证）。
-- **Web 15 个页面已逐页点检**（2026-11-04，Edge 无头真实登录遍历）：0 控制台错误、
-  0 失败请求；过程中修掉 4 个真问题（缺改密页导致登录死锁、`.pad` 无内边距、
+## 六、已知待办 / 未修（2026-11-06 重排）
+
+> 状态以 `docs/features.md` 与磁盘为准；本节只是**索引**，细节在 features 与当日日志。
+> 架构冻结为 MySQL 8 + Go + Web 后台 + Kotlin 原生，**不要再讨论换栈**；
+> Web 用 Vue 3、Android `minSdk` 26，均已构建验证。
+
+### 6.1 已完成，别再当待办
+
+- **11-06 早全量回归 298 项全过**（当时全部验收脚本）；当天新增断言后
+  p5 扩到 **56/56**、p7 扩到 **28/28**，单脚本复跑通过（**全量未再跑**）。
+  引用回归数字时说清是「全量」还是「单脚本」，别把两者混成一个结论。
+- 11-06 四项成果：Web 设备明细（新增只读 admin 接口 + 页面）、
+  Android 趋势折线（**先修 `TrendPoint` 的 `label/value` → `date/earned/net` 错配**才能画出来）、
+  接口清单 7 条漂移清理 + `api_audit.py` 升为**双向硬门禁**、README 整份重写；
+  另确立 8.4「余额可为负」不变量（见〇之二）。
+- 原「三项未验证」已补齐：logout（全量吊销 refresh）、Web access 自动刷新
+  （401 → 换 token → 重放，并发共享 `refreshing` promise）、券核销端到端。
+  ⚠️ **改密会吊销全部 refresh**，改密成功后必须重新登录取新 token。
+- Web 页面 2026-11-04 已逐页点检（Edge 无头真实登录遍历，0 控制台错误 / 0 失败请求），
+  当时修掉 4 个真问题（缺改密页导致登录死锁、`.pad` 无内边距、
   任务「已完成」统计用了不存在的 `status==='done'`、按钮被 flex 压成竖排）。
-  Android 未做趋势图折线（接口已接）。
-- **原「未验证三项」已全部补齐**（2026-11-05 晚）：
-  ① **logout 已实现**：`POST /api/admin/logout`、`/api/app/logout`，按主体**全量吊销 refresh**；
-     验收 `scripts/p10_logout_check.sh` 12/12。前端登出按钮改为「先调接口再清本地」。
-  ② **Web 端 access 自动刷新已实现并实测**：401 → 换新 token → 重放原请求，
-     并发 5 个请求只刷新 1 次（`refreshing` 共享 promise）。用无头浏览器验证通过。
-     **改密会吊销全部 refresh**，所以改密成功后必须重新登录取新 token —— 这点最初漏了，
-     表现为「当前 access 还能用 2h，到期后莫名被踢」。
-  ③ **券核销全链路已端到端验证**（模拟器 + 3 账号）：A 兑换→发券→使用(pending)→
-     B 投票(1/2)→C 投票(2/2 核销)→A 界面显示「已核销」。驳回路径与 1 人家庭由 p9 覆盖。
-- ~~榜单 N+1~~ **已修**（2026-11-05）：`repo.Report.Streaks` 一次查全组，
-  4 人家庭 2.0–4.7s → 1.0–1.6s；剩余 ~1.2s 是远端 MySQL 两次往返 RTT，
-  要再压只能加缓存或把库搬到应用同机。
-- **README.md 已整体失效**（2026-11-03）：描述的是已删除的 v1。
-  **不必逐条纠错**——v3 稳定后整份重写。
-- **回归脚本的管理员密码**（2026-11-05）：脚本会改管理员密码（p2 改密流程、p8b 也改），
-  写死一个值必然在某个时点集体假红。已统一走 `scripts/lib_admin.sh` 的 `admin_login()`：
-  先试 `ADMIN_PASSWORD` 环境变量，再兜底 `admins1234 / admins123 / admins`。
-  **新写验收脚本一律 source 它，不要自己拼登录 curl。**
-- **本地环境两个坑**（2026-11-04 实测）：
-  ① 本机 `http_proxy` 会吞掉 localhost 请求并返回误导性 502，排查一律加 `curl --noproxy '*'`；
-  ② `p8b_admin_check.sh` 会把默认管理员密码改成 `admins123`，跑完回归需
+  路由口径记牢：`router.js` 的 **`routes` 数组 = 全部页面 + 1 条 catch-all**，
+  页面清单看 `web/src/pages/`（含登录页、强制改密页）。
+  ⚠️ `grep -c 'path:'` 会**多算一个**——登录守卫 `beforeEach` 里也有 `path: '/login'`，
+  它不是路由条目。11-06 就是这么把 15 写成 16 的。
+- 榜单 N+1 已修（`repo.Report.Streaks` 一次查全组，2.0–4.7s → 1.0–1.6s；
+  剩余 ~1.2s 是远端 MySQL 两次 RTT，要再压只能加缓存或把库搬到应用同机）。
+- README 已于 11-06 重写完成；**「README 已整体失效」是过期陈述，已作废**。
+
+### 6.2 真·功能缺口（11-06 查代码确认没有）
+
+| 项 | 落点 |
+|---|---|
+| 兑换成功通知 | `service/ledger.go` 的 `Redeem` 无 `notifier` 调用；`notify.Service` 里没有兑换相关方法 |
+| 登录 / 改密落审计 | `handler/auth.go` 无 `recordAudit`；features 21.2 明写「至今未落审计」 |
+| 审计日志 180 天定时清理、日志导出 | 全仓无 ticker/cron；21.3.4 ⚠️ / 21.3.5 ⬜（**记录** CSV 导出已有，日志导出没有） |
+| **P3.1 组长按用户名直接邀请** | 5.2.3：需「待确认邀请」状态机 + 新表；后台侧 15.2.3 语义不同（只拉未入组用户、无确认环节）。**唯一要动表结构的项** |
+| Android 补算最近 7 天 / 国产 ROM 保活引导 | 12.2.5 `runNow()` 只补「昨天」；12.2.8 未做 |
+| 投票过期仅惰性清扫 | `repo/task.go` 读路径 `ExpireDue`，无定时任务（家庭量级够，属设计取舍不是 bug） |
+
+### 6.3 未复验 / 缺界面级证据
+
+- 屏幕时间**真机**上报（11-05 USB 掉线后改用模拟器完成 UI 验证，至今未复验）。
+- Android 趋势折线**界面截图**：本机无 AVD / system-image，连着的真机按约定不占用；
+  证据只到「编译通过 + 服务端 DTO 契约断言 + p7 锁字段/日期格式」。
+
+### 6.4 明确挂起 / 明确不做（不是待办）
+
+部署 16 节全表 + 19.5–19.7（服务器规格、是否公开注册、域名备案，**不阻塞开发**；
+开发期默认开放注册 / 一律 localhost / MySQL 本机）、25 节全服任务与家庭星（已设计已搁置）、
+9.4 撤销兑换 / 10.2.6 撤销赠送、22.1.5 系统推送、22.2.2 自定义头像上传、
+图片凭证、后台代审核、移交管理员、Web 成员只读视图。
+**下一步主线是部署（挂起中）**，功能开发已收口。
+
+### 6.5 环境与工具坑（长期有效）
+
+- **回归脚本的管理员密码**：p2 / p8b 会改管理员密码，写死一个值必然集体假红。
+  统一走 `scripts/lib_admin.sh` 的 `admin_login()`（先试 `ADMIN_PASSWORD`，再兜底
+  `admins1234 / admins123 / admins`）。**新写验收脚本一律 source 它，不要自己拼登录 curl。**
+- 本机 `http_proxy` 会吞掉 localhost 请求并返回误导性 502，排查一律加 `curl --noproxy '*'`。
+- `p8b_admin_check.sh` 会把默认管理员密码改成 `admins123`，跑完回归需
   `DELETE FROM admins` + `migrate -seed-admin` 复位。
+- 数据库是远端开发库；本机起 API 做验收后记得停进程，临时浏览器脚本/截图**验完即删**。
