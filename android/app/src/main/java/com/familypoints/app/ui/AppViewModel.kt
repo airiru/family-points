@@ -37,6 +37,7 @@ import com.familypoints.app.data.api.SubmitReq
 import com.familypoints.app.data.api.TaskDetailView
 import com.familypoints.app.data.api.TaskIdReq
 import com.familypoints.app.data.api.TaskView
+import com.familypoints.app.data.api.TrendPoint
 import com.familypoints.app.data.api.TransferLeaderReq
 import com.familypoints.app.data.api.TransferReq
 import com.familypoints.app.data.api.VoteReq
@@ -90,6 +91,10 @@ class AppViewModel @Inject constructor(
 
     private val _ranking = MutableStateFlow<List<RankingRow>>(emptyList())
     val ranking: StateFlow<List<RankingRow>> = _ranking.asStateFlow()
+
+    /** 积分趋势（全组，按天）。period 只作展示参数，判定与聚合都在后端。 */
+    private val _trend = MutableStateFlow<List<TrendPoint>>(emptyList())
+    val trend: StateFlow<List<TrendPoint>> = _trend.asStateFlow()
 
     private val _records = MutableStateFlow<List<RecordView>>(emptyList())
     val records: StateFlow<List<RecordView>> = _records.asStateFlow()
@@ -257,6 +262,11 @@ class AppViewModel @Inject constructor(
     fun loadRanking(type: String, period: String = "week") = launchBusy(showBusy = false) {
         val resp = api.ranking(type, period)
         _ranking.value = resp.data?.rows.orEmpty()
+    }
+
+    /** 不传 member_id：后端按全组聚合，普通成员也不会触发 403（查他人才需要组长）。 */
+    fun loadTrend(period: String = "week") = launchBusy(showBusy = false) {
+        _trend.value = api.trend(period = period).data?.points.orEmpty()
     }
 
     fun loadRecords(memberId: Long? = null, keyword: String? = null) = launchBusy(showBusy = false) {

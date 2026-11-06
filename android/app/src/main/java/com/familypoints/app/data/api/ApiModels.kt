@@ -118,8 +118,13 @@ data class TrendView(
     val points: List<TrendPoint> = emptyList(),
 )
 
+/** 与后端 `repo.TrendPoint` 对齐：按天聚合，earned=当天正分之和，net=含负分的净变动。 */
 @Serializable
-data class TrendPoint(val label: String = "", val value: Int = 0)
+data class TrendPoint(
+    val date: String = "",
+    val earned: Int = 0,
+    val net: Int = 0,
+)
 
 @Serializable
 data class TaskView(

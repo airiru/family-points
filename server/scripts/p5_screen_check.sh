@@ -43,7 +43,7 @@ chk "档位重复 → 400" "400" "$(code -X POST $B/api/app/rule/save -H "Author
 chk "夜间三项不全 → 400" "400" "$(code -X POST $B/api/app/screen-rule/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"threshold_min\":120,\"bonus_points\":2,\"penalty_points\":3,\"night_start_hour\":0}")"
 chk "开始=结束 → 400" "400" "$(code -X POST $B/api/app/screen-rule/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"threshold_min\":120,\"bonus_points\":2,\"penalty_points\":3,\"night_start_hour\":7,\"night_end_hour\":7,\"night_max_min\":0,\"night_rule_id\":1}")"
 
-echo "== 3. 给小孩建默认规则 + 设备令牌 =="
+echo "== 3. 给小孩建默认规则 + 上报鉴权 =="
 RULE_ID=$(echo "$RULE" | jget "['data']['rules'][0]['id']")
 chk "给小孩配规则 → 200" "200" "$(code -X POST $B/api/app/screen-rule/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"threshold_min\":120,\"bonus_points\":2,\"penalty_points\":3,\"night_start_hour\":0,\"night_end_hour\":7,\"night_max_min\":0,\"night_rule_id\":$RULE_ID}")"
 A_AT=$(admin_login "$B")
@@ -101,6 +101,16 @@ chk "小孩当天汇总 50" "50" "$(echo "$FAM" | python -c "import sys,json;d=j
 chk "小孩有 2 台设备明细" "2" "$(echo "$FAM" | python -c "import sys,json;d=json.load(sys.stdin);print(len([m for m in d['data']['members'] if m['member_id']==$M_ID][0]['devices']))")"
 chk "设备明细含型号" "True" "$(echo "$FAM" | python -c "import sys,json;d=json.load(sys.stdin);ms=[m for m in d['data']['members'] if m['member_id']==$M_ID][0]['devices'];print(any(x['device_model'] in ('手机','平板') for x in ms))")"
 chk "本人设备列表 2 台" "2" "$(curl -s "$B/api/app/screen/devices" -H "Authorization: Bearer $M_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(len(d['data']['devices']))")"
+
+echo "== 9. 后台设备原始上报明细（12.6）=="
+A_ADMIN=$(admin_login "$B")
+DET=$(curl -s "$B/api/admin/family/$FID/screen-device-reports?date=2026-10-25" -H "Authorization: Bearer $A_ADMIN")
+chk "后台明细含小孩 2 台设备" "2" "$(echo "$DET" | python -c "import sys,json;d=json.load(sys.stdin);print(len([r for r in d['data']['reports'] if r['member_id']==$M_ID]))")"
+chk "明细保留各设备原始时长 30/20" "True" "$(echo "$DET" | python -c "import sys,json;d=json.load(sys.stdin);v=sorted(r['total_min'] for r in d['data']['reports'] if r['member_id']==$M_ID);print(v==[20,30])")"
+chk "明细带设备型号" "True" "$(echo "$DET" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['device_model'] in ('手机','平板') for r in d['data']['reports']))")"
+chk "已登记设备 2 台" "2" "$(echo "$DET" | python -c "import sys,json;d=json.load(sys.stdin);print(len([x for x in d['data']['devices'] if x['member_id']==$M_ID]))")"
+chk "按成员筛选只返回该成员" "True" "$(curl -s "$B/api/admin/family/$FID/screen-device-reports?member_id=$M_ID" -H "Authorization: Bearer $A_ADMIN" | python -c "import sys,json;d=json.load(sys.stdin);print(all(r['member_id']==$M_ID for r in d['data']['reports']))")"
+chk "日期格式非法 → 400" "400" "$(code "$B/api/admin/family/$FID/screen-device-reports?date=2026/10/25" -H "Authorization: Bearer $A_ADMIN")"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"

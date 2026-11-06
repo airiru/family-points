@@ -79,6 +79,33 @@ func (a *Admin) ScreenReports(ctx context.Context, familyID, memberID uint64, li
 	return a.screen.Reports(ctx, familyID, memberID, limit)
 }
 
+// ScreenDeviceReports 后台设备明细：原始上报列表 + 已登记设备（均只读）。
+// 原始上报是「每台设备每天一行」；结算行仍是「每人每天一行」（多设备相加，见 12.4），
+// 这里只做展示，不重新汇总、不重新判定。
+func (a *Admin) ScreenDeviceReports(ctx context.Context, familyID, memberID uint64, date time.Time, limit int) ([]model.DeviceReport, []model.MemberDevice, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	reports, err := a.screen.DeviceReports(ctx, familyID, memberID, date, limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	devices, err := a.screen.DevicesOfFamily(ctx, familyID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if memberID != 0 {
+		kept := devices[:0]
+		for _, d := range devices {
+			if d.MemberID == memberID {
+				kept = append(kept, d)
+			}
+		}
+		devices = kept
+	}
+	return reports, devices, nil
+}
+
 // Records 本组流水（只读，服务端分页与筛选）。
 func (a *Admin) Records(ctx context.Context, f repo.RecordFilter) ([]model.Record, int, error) {
 	if f.Limit <= 0 || f.Limit > 200 {

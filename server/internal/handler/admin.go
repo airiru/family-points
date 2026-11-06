@@ -355,6 +355,31 @@ func (h *Admin) ScreenReports(c *gin.Context) {
 	httpx.OK(c, gin.H{"reports": list})
 }
 
+// ScreenDeviceReports GET /api/admin/family/:family_id/screen-device-reports —— 设备原始上报明细（只读）。
+// date=YYYY-MM-DD 可省略（不限日期）；member_id=0 表示全组。
+func (h *Admin) ScreenDeviceReports(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	var day time.Time
+	if v := c.Query("date"); v != "" {
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			httpx.BadRequest(c, "日期格式应为 YYYY-MM-DD")
+			return
+		}
+		day = t
+	}
+	reports, devices, err := h.svc.ScreenDeviceReports(
+		c.Request.Context(), fid, uint64(qInt(c, "member_id", 0)), day, qInt(c, "limit", 50))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"reports": reports, "devices": devices})
+}
+
 // Ranking GET /api/admin/family/:family_id/stats/ranking?mode=points|score&range=week|month
 func (h *Admin) Ranking(c *gin.Context) {
 	fid, ok := pathFamilyID(c)

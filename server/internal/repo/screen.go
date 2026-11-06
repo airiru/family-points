@@ -226,6 +226,28 @@ func (r *Screen) DeviceReportsOfDay(ctx context.Context, familyID uint64, date t
 	return list, err
 }
 
+// DeviceReports 列出后台视图的设备原始上报（只读）。
+// memberID=0 表示全组；date 为零值表示不限日期。全部条件都带 family_id，避免跨组读取。
+func (r *Screen) DeviceReports(ctx context.Context, familyID, memberID uint64, date time.Time, limit int) ([]model.DeviceReport, error) {
+	q := `SELECT id, family_id, member_id, device_key, device_model, report_date,
+	             total_min, night_min, reported_at, updated_at
+	        FROM screen_device_reports WHERE family_id = ?`
+	args := []any{familyID}
+	if memberID != 0 {
+		q += " AND member_id = ?"
+		args = append(args, memberID)
+	}
+	if !date.IsZero() {
+		q += " AND report_date = ?"
+		args = append(args, date.Format("2006-01-02"))
+	}
+	q += " ORDER BY report_date DESC, member_id, total_min DESC, id DESC LIMIT ?"
+	args = append(args, limit)
+	list := []model.DeviceReport{}
+	err := r.db.SelectContext(ctx, &list, q, args...)
+	return list, err
+}
+
 // ---------- 结算 ----------
 
 // SettleParams 是一次上报结算所需的全部输入。

@@ -69,6 +69,10 @@ chk "趋势有 3 天" "3" "$(echo "$T" | jget "['data']['points'].__len__()")"
 chk "第一天净得分 4" "4" "$(echo "$T" | jget "['data']['points'][0]['net']")"
 chk "普通成员查他人趋势 → 403" "403" "$(code "$B/api/app/stats/trend?member_id=1" -H "Authorization: Bearer $M1_AT")"
 chk "组长查他人趋势 → 200" "200" "$(code "$B/api/app/stats/trend?member_id=$M1_ID" -H "Authorization: Bearer $L_AT")"
+# 2026-11-06：Android 折线图的 DTO 契约。旧 DTO 写的是 label/value，会静默取默认值。
+chk "趋势点字段恰为 date/earned/net" "True" "$(echo "$T" | python -c "import sys,json;d=json.load(sys.stdin);print(set(d['data']['points'][0])=={'date','earned','net'})")"
+chk "趋势点日期为 YYYY-MM-DD" "True" "$(echo "$T" | python -c "import sys,json,re;d=json.load(sys.stdin);print(bool(re.fullmatch(r'\d{4}-\d{2}-\d{2}',d['data']['points'][0]['date'])))")"
+chk "全组趋势（不传 member_id）→ 200" "200" "$(code "$B/api/app/stats/trend?period=week" -H "Authorization: Bearer $M1_AT")"
 
 echo "== 6. 兑换后：积分榜降、得分榜不变 =="
 curl -s -o /dev/null -X POST $B/api/app/item/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"name":"糖果","cost":5}'

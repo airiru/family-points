@@ -69,7 +69,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.GET("/family/:family_id", familyHandler.AdminInfo)
 		admin.GET("/family/:family_id/members", familyHandler.AdminMembers)
 
-		// 设备令牌（屏幕时间上报的唯一凭证）
+		// 屏幕时间上报已改为「成员登录态 + 客户端自报 device_key」，不再有设备令牌（2026-11-05）。
 
 		// 审计日志（append-only，只读查询）
 		admin.GET("/audit/list", auditHandler.AdminList)
@@ -93,6 +93,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.GET("/family/:family_id/records", adminHandler.Records)
 		admin.GET("/family/:family_id/transfers", adminHandler.Transfers)
 		admin.GET("/family/:family_id/screen-reports", adminHandler.ScreenReports)
+		admin.GET("/family/:family_id/screen-device-reports", adminHandler.ScreenDeviceReports)
 		admin.GET("/family/:family_id/stats/ranking", adminHandler.Ranking)
 		admin.GET("/family/:family_id/stats/trend", adminHandler.Trend)
 

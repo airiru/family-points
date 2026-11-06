@@ -1,5 +1,6 @@
 package com.familypoints.app.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,6 +39,7 @@ import androidx.navigation.NavHostController
 import com.familypoints.app.data.api.MemberBrief
 import com.familypoints.app.data.api.RankingRow
 import com.familypoints.app.data.api.RecordView
+import com.familypoints.app.data.api.TrendPoint
 import com.familypoints.app.ui.AppViewModel
 import com.familypoints.app.ui.Avatar
 import com.familypoints.app.ui.CardBox
@@ -60,6 +64,7 @@ fun BoardScreen(vm: AppViewModel, nav: NavHostController) {
     val familyName by vm.familyName.collectAsStateWithLifecycle()
     val ranking by vm.ranking.collectAsStateWithLifecycle()
     val members by vm.members.collectAsStateWithLifecycle()
+    val trend by vm.trend.collectAsStateWithLifecycle()
 
     var type by remember { mutableStateOf("points") }
     var period by remember { mutableStateOf("week") }
@@ -67,6 +72,7 @@ fun BoardScreen(vm: AppViewModel, nav: NavHostController) {
     LaunchedEffect(type, period) {
         vm.loadOverview()
         vm.loadRanking(type, period)
+        vm.loadTrend(period)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -90,11 +96,10 @@ fun BoardScreen(vm: AppViewModel, nav: NavHostController) {
             options = listOf("积分榜" to (type == "points"), "得分榜" to (type == "score")),
         ) { index -> type = if (index == 0) "points" else "score" }
 
-        if (type == "score") {
-            SegmentedRow(
-                options = listOf("本周" to (period == "week"), "本月" to (period == "month")),
-            ) { index -> period = if (index == 0) "week" else "month" }
-        }
+        // 本周/本月同时作用于得分榜与趋势折线；积分榜是净额，后端会忽略该参数。
+        SegmentedRow(
+            options = listOf("本周" to (period == "week"), "本月" to (period == "month")),
+        ) { index -> period = if (index == 0) "week" else "month" }
 
         LazyColumn(
             modifier = Modifier
@@ -120,6 +125,7 @@ fun BoardScreen(vm: AppViewModel, nav: NavHostController) {
                     }
                 }
             }
+            item { TrendCard(points = trend, period = period) }
             item {
                 CardBox {
                     Text(
@@ -347,6 +353,125 @@ private fun RecordRow(r: RecordView) {
             Text(fmtTime(r.occurredAt), fontSize = 11.5.sp, color = Sub)
         }
         PointsText(r.points)
+    }
+}
+
+/** 积分趋势折线：只画后端 /api/app/stats/trend 的 date / earned / net，前端不做任何判定。 */
+@Composable
+private fun TrendCard(points: List<TrendPoint>, period: String) {
+    CardBox {
+        Text(
+            "积分趋势（全组 · ${if (period == "month") "本月" else "本周"}）",
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "共赚 ${points.sumOf { it.earned }} 分 · 净 ${points.sumOf { it.net }} 分",
+            fontSize = 11.5.sp,
+            color = Sub,
+        )
+        Spacer(Modifier.height(10.dp))
+        if (points.isEmpty()) {
+            EmptyState("这段时间没有积分变动")
+        } else {
+            TrendChart(points)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(points.first().date.takeLast(5), fontSize = 10.sp, color = Sub)
+                if (points.size > 2) {
+                    Text(points[points.size / 2].date.takeLast(5), fontSize = 10.sp, color = Sub)
+                }
+                Text(points.last().date.takeLast(5), fontSize = 10.sp, color = Sub)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                LegendDot(Primary)
+                Text(" 赚到的分 earned", fontSize = 11.sp, color = Sub)
+                Spacer(Modifier.width(12.dp))
+                LegendDot(Blue)
+                Text(" 净变动 net", fontSize = 11.sp, color = Sub)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "曲线只画服务端按 occurred_at 聚合的结果；补记的旧日期会落在它自己那天。",
+            fontSize = 11.sp,
+            color = Sub,
+            lineHeight = 16.sp,
+        )
+    }
+}
+
+@Composable
+private fun LegendDot(color: androidx.compose.ui.graphics.Color) {
+    Box(
+        Modifier
+            .width(10.dp)
+            .height(3.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(color),
+    )
+}
+
+@Composable
+private fun TrendChart(points: List<TrendPoint>) {
+    // net 可能为负（兑换 / 扣分），所以纵轴下界取 0 与最小净值的较小者。
+    val maxV = maxOf(1, points.maxOf { maxOf(it.earned, it.net) })
+    val minV = minOf(0, points.minOf { minOf(it.earned, it.net) })
+    val span = (maxV - minV).coerceAtLeast(1).toFloat()
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(150.dp)
+            .padding(horizontal = 4.dp, vertical = 8.dp),
+    ) {
+        val left = 0f
+        val right = size.width
+        val bottom = size.height
+        val h = bottom
+        fun xAt(i: Int): Float =
+            if (points.size == 1) (left + right) / 2 else left + (right - left) * i / (points.size - 1)
+        fun yAt(v: Int): Float = bottom - (v - minV) / span * h
+
+        listOf(0f, 0.5f, 1f).forEach { f ->
+            val y = bottom - h * f
+            drawLine(Line, Offset(left, y), Offset(right, y), strokeWidth = 1.dp.toPx())
+        }
+        if (minV < 0) {
+            drawLine(
+                Sub.copy(alpha = 0.5f),
+                Offset(left, yAt(0)),
+                Offset(right, yAt(0)),
+                strokeWidth = 1.dp.toPx(),
+            )
+        }
+
+        // 先画 net（虚线），再画 earned（实线），保证实线在上层。
+        val dash = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
+        if (points.size > 1) {
+            points.forEachIndexed { i, p ->
+                if (i > 0) {
+                    drawLine(
+                        Blue,
+                        Offset(xAt(i - 1), yAt(points[i - 1].net)),
+                        Offset(xAt(i), yAt(p.net)),
+                        strokeWidth = 2.5.dp.toPx(),
+                        pathEffect = dash,
+                    )
+                    drawLine(
+                        Primary,
+                        Offset(xAt(i - 1), yAt(points[i - 1].earned)),
+                        Offset(xAt(i), yAt(p.earned)),
+                        strokeWidth = 3.dp.toPx(),
+                    )
+                }
+            }
+        }
+        points.forEachIndexed { i, p ->
+            drawCircle(Blue, radius = 3.dp.toPx(), center = Offset(xAt(i), yAt(p.net)))
+            drawCircle(Primary, radius = 3.5.dp.toPx(), center = Offset(xAt(i), yAt(p.earned)))
+        }
     }
 }
 

@@ -174,6 +174,21 @@ type DeviceDayReport struct {
 	NightMin    *int   `db:"night_min" json:"night_min"`
 }
 
+// DeviceReport 是后台「设备原始上报」列表的一行（按天 × 设备，只读展示）。
+// 与 DeviceDayReport 的区别：它带日期与写入时间，供后台跨日期翻查，不参与任何结算。
+type DeviceReport struct {
+	ID          uint64     `db:"id" json:"id"`
+	FamilyID    uint64     `db:"family_id" json:"-"`
+	MemberID    uint64     `db:"member_id" json:"member_id"`
+	DeviceKey   string     `db:"device_key" json:"device_key"`
+	DeviceModel string     `db:"device_model" json:"device_model"`
+	ReportDate  time.Time  `db:"report_date" json:"report_date"`
+	TotalMin    int        `db:"total_min" json:"total_min"`
+	NightMin    *int       `db:"night_min" json:"night_min"`
+	ReportedAt  time.Time  `db:"reported_at" json:"reported_at"`
+	UpdatedAt   *time.Time `db:"updated_at" json:"updated_at"`
+}
+
 // ScreenReport 是一天的屏幕时间结算行（幂等载体）。
 type ScreenReport struct {
 	ID            uint64     `db:"id" json:"id"`
