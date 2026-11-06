@@ -187,18 +187,25 @@ fun FamilyScreen(vm: AppViewModel, nav: NavHostController) {
                     }
                 }
 
-                item {
-                    OutlinedButton(
-                        onClick = { confirmLeave = true },
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
-                    ) { Text("退出家庭", color = Red, fontSize = 13.sp) }
-                }
+                // 组长后端明确禁止直接退出（必须先转让），所以不给他一个必然失败的按钮，
+                // 只留说明。2026-11-06 反馈的「点退出报 HTTP 400」正是这个原因。
                 if (me?.isLeader == true) {
                     item {
-                        Text(
-                            "组长不能直接退出：需先把组长转让给其他成员，否则组内会没人能管理。",
-                            fontSize = 11.sp, color = Sub,
-                        )
+                        CardBox {
+                            Text("组长不能直接退出", fontWeight = FontWeight.Medium, fontSize = 13.5.sp)
+                            Text(
+                                "需先把组长转让给其他成员，否则组内会没人能管理。转让入口在「家庭管理」。",
+                                fontSize = 11.5.sp, color = Sub, lineHeight = 17.sp,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
+                } else {
+                    item {
+                        OutlinedButton(
+                            onClick = { confirmLeave = true },
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                        ) { Text("退出家庭", color = Red, fontSize = 13.sp) }
                     }
                 }
             } else {

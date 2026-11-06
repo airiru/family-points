@@ -10,6 +10,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.Route
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -106,6 +107,37 @@ class ApiClient @Inject constructor(
         }
     }.getOrNull()
 
+    /**
+     * 把「业务错误」的 HTTP 状态改写成 200。
+     *
+     * 后端对业务失败返回 `{ok:false,error:"组长需先转让…"}` 配 4xx，
+     * 而 Retrofit 遇到非 2xx 直接抛 HttpException，body 被丢掉，
+     * 用户只看到「HTTP 400」——正是 2026-11-06 反馈的问题。
+     *
+     * 只改写 400/403/404/409/422：
+     * - **不动 401**（TokenAuthenticator 靠它触发刷新）
+     * - **不动 5xx**（那是真故障，应该显眼）
+     * 改写后 `Envelope.ok=false` 且 `error` 有值，各页面照常显示中文提示。
+     */
+    private val businessErrorInterceptor = Interceptor { chain ->
+        val resp = chain.proceed(chain.request())
+        val code = resp.code
+        val soft = code == 400 || code == 403 || code == 404 || code == 409 || code == 422
+        if (!soft) return@Interceptor resp
+
+        val body = resp.body
+        val text = body?.string()
+        if (text != null && text.contains("\"ok\":false")) {
+            return@Interceptor resp.newBuilder()
+                .code(200)
+                .message("OK")
+                .body(text.toResponseBody("application/json; charset=utf-8".toMediaType()))
+                .build()
+        }
+        // 没命中业务错误格式：把 body 原样放回，不改变行为
+        resp.newBuilder().body(text?.toResponseBody(body?.contentType())).build()
+    }
+
     private val okHttp = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
         .addInterceptor(
@@ -114,6 +146,7 @@ class ApiClient @Inject constructor(
                 else HttpLoggingInterceptor.Level.NONE
             }
         )
+        .addInterceptor(businessErrorInterceptor)
         .authenticator(authenticator)
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
