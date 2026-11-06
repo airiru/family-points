@@ -137,8 +137,22 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
 
             item {
                 CardBox {
-                    MenuItem("🎁", "赠送积分", "把积分转给其他成员") { nav.navigate(Routes.GIFT) }
+                    Text("积分管理", fontSize = 12.sp, color = Sub, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    // 只读一行：当前可用积分。与「赠送」同组，因为这两件事是同一件事的两面。
+                    StatRow(
+                        icon = "💰",
+                        title = "可用积分",
+                        subtitle = "当前可以花掉的积分",
+                        value = "${me?.score ?: 0}",
+                    )
                     Divider(color = Line)
+                    MenuItem("🎁", "赠送积分", "把积分转给其他成员") { nav.navigate(Routes.GIFT) }
+                }
+            }
+
+            item {
+                CardBox {
                     MenuItem(
                         "🔔", "通知",
                         if (unread > 0) "有 $unread 条未读" else "投票提醒与结果",
@@ -225,6 +239,32 @@ private fun MenuItem(icon: String, title: String, subtitle: String, badge: Int =
             Spacer(Modifier.width(6.dp))
         }
         Text("›", fontSize = 18.sp, color = Sub)
+    }
+}
+
+/**
+ * 只读信息行：与 [MenuItem] 同一套排版，但没有箭头、不可点，右侧显示数值。
+ * 用在「可用积分」这类只展示不跳转的条目上，避免做成按钮让人以为能点。
+ */
+@Composable
+private fun StatRow(icon: String, title: String, subtitle: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) { Text(icon, fontSize = 16.sp) }
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            if (subtitle.isNotBlank()) Text(subtitle, fontSize = 11.5.sp, color = Sub)
+        }
+        Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp)
     }
 }
 

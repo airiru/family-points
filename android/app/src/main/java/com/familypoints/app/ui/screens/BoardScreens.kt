@@ -276,17 +276,6 @@ fun MemberDetailScreen(vm: AppViewModel, nav: NavHostController, memberId: Long)
                     }
                 }
             }
-            item {
-                if (member != null && member.id != me?.id) {
-                    androidx.compose.material3.Button(
-                        onClick = { nav.navigate(Routes.GIFT) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp),
-                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Primary),
-                    ) { Text("赠送积分给 ${member.nickname}") }
-                }
-            }
             item { Spacer(Modifier.height(12.dp)) }
         }
     }
