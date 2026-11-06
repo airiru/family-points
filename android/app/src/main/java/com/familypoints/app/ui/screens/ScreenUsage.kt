@@ -9,19 +9,26 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.familypoints.app.data.api.DayPoint
@@ -171,47 +178,82 @@ private fun Chip(text: String, active: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * 24 小时柱状图。
+ * 24 小时柱状图。点柱子看该小时的具体分钟数。
  *
  * 高度按**当天最大值**归一化：不用固定刻度，否则孩子用 20 分钟的那天
  * 柱子只有 2 像素高，看不出形状。
+ *
+ * 坐标轴标签与柱子**共用同一套 24 等分网格**（都按 weight(1f) 分格）。
+ * 之前用 SpaceBetween 均分 5 个标签，间距是「宽度 ÷ 4」，
+ * 与「宽度 ÷ 24」的柱子网格根本不是一回事，必然错位。
  */
 @Composable
 internal fun HourlyBars(hours: List<Int>, nightStart: Int, nightEnd: Int) {
     val max = (hours.maxOrNull() ?: 0).coerceAtLeast(1)
+    // 换设备/换天时数据变了，选中项要清空，避免指向一根已经不存在的柱子
+    var picked by remember(hours) { mutableStateOf<Int?>(null) }
+    val pickedMinutes = picked?.let { hours.getOrNull(it) ?: 0 } ?: 0
+
     CardBox {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("每小时", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             Spacer(Modifier.weight(1f))
-            Text("共 ${hours.sum()} 分钟", fontSize = 11.5.sp, color = Sub)
+            Text(
+                picked?.let { "%02d:00–%02d:00 · %d 分钟".format(it, (it + 1) % 24, pickedMinutes) }
+                    ?: "点柱子看详情",
+                fontSize = 11.5.sp,
+                color = if (picked == null) Sub else Primary,
+                fontWeight = if (picked == null) FontWeight.Normal else FontWeight.SemiBold,
+            )
         }
         Spacer(Modifier.height(12.dp))
-        Row(
-            Modifier.fillMaxWidth().height(96.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
+        // 每根柱子与它的刻度写在**同一个格子**里（同一个 weight(1f)），
+        // 这样刻度天然落在柱子正中——分成两行再各自均分，一定会错位。
+        Row(Modifier.fillMaxWidth().height(122.dp)) {
             hours.forEachIndexed { h, v ->
                 val isNight = isNightHour(h, nightStart, nightEnd)
-                val hDp = if (v <= 0) 2.dp else (6 + (v.toFloat() / max) * 84).dp
+                val selected = picked == h
+                val hDp = when {
+                    v <= 0 -> 2.dp
+                    selected -> (10 + (v.toFloat() / max) * 82).dp
+                    else -> (6 + (v.toFloat() / max) * 78).dp
+                }
                 Column(
-                    Modifier.weight(1f),
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable { picked = if (selected) null else h },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(hDp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(if (v <= 0) Line else if (isNight) Sub else Primary)
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(hDp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(
+                                    when {
+                                        v <= 0 -> Line
+                                        selected -> Primary
+                                        isNight -> Sub.copy(alpha = 0.7f)
+                                        else -> Primary.copy(alpha = 0.72f)
+                                    }
+                                )
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    // 只在 0/6/12/18/23 写数字，其余留空占位；requiredWidth 防止窄格裁字
+                    Text(
+                        if (h in LABEL_HOURS) "$h" else "",
+                        fontSize = 10.sp,
+                        color = if (selected) Primary else Sub,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                        softWrap = false,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.requiredWidth(30.dp).height(14.dp),
                     )
                 }
-            }
-        }
-        Spacer(Modifier.height(6.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf("0", "6", "12", "18", "23").forEach { label ->
-                Text(label, fontSize = 10.sp, color = Sub)
             }
         }
         Text(
@@ -221,6 +263,8 @@ internal fun HourlyBars(hours: List<Int>, nightStart: Int, nightEnd: Int) {
         )
     }
 }
+
+private val LABEL_HOURS = setOf(0, 6, 12, 18, 23)
 
 private fun isNightHour(h: Int, start: Int, end: Int): Boolean {
     if (start == end) return false
