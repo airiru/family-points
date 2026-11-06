@@ -68,13 +68,17 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
     val session by vm.session.collectAsStateWithLifecycle()
     val me = (session as? Session.Ready)?.me
     val code by vm.inviteCode.collectAsStateWithLifecycle()
+    val familyInvitations by vm.familyInvitations.collectAsStateWithLifecycle()
+    val busy by vm.busy.collectAsStateWithLifecycle()
 
+    var inviteUsername by remember { mutableStateOf("") }
     var actionTarget by remember { mutableStateOf<com.familypoints.app.data.api.MemberBrief?>(null) }
     var confirmKick by remember { mutableStateOf<com.familypoints.app.data.api.MemberBrief?>(null) }
 
     LaunchedEffect(Unit) {
         vm.loadOverview()
         vm.loadInviteCode()
+        vm.loadFamilyInvitations()
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -116,6 +120,84 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
 
             item {
                 CardBox {
+                    Text("按用户名邀请", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "对方需本人确认才会入组，不会直接拉人。用户名注册后不可修改；同组同一人同时只能有一条待确认邀请。",
+                        fontSize = 11.5.sp,
+                        color = Sub,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = inviteUsername,
+                        onValueChange = { inviteUsername = it },
+                        label = { Text("对方的用户名") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            vm.inviteByUsername(inviteUsername)
+                            inviteUsername = ""
+                        },
+                        enabled = !busy && inviteUsername.isNotBlank(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(42.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                    ) { Text("发送邀请", fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
+                }
+            }
+
+            item {
+                CardBox {
+                    Text("本组已发邀请（${familyInvitations.size}）", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Spacer(Modifier.height(6.dp))
+                    if (familyInvitations.isEmpty()) {
+                        Text(
+                            "暂无邀请记录",
+                            fontSize = 12.5.sp,
+                            color = Sub,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    } else {
+                        familyInvitations.forEachIndexed { i, inv ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        inv.inviteeNickname.ifBlank { "成员 ${inv.inviteeId}" },
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.5.sp,
+                                    )
+                                    Text(
+                                        "${inv.createdDate} 发出 · 有效期至 ${inv.expireDate}",
+                                        fontSize = 11.sp,
+                                        color = Sub,
+                                    )
+                                }
+                                Pill(inv.statusText, if (inv.isPending) Primary else Sub, PrimarySoft)
+                                if (inv.isPending) {
+                                    Spacer(Modifier.width(6.dp))
+                                    TextButton(
+                                        onClick = { vm.cancelInvitation(inv.id) },
+                                        modifier = Modifier.height(34.dp),
+                                    ) { Text("取消", fontSize = 12.sp, color = Red) }
+                                }
+                            }
+                            if (i != familyInvitations.lastIndex) Divider(color = Line)
+                        }
+                    }
+                }
+            }
+
+            item {
+                CardBox {
                     Text("成员（${members.size}）", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Spacer(Modifier.height(4.dp))
                     members.forEachIndexed { i, m ->
@@ -129,7 +211,7 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
                             Spacer(Modifier.width(11.dp))
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(m.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text(m.nickname, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                                     if (m.id == me?.id) {
                                         Spacer(Modifier.width(6.dp))
                                         Pill("我", Primary, PrimarySoft)
@@ -162,7 +244,7 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
     actionTarget?.let { m ->
         AlertDialog(
             onDismissRequest = { actionTarget = null },
-            title = { Text("管理 ${m.name}") },
+            title = { Text("管理 ${m.nickname}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(
@@ -201,7 +283,7 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
     confirmKick?.let { m ->
         AlertDialog(
             onDismissRequest = { confirmKick = null },
-            title = { Text("踢出 ${m.name}？") },
+            title = { Text("踢出 ${m.nickname}？") },
             text = {
                 Text(
                     "该成员的积分会清零，且永久无法再加入本家庭组。历史记录会保留。",
@@ -250,7 +332,7 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
                     Box {
                         OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                members.firstOrNull { it.id == (selectedId ?: current?.memberId) }?.name
+                                members.firstOrNull { it.id == (selectedId ?: current?.memberId) }?.nickname
                                     ?: "选择成员",
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
@@ -258,7 +340,7 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
                         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                             members.forEach { m ->
                                 DropdownMenuItem(
-                                    text = { Text(m.name) },
+                                    text = { Text(m.nickname) },
                                     onClick = {
                                         selectedId = m.id
                                         expanded = false

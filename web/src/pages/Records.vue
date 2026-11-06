@@ -16,7 +16,7 @@ const offset = ref(0)
 const sources = [
   ['', '全部类型'], ['screen', '屏幕时间'], ['night', '睡觉'], ['task', '任务'], ['transfer', '赠送'], ['redeem', '兑换'],
 ]
-const nameOf = id => (members.value.find(m => m.id === id) || {}).name || ('#' + id)
+const nameOf = id => (members.value.find(m => m.id === id) || {}).nickname || ('#' + id)
 
 async function load() {
   if (!store.familyId) { loading.value = false; return }
@@ -61,7 +61,7 @@ async function exportCSV() {
           <label>成员</label>
           <select class="input" style="width:150px" v-model.number="f.member_id" @change="search">
             <option :value="0">全部成员</option>
-            <option v-for="m in members" :key="m.id" :value="m.id">{{ m.name }}</option>
+            <option v-for="m in members" :key="m.id" :value="m.id">{{ m.nickname }}</option>
           </select>
         </div>
         <div class="field">

@@ -585,13 +585,14 @@ func insertRecord(ctx context.Context, tx *sqlx.Tx, in recordRow) (uint64, error
 }
 
 func memberNameOf(ctx context.Context, tx *sqlx.Tx, memberID, familyID uint64) (string, error) {
-	var name string
-	err := tx.GetContext(ctx, &name,
-		`SELECT name FROM members WHERE id = ? AND family_id = ?`, memberID, familyID)
+	// 返回的是昵称快照，写入 records.member_name（该快照列名保留原名）。
+	var nickname string
+	err := tx.GetContext(ctx, &nickname,
+		`SELECT nickname FROM members WHERE id = ? AND family_id = ?`, memberID, familyID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
 	}
-	return name, err
+	return nickname, err
 }
 
 func dateOnly(t time.Time) time.Time {

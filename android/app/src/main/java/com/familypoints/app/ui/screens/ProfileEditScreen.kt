@@ -51,7 +51,7 @@ private val AVATARS = listOf("😀", "🐻", "🐱", "🐶", "🦊", "🐼", "�
 /**
  * 个人设置页（2026-11-05 新增）。
  *
- * 从「我的」页点头像进来；可改名称、头像、密码。
+ * 从「我的」页点头像进来；可改昵称、头像、密码。username 永不可改。
  * **不做本地校验**（长度等一律交给后端），只校验「两次输入是否一致」这类纯表单问题。
  */
 @Composable
@@ -59,7 +59,7 @@ fun ProfileEditScreen(vm: AppViewModel, nav: NavHostController) {
     val session by vm.session.collectAsStateWithLifecycle()
     val me = (session as? Session.Ready)?.me
 
-    var name by remember(me?.id) { mutableStateOf(me?.name.orEmpty()) }
+    var nickname by remember(me?.id) { mutableStateOf(me?.nickname.orEmpty()) }
     var avatar by remember(me?.id) { mutableStateOf(me?.avatar.orEmpty().ifBlank { AVATARS.first() }) }
 
     var oldPwd by remember { mutableStateOf("") }
@@ -108,22 +108,22 @@ fun ProfileEditScreen(vm: AppViewModel, nav: NavHostController) {
             }
 
             CardBox {
-                Text("名称", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text("昵称", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
+                    value = nickname,
+                    onValueChange = { nickname = it },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "名称会显示在积分榜与流水里；历史记录里的名字是快照，不会被改。",
+                    "昵称会显示在积分榜与流水里；历史记录里的名字是快照，不会被改。",
                     fontSize = 11.5.sp, color = Sub,
                     modifier = Modifier.padding(top = 6.dp),
                 )
                 Spacer(Modifier.height(12.dp))
                 Button(
-                    onClick = { vm.updateProfile(name.trim(), avatar) { nav.popBackStack() } },
+                    onClick = { vm.updateProfile(nickname.trim(), avatar) { nav.popBackStack() } },
                     modifier = Modifier.fillMaxWidth().height(46.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Color.White),
                 ) { Text("保存资料") }

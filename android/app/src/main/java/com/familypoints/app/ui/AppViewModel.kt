@@ -12,6 +12,9 @@ import com.familypoints.app.data.api.FamilyScreenView
 import com.familypoints.app.data.api.HiddenReq
 import com.familypoints.app.data.api.ItemIdReq
 import com.familypoints.app.data.api.ItemSaveReq
+import com.familypoints.app.data.api.InvitationIdReq
+import com.familypoints.app.data.api.InvitationView
+import com.familypoints.app.data.api.InviteByUsernameReq
 import com.familypoints.app.data.api.ItemView
 import com.familypoints.app.data.api.JoinReq
 import com.familypoints.app.data.api.LoginReq
@@ -167,7 +170,7 @@ class AppViewModel @Inject constructor(
                 val id = tokenStore.memberIdOnce() ?: 0L
                 val familyId = tokenStore.familyId.first()
                 _session.value = Session.Ready(
-                    MeView(id = id, name = "", familyId = familyId)
+                    MeView(id = id, nickname = "", familyId = familyId)
                 )
             }
         }
@@ -178,13 +181,13 @@ class AppViewModel @Inject constructor(
         handleAuth(resp.data?.member, resp.data?.token?.accessToken, resp.data?.token?.refreshToken, resp.error)
     }
 
-    fun register(username: String, password: String, name: String, createFamily: Boolean, familyName: String) =
+    fun register(username: String, password: String, nickname: String, createFamily: Boolean, familyName: String) =
         launchBusy {
             val resp = api.register(
                 RegisterReq(
                     username = username.trim(),
                     password = password,
-                    name = name.trim().ifBlank { username.trim() },
+                    nickname = nickname.trim().ifBlank { username.trim() },
                     createFamily = createFamily,
                     familyName = familyName.trim(),
                 )
@@ -197,7 +200,7 @@ class AppViewModel @Inject constructor(
             _message.value = error ?: "登录失败"
             return
         }
-        tokenStore.saveSession(access, refresh, me.id, me.name, me.role, me.familyId)
+        tokenStore.saveSession(access, refresh, me.id, me.nickname, me.role, me.familyId)
         _session.value = if (me.familyId == null) Session.NoFamily(me) else Session.Ready(me)
         if (me.familyId != null) {
             loadOverview()
@@ -216,7 +219,7 @@ class AppViewModel @Inject constructor(
             tokenStore.saveSession(
                 tokenStore.accessTokenOnce().orEmpty(),
                 tokenStore.refreshTokenOnce().orEmpty(),
-                me.id, me.name, me.role, me.familyId,
+                me.id, me.nickname, me.role, me.familyId,
             )
             _session.value = Session.Ready(me)
             loadOverview()
@@ -301,6 +304,67 @@ class AppViewModel @Inject constructor(
     fun resetInviteCode() = launchBusy {
         _inviteCode.value = api.resetInviteCode().data?.inviteCode
         _message.value = "邀请码已重置"
+    }
+
+    // ---------------- 待确认邀请（P3.1） ----------------
+    // 与邀请码是两条独立入组路径：邀请码是自助凭码入组，这里必须经被邀请人确认。
+
+    private val _myInvitations = MutableStateFlow<List<InvitationView>>(emptyList())
+    val myInvitations: StateFlow<List<InvitationView>> = _myInvitations.asStateFlow()
+
+    private val _familyInvitations = MutableStateFlow<List<InvitationView>>(emptyList())
+    val familyInvitations: StateFlow<List<InvitationView>> = _familyInvitations.asStateFlow()
+
+    /** 未入组也能调：接口挂在 /api/app 而不是 RequireFamily 的组内路由。 */
+    fun loadMyInvitations() = launchBusy(showBusy = false) {
+        _myInvitations.value = api.myInvitations().data?.items.orEmpty()
+    }
+
+    fun loadFamilyInvitations() = launchBusy(showBusy = false) {
+        _familyInvitations.value = api.familyInvitations().data?.items.orEmpty()
+    }
+
+    fun inviteByUsername(username: String) = launchBusy {
+        val resp = api.inviteByUsername(InviteByUsernameReq(username.trim()))
+        _message.value = if (resp.ok) "已发出邀请，等待对方确认" else (resp.error ?: "邀请失败")
+        if (resp.ok) loadFamilyInvitations()
+    }
+
+    fun cancelInvitation(invitationId: Long) = launchBusy {
+        val resp = api.cancelInvitation(InvitationIdReq(invitationId))
+        _message.value = if (resp.ok) "已取消邀请" else (resp.error ?: "取消失败")
+        if (resp.ok) loadFamilyInvitations()
+    }
+
+    fun decideInvitation(invitationId: Long, accept: Boolean) = launchBusy {
+        val resp = if (accept) {
+            api.acceptInvitation(InvitationIdReq(invitationId))
+        } else {
+            api.rejectInvitation(InvitationIdReq(invitationId))
+        }
+        if (!resp.ok) {
+            _message.value = resp.error ?: "操作失败"
+            return@launchBusy
+        }
+        loadMyInvitations()
+        if (!accept) {
+            _message.value = "已拒绝邀请"
+            return@launchBusy
+        }
+        // 接受后服务端已把 family_id 填上。必须重新拉 me、刷新本地 familyId 并切到 Ready，
+        // 否则界面还停在 NoFamily，且后续组内请求会带上旧身份。
+        val me = api.me().data
+        if (me != null) {
+            tokenStore.saveSession(
+                tokenStore.accessTokenOnce().orEmpty(),
+                tokenStore.refreshTokenOnce().orEmpty(),
+                me.id, me.nickname, me.role, me.familyId,
+            )
+            _session.value = Session.Ready(me)
+            loadOverview()
+            scheduler.runNow()
+        }
+        _message.value = "已加入家庭组"
     }
 
     // ---------------- 商品券 ----------------
@@ -436,9 +500,9 @@ class AppViewModel @Inject constructor(
         if (resp.ok) loadOverview()
     }
 
-    fun renameMember(memberId: Long, name: String) = launchBusy {
-        val resp = api.renameMember(RenameMemberReq(memberId, name.trim()))
-        _message.value = if (resp.ok) "已改名" else (resp.error ?: "改名失败")
+    fun renameMember(memberId: Long, nickname: String) = launchBusy {
+        val resp = api.renameMember(RenameMemberReq(memberId, nickname.trim()))
+        _message.value = if (resp.ok) "已改昵称" else (resp.error ?: "改昵称失败")
         if (resp.ok) loadOverview()
     }
 
@@ -516,9 +580,9 @@ class AppViewModel @Inject constructor(
     }
 
 
-    /** 改自己的名称 / 头像；成功后同步刷新 session 里的 me。 */
-    fun updateProfile(name: String, avatar: String, onDone: () -> Unit = {}) = launchBusy {
-        val resp = api.updateProfile(ProfileReq(name = name, avatar = avatar))
+    /** 改自己的昵称 / 头像；成功后同步刷新 session 里的 me。 */
+    fun updateProfile(nickname: String, avatar: String, onDone: () -> Unit = {}) = launchBusy {
+        val resp = api.updateProfile(ProfileReq(nickname = nickname, avatar = avatar))
         if (!resp.ok) {
             showMessage(resp.error ?: "保存失败")
             return@launchBusy

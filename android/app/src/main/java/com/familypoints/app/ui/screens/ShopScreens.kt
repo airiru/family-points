@@ -250,7 +250,7 @@ fun GiftScreen(vm: AppViewModel, nav: NavHostController) {
                             Avatar(m.avatar)
                             Spacer(Modifier.width(11.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(m.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text(m.nickname, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                                 Text("当前 ${m.score} 分", fontSize = 12.sp, color = Sub)
                             }
                             Text("赠送 ›", fontSize = 12.sp, color = Sub)
@@ -265,7 +265,7 @@ fun GiftScreen(vm: AppViewModel, nav: NavHostController) {
 
     target?.let { m ->
         GiftDialog(
-            targetName = m.name,
+            targetName = m.nickname,
             max = transferMax,
             onDismiss = { target = null },
             onConfirm = { amount, note ->
@@ -382,7 +382,7 @@ fun CouponsScreen(vm: AppViewModel, nav: NavHostController) {
                     )
                 }
                 items(pending, key = { "p-${it.id}" }) { c ->
-                    val owner = members.firstOrNull { it.id == c.memberId }?.name ?: "成员"
+                    val owner = members.firstOrNull { it.id == c.memberId }?.nickname ?: "成员"
                     CardBox {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(

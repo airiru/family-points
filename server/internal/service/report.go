@@ -54,7 +54,7 @@ func (s *Report) State(ctx context.Context, me *model.Member) (*State, error) {
 	briefs := make([]MemberBrief, 0, len(members))
 	for _, m := range members {
 		briefs = append(briefs, MemberBrief{
-			ID: m.ID, Name: m.Name, Role: m.Role, Avatar: m.Avatar,
+			ID: m.ID, Nickname: m.Nickname, Role: m.Role, Avatar: m.Avatar,
 			Score: m.Score, FrozenScore: m.FrozenScore, Hidden: m.Hidden,
 		})
 	}
@@ -65,7 +65,7 @@ func (s *Report) State(ctx context.Context, me *model.Member) (*State, error) {
 	return &State{
 		Family: FamilyBrief{ID: f.ID, Name: f.Name},
 		Me: MemberBrief{
-			ID: me.ID, Name: me.Name, Role: me.Role, Avatar: me.Avatar,
+			ID: me.ID, Nickname: me.Nickname, Role: me.Role, Avatar: me.Avatar,
 			Score: me.Score, FrozenScore: me.FrozenScore, Hidden: me.Hidden,
 		},
 		Members:     briefs,
@@ -129,7 +129,7 @@ func (s *Report) Records(ctx context.Context, me *model.Member, q RecordQuery) (
 // RankingRow 是榜单的一行（含连续打卡天数）。
 type RankingRow struct {
 	MemberID    uint64  `json:"member_id"`
-	Name        string  `json:"name"`
+	Nickname    string  `json:"nickname"`
 	Avatar      *string `json:"avatar"`
 	Score       int     `json:"score"`
 	FrozenScore int     `json:"frozen_score"`
@@ -169,7 +169,7 @@ func (s *Report) Ranking(ctx context.Context, me *model.Member, typ, period stri
 	out := make([]RankingRow, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, RankingRow{
-			MemberID: r.MemberID, Name: r.Name, Avatar: r.Avatar,
+			MemberID: r.MemberID, Nickname: r.Nickname, Avatar: r.Avatar,
 			Score: r.Score, FrozenScore: r.FrozenScore,
 			PeriodScore: r.PeriodScore, Streak: streaks[r.MemberID],
 		})

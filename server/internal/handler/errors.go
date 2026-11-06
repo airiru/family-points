@@ -50,7 +50,8 @@ func fail(c *gin.Context, err error) {
 		errors.Is(err, service.ErrBanned):
 		httpx.Forbidden(c, err.Error())
 	case errors.Is(err, service.ErrAlreadyInFamily),
-		errors.Is(err, service.ErrLeaderMustTransfer):
+		errors.Is(err, service.ErrLeaderMustTransfer),
+		errors.Is(err, repo.ErrInvitationPending):
 		httpx.Conflict(c, err.Error())
 	case errors.Is(err, service.ErrInviteCodeInvalid),
 		errors.Is(err, service.ErrConfirmRequired),
@@ -59,7 +60,8 @@ func fail(c *gin.Context, err error) {
 		errors.Is(err, service.ErrNotEnoughScore),
 		errors.Is(err, service.ErrNightConfigInvalid),
 		errors.Is(err, service.ErrScreenRuleMissing),
-		errors.Is(err, service.ErrDeviceTokenInvalid):
+		errors.Is(err, service.ErrDeviceTokenInvalid),
+		errors.Is(err, service.ErrInvitationExpired):
 		httpx.BadRequest(c, err.Error())
 	default:
 		// 500 必须留日志：否则线上只看到「服务器内部错误」，根因彻底丢失

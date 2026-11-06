@@ -177,7 +177,7 @@ private fun RankingItem(
         Spacer(Modifier.width(11.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(row.name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text(row.nickname, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 if (isMe) {
                     Spacer(Modifier.width(6.dp))
                     Pill("我", Primary, PrimarySoft)
@@ -238,7 +238,7 @@ fun MemberDetailScreen(vm: AppViewModel, nav: NavHostController, memberId: Long)
                         Avatar(member?.avatar, size = 64)
                         Spacer(Modifier.height(10.dp))
                         Text(
-                            member?.name ?: "成员",
+                            member?.nickname ?: "成员",
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
@@ -284,7 +284,7 @@ fun MemberDetailScreen(vm: AppViewModel, nav: NavHostController, memberId: Long)
                             .fillMaxWidth()
                             .height(46.dp),
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Primary),
-                    ) { Text("赠送积分给 ${member.name}") }
+                    ) { Text("赠送积分给 ${member.nickname}") }
                 }
             }
             item { Spacer(Modifier.height(12.dp)) }

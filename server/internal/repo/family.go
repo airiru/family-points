@@ -41,7 +41,7 @@ func (r *Family) ByID(ctx context.Context, id uint64) (*model.Family, error) {
 // includeHidden=false 时过滤掉被隐藏的成员（隐藏只影响展示，不影响数据，见 10.4）。
 // **SQL 一定带 family_id = ?** —— 这是多租户隔离的唯一屏障。
 func (r *Family) Members(ctx context.Context, familyID uint64, includeHidden bool) ([]model.Member, error) {
-	q := `SELECT id, family_id, name, score, frozen_score, hidden, avatar,
+	q := `SELECT id, family_id, nickname, score, frozen_score, hidden, avatar,
 	             username, pass_hash, role, created_at
 	        FROM members WHERE family_id = ?`
 	if !includeHidden {
@@ -101,7 +101,7 @@ func (r *Family) AdminStats(ctx context.Context) (*AdminStats, error) {
 func (r *Family) MemberInFamily(ctx context.Context, familyID, memberID uint64) (*model.Member, error) {
 	var m model.Member
 	err := r.db.GetContext(ctx, &m,
-		`SELECT id, family_id, name, score, frozen_score, hidden, avatar,
+		`SELECT id, family_id, nickname, score, frozen_score, hidden, avatar,
 		        username, pass_hash, role, created_at
 		   FROM members WHERE id = ? AND family_id = ?`, memberID, familyID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -187,7 +187,15 @@ func (r *Family) Join(ctx context.Context, familyID, memberID uint64) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := joinTx(ctx, tx, familyID, memberID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
+// joinTx 是入组的事务体：邀请码 / 后台直邀（Join）与 P3.1 待确认邀请
+// （Invitation.Decide）共用，避免两条入组路径的 SQL 漂移。
+func joinTx(ctx context.Context, tx *sqlx.Tx, familyID, memberID uint64) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE members SET family_id = ?, role = ? WHERE id = ? AND family_id IS NULL`,
 		familyID, model.RoleMember, memberID); err != nil {
@@ -207,7 +215,7 @@ func (r *Family) Join(ctx context.Context, familyID, memberID uint64) error {
 		NightRuleID    *uint64 `db:"night_rule_id"`
 	}
 	var t tmpl
-	err = tx.GetContext(ctx, &t,
+	err := tx.GetContext(ctx, &t,
 		`SELECT threshold_min, bonus_points, penalty_points, enabled,
 		        night_start_hour, night_end_hour, night_max_min, night_rule_id
 		   FROM screen_rules WHERE family_id = ?
@@ -230,8 +238,7 @@ func (r *Family) Join(ctx context.Context, familyID, memberID uint64) error {
 		t.NightStartHour, t.NightEndHour, t.NightMaxMin, t.NightRuleID); err != nil {
 		return err
 	}
-
-	return tx.Commit()
+	return nil
 }
 
 // Leave 退出 / 踢出：积分清零 + family_id 置空 + 角色回落 + 写禁入名单。
@@ -315,15 +322,15 @@ func (r *Family) TransferLeader(ctx context.Context, familyID, fromID, toID uint
 	return tx.Commit()
 }
 
-// UpdateProfile 更新成员个人资料（名称 / 头像）。
+// UpdateProfile 更新成员个人资料（昵称 / 头像）。**不接收 username**。
 //
 // 头像用**预设标识**（emoji 或色块 key），不做文件上传：
 // 家庭场景里上传链路（存储、限流、清理）成本远高于收益。
-func (r *Family) UpdateProfile(ctx context.Context, memberID uint64, name, avatar string) error {
+func (r *Family) UpdateProfile(ctx context.Context, memberID uint64, nickname, avatar string) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE members SET name = COALESCE(NULLIF(?, ''), name),
+		`UPDATE members SET nickname = COALESCE(NULLIF(?, ''), nickname),
 		        avatar = COALESCE(NULLIF(?, ''), avatar)
-		  WHERE id = ?`, name, avatar, memberID)
+		  WHERE id = ?`, nickname, avatar, memberID)
 	if err != nil {
 		return err
 	}
@@ -333,10 +340,10 @@ func (r *Family) UpdateProfile(ctx context.Context, memberID uint64, name, avata
 	return nil
 }
 
-// RenameMember 成员改名（records.member_name 是快照，历史不受影响）。
-func (r *Family) RenameMember(ctx context.Context, familyID, memberID uint64, name string) error {
+// RenameMember 成员改昵称（records.member_name 是快照，历史不受影响）。
+func (r *Family) RenameMember(ctx context.Context, familyID, memberID uint64, nickname string) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE members SET name = ? WHERE id = ? AND family_id = ?`, name, memberID, familyID)
+		`UPDATE members SET nickname = ? WHERE id = ? AND family_id = ?`, nickname, memberID, familyID)
 	if err != nil {
 		return err
 	}

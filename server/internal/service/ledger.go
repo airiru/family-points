@@ -132,7 +132,7 @@ func (s *Ledger) Send(ctx context.Context, me *model.Member, toID uint64, amount
 		return nil, err
 	}
 	// 受赠方收到通知（旁路，失败不影响转账）
-	s.notifier.TransferIn(ctx, *me.FamilyID, toID, amount, me.Name)
+	s.notifier.TransferIn(ctx, *me.FamilyID, toID, amount, me.Nickname)
 	return t, nil
 }
 

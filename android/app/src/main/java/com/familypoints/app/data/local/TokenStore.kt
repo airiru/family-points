@@ -47,7 +47,7 @@ class TokenStore @Inject constructor(
         access: String,
         refresh: String,
         memberId: Long,
-        name: String,
+        nickname: String,
         role: String,
         familyId: Long?,
     ) {
@@ -55,7 +55,7 @@ class TokenStore @Inject constructor(
             it[Keys.ACCESS] = access
             it[Keys.REFRESH] = refresh
             it[Keys.MEMBER_ID] = memberId.toString()
-            it[Keys.MEMBER_NAME] = name
+            it[Keys.MEMBER_NAME] = nickname
             it[Keys.ROLE] = role
             if (familyId != null) it[Keys.FAMILY_ID] = familyId.toString() else it.remove(Keys.FAMILY_ID)
         }

@@ -31,6 +31,7 @@ npm run build    # 产物在 dist/
 ```
 src/
 ├── api.js            统一 fetch 封装：token、401 跳登录、CSV 下载
+│                     （localStorage 里存的是登录 username，不是昵称）
 ├── store.js          全局状态：当前管理员 + 当前家庭组（localStorage 记忆）
 ├── router.js         15 条路由（14 页面 + 1 条 catch-all redirect）+ 登录守卫
 ├── toast.js          轻量提示
@@ -38,6 +39,14 @@ src/
 │   └── AppLayout.vue 侧边导航 + 顶部家庭组切换
 └── pages/            14 个 .vue（12 个功能页 + 登录 + 改密）
 ```
+
+## 账号口径（2026-11-06 P3.1）
+
+- 管理员和成员一样有 `username` + `nickname`；**`username` 注册后永不可改**，
+  localStorage 里存的正是它（改密后要用它重新登录，不能用昵称）。
+- `管理员账号` 页有「我的昵称」卡片，`POST /api/admin/me/profile` 只改 `nickname`；
+  请求体带 `username` 后端直接 400。成员列表显示 `nickname`，表头标注用户名不可改。
+- 成员改名走 App 端；后台成员页是只读展示，不提供改昵称入口。
 
 ## 与后端的关系
 

@@ -19,7 +19,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 
 echo "== 1. 前台：注册 → 登出 → 旧 refresh 重放必须被拒 =="
 REG=$(curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d '{"username":"'$KID'","password":"Kid#2026pass","name":"小明","create_family":true,"family_name":"登出测试组"}')
+  -d '{"username":"'$KID'","password":"Kid#2026pass","nickname":"小明","create_family":true,"family_name":"登出测试组"}')
 M_AT=$(echo "$REG" | jget "['data']['token']['access_token']")
 M_RT=$(echo "$REG" | jget "['data']['token']['refresh_token']")
 [ -n "${M_AT:-}" ] && echo "  ✅ 注册成功" && pass=$((pass+1)) || { echo "  ❌ 注册失败"; fail=$((fail+1)); }

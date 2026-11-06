@@ -59,7 +59,7 @@ const valOf = r => (mode.value === 'points' ? r.score + r.frozen_score : r.perio
       <tbody>
         <tr v-for="(r, i) in ranking" :key="r.member_id">
           <td class="num" :style="{ color: i === 0 ? 'var(--gold)' : '' }">{{ i + 1 }}</td>
-          <td><div class="row"><div class="avatar">{{ r.avatar || r.name[0] }}</div><b>{{ r.name }}</b></div></td>
+          <td><div class="row"><div class="avatar">{{ r.avatar || r.nickname[0] }}</div><b>{{ r.nickname }}</b></div></td>
           <td class="num">{{ valOf(r) }}</td>
           <td class="num muted">{{ r.score }}</td>
           <td class="num" :style="{ color: r.frozen_score ? 'var(--gold)' : '' }">{{ r.frozen_score }}</td>

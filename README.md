@@ -111,10 +111,13 @@ export ANDROID_HOME=/path/to/Android/Sdk
 | 接口对账 | `cd server && python scripts/api_audit.py` | **双向零漂移**（见下） |
 | Web 构建 | `cd web && npm run build` | 产物在 `web/dist/` |
 | Android 构建 | `cd android && ./gradlew assembleDebug` | `BUILD SUCCESSFUL` |
-| 接口回归 | `cd server && bash scripts/p1_auth_check.sh`（p1–p11 及 p8b，共 12 个脚本） | 各脚本「失败 0 项」 |
+| 接口回归 | `cd server && for s in scripts/p*_check.sh; do bash "$s"; done` | 每个脚本「失败 0 项」 |
 
 接口回归脚本需要先起好 API（默认打 `127.0.0.1:8080`），依赖 `lib_admin.sh` 统一的管理员登录
 （脚本会改管理员密码，写死密码会集体假红）。`p5` / `p7` 等脚本还会用 `python` 解析 JSON。
+脚本用 `curl` 直连本机：**若 shell 里设了 `HTTP_PROXY`，需 `export NO_PROXY=127.0.0.1,localhost`**，
+否则请求会被代理拦成 502。`p12` 的过期断言会调 `cmd/devtool -expire-invitation` 做时间旅行
+（仅 `APP_ENV=dev` 可用），不依赖定时等待。
 
 > **`api_audit.py` 是硬门禁**：`docs/features.md` 第 15 节登记的接口必须和
 > `server/internal/router/router.go` **双向一一对应**。
@@ -127,7 +130,9 @@ export ANDROID_HOME=/path/to/Android/Sdk
 - 跨组操作 `family_id` **只能走路径参数**（后台）、前台一律取自 token 主体
 - 公开接口：`/api/register`、两个 `login`、两个 `refresh`；`/api/app/logout` 只需有效 access
 - 屏幕时间上报用**成员登录态**，设备令牌机制已于 2026-11-05 整体删除
-- 完整清单：features 15 节；鉴权细节：features 4 节
+- **账号字段口径**：`username` 是登录凭证、全局唯一、注册后永不可改；`nickname` 是显示名、可改。
+  `members` / `admins` 两张表都有，API / DTO 一律用 `nickname`（`records.member_name` 是历史快照列，保留旧名）
+- 完整清单：features 15 节；鉴权细节：features 4 节；P3.1 待确认邀请：features 5.2.3
 
 ## 文档索引
 

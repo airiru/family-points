@@ -11,7 +11,7 @@ chk() { if [ "$2" = "$3" ]; then echo "  ✅ $1  ($3)"; pass=$((pass+1)); else e
 jget() { python -c "import sys,json;d=json.load(sys.stdin);print(eval('d'+sys.argv[1]))" "$1" 2>/dev/null; }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 reg() { curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"name\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"; }
+  -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"nickname\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"; }
 me() { curl -s $B/api/app/me -H "Authorization: Bearer $1"; }
 score() { me "$1" | jget "['data']['score']"; }
 frozen() { me "$1" | jget "['data']['frozen_score']"; }

@@ -1,22 +1,24 @@
 // 统一 API 客户端：token 存 localStorage，401 先尝试刷新、失败才回登录页
 const TOKEN_KEY = 'fp_admin_token'
-const NAME_KEY = 'fp_admin_name'
+// 存的是登录时输入的 **username**（username 永不可改，改密后要用它重新登录）。
+// localStorage key 沿用旧值，避免已登录的会话拿不到用户名。
+const USERNAME_KEY = 'fp_admin_name'
 const REFRESH_KEY = 'fp_admin_refresh'
 
 export const token = {
   get: () => localStorage.getItem(TOKEN_KEY) || '',
-  // name 传 null 表示「只更新 token，不动用户名」
-  set: (t, name, refresh) => {
+  // username 传 null 表示「只更新 token，不动用户名」
+  set: (t, username, refresh) => {
     localStorage.setItem(TOKEN_KEY, t)
-    if (name) localStorage.setItem(NAME_KEY, name)
+    if (username) localStorage.setItem(USERNAME_KEY, username)
     if (refresh) localStorage.setItem(REFRESH_KEY, refresh)
   },
   clear: () => {
     localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(NAME_KEY)
+    localStorage.removeItem(USERNAME_KEY)
     localStorage.removeItem(REFRESH_KEY)
   },
-  name: () => localStorage.getItem(NAME_KEY) || '管理员',
+  username: () => localStorage.getItem(USERNAME_KEY) || '',
   refresh: () => localStorage.getItem(REFRESH_KEY) || '',
 }
 

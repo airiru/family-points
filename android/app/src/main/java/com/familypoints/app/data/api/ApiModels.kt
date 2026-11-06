@@ -20,7 +20,7 @@ data class TokenPair(
 @Serializable
 data class MemberBrief(
     val id: Long,
-    val name: String,
+    val nickname: String,
     val role: String = "member",
     val avatar: String? = null,
     val score: Int = 0,
@@ -34,7 +34,7 @@ data class MemberBrief(
 @Serializable
 data class MeView(
     val id: Long,
-    val name: String = "",
+    val nickname: String = "",
     val role: String = "member",
     val score: Int = 0,
     @SerialName("frozen_score") val frozenScore: Int = 0,
@@ -97,7 +97,7 @@ data class RecordPage(
 @Serializable
 data class RankingRow(
     @SerialName("member_id") val memberId: Long,
-    val name: String = "",
+    val nickname: String = "",
     val avatar: String? = null,
     val score: Int = 0,
     @SerialName("frozen_score") val frozenScore: Int = 0,
@@ -253,7 +253,7 @@ data class ScreenReportView(
 data class RegisterReq(
     val username: String,
     val password: String,
-    val name: String,
+    val nickname: String,
     @SerialName("create_family") val createFamily: Boolean = false,
     @SerialName("family_name") val familyName: String = "",
 )
@@ -362,7 +362,7 @@ data class FamilyScreenView(
 @Serializable
 data class FamilyMemberDay(
     @SerialName("member_id") val memberId: Long = 0,
-    val name: String = "",
+    val nickname: String = "",
     val role: String = "",
     @SerialName("total_min") val totalMin: Int = 0,
     @SerialName("night_min") val nightMin: Int? = null,
@@ -379,10 +379,10 @@ data class DeviceDay(
     @SerialName("night_min") val nightMin: Int? = null,
 )
 
-/** 个人资料更新（名称 / 头像）。 */
+/** 个人资料更新（昵称 / 头像）。 */
 @Serializable
 data class ProfileReq(
-    val name: String = "",
+    val nickname: String = "",
     val avatar: String = "",
 )
 
@@ -390,7 +390,50 @@ data class ProfileReq(
 data class MemberIdReq(@SerialName("member_id") val memberId: Long, val confirm: Boolean = false)
 
 @Serializable
-data class RenameReq(val name: String)
+data class RenameReq(val nickname: String)
+
+// ---------- 待确认邀请（P3.1） ----------
+
+@Serializable
+data class InvitationView(
+    val id: Long = 0,
+    @SerialName("family_id") val familyId: Long = 0,
+    @SerialName("inviter_id") val inviterId: Long = 0,
+    @SerialName("invitee_id") val inviteeId: Long = 0,
+    val status: String = "",
+    @SerialName("expires_at") val expiresAt: String = "",
+    @SerialName("decided_at") val decidedAt: String? = null,
+    @SerialName("created_at") val createdAt: String = "",
+    @SerialName("family_name") val familyName: String = "",
+    @SerialName("inviter_nickname") val inviterNickname: String = "",
+    @SerialName("invitee_nickname") val inviteeNickname: String = "",
+) {
+    val isPending: Boolean get() = status == "pending"
+    val statusText: String get() = when (status) {
+        "pending" -> "待确认"
+        "accepted" -> "已接受"
+        "rejected" -> "已拒绝"
+        "cancelled" -> "已取消"
+        "expired" -> "已过期"
+        else -> status
+    }
+    // 服务端 time.Time 是 RFC3339，界面只展示日期部分。
+    val createdDate: String get() = createdAt.take(10)
+    val expireDate: String get() = expiresAt.take(10)
+}
+
+@Serializable
+data class InviteByUsernameReq(val username: String)
+
+@Serializable
+data class InvitationIdReq(@SerialName("invitation_id") val invitationId: Long)
+
+/** 列表接口返回 { items: [...] }，不能把 data 直接当成数组。 */
+@Serializable
+data class InvitationList(val items: List<InvitationView> = emptyList())
+
+@Serializable
+data class InvitationCancel(val cancelled: Boolean = false)
 
 @Serializable
 data class HiddenReq(@SerialName("member_id") val memberId: Long, val hidden: Boolean)

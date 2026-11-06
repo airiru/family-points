@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -123,7 +124,7 @@ fun LoginScreen(vm: AppViewModel, onGoRegister: () -> Unit) {
 fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
+    var nickname by remember { mutableStateOf("") }
     var familyName by remember { mutableStateOf("") }
     var createFamily by remember { mutableStateOf(true) }
     val busy by vm.busy.collectAsStateWithLifecycle()
@@ -162,8 +163,8 @@ fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
             )
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
+                value = nickname,
+                onValueChange = { nickname = it },
                 label = { Text("昵称（在家庭里显示的名字）") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -196,7 +197,7 @@ fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
 
             Spacer(Modifier.height(18.dp))
             Button(
-                onClick = { vm.register(username, password, name, createFamily, familyName) },
+                onClick = { vm.register(username, password, nickname, createFamily, familyName) },
                 enabled = !busy && username.isNotBlank() && password.length >= 4,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -230,6 +231,10 @@ fun JoinFamilyScreen(vm: AppViewModel, me: MeView) {
     var code by remember { mutableStateOf("") }
     var confirmLeave by remember { mutableStateOf(false) }
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val myInvitations by vm.myInvitations.collectAsStateWithLifecycle()
+    val pending = myInvitations.filter { it.isPending }
+
+    LaunchedEffect(Unit) { vm.loadMyInvitations() }
 
     Column(
         modifier = Modifier
@@ -241,7 +246,7 @@ fun JoinFamilyScreen(vm: AppViewModel, me: MeView) {
         Text("👋", fontSize = 44.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
         Spacer(Modifier.height(12.dp))
         Text(
-            "你好，${me.name.ifBlank { "新成员" }}",
+            "你好，${me.nickname.ifBlank { "新成员" }}",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.Center,
@@ -282,6 +287,68 @@ fun JoinFamilyScreen(vm: AppViewModel, me: MeView) {
                     .height(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Primary),
             ) { Text("加入家庭组", fontWeight = FontWeight.SemiBold) }
+        }
+
+        Spacer(Modifier.height(18.dp))
+        CardBox {
+            Text("我收到的邀请（${pending.size}）", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "组长按你的用户名发出邀请后，会显示在这里。接受后才会加入家庭组。",
+                fontSize = 11.5.sp,
+                color = Sub,
+            )
+            Spacer(Modifier.height(8.dp))
+            if (pending.isEmpty()) {
+                Text(
+                    "暂无待确认邀请",
+                    fontSize = 12.5.sp,
+                    color = Sub,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            } else {
+                pending.forEachIndexed { i, inv ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "「${inv.familyName}」",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.5.sp,
+                            )
+                            Text(
+                                "${inv.inviterNickname} 邀请你 · ${inv.createdDate} 发出",
+                                fontSize = 11.sp,
+                                color = Sub,
+                            )
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = { vm.decideInvitation(inv.id, accept = true) },
+                            enabled = !busy,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                        ) { Text("接受", fontSize = 13.sp) }
+                        OutlinedButton(
+                            onClick = { vm.decideInvitation(inv.id, accept = false) },
+                            enabled = !busy,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp),
+                        ) { Text("拒绝", fontSize = 13.sp, color = Sub) }
+                    }
+                    if (i != pending.lastIndex) {
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(18.dp))

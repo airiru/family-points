@@ -56,7 +56,7 @@ func NewAuth(r *repo.Auth, tm *auth.Manager) *Auth {
 type RegisterInput struct {
 	Username     string `json:"username"`
 	Password     string `json:"password"`
-	Name         string `json:"name"`
+	Nickname     string `json:"nickname"`
 	CreateFamily bool   `json:"create_family"`
 	FamilyName   string `json:"family_name"`
 }
@@ -64,7 +64,7 @@ type RegisterInput struct {
 // Register 注册前台账号。**绝不会产生管理员**（管理员只能由初始化/后台创建）。
 func (s *Auth) Register(ctx context.Context, in RegisterInput) (*model.Member, *TokenPair, error) {
 	in.Username = strings.TrimSpace(in.Username)
-	in.Name = strings.TrimSpace(in.Name)
+	in.Nickname = strings.TrimSpace(in.Nickname)
 	in.FamilyName = strings.TrimSpace(in.FamilyName)
 
 	if !usernamePattern.MatchString(in.Username) {
@@ -73,10 +73,10 @@ func (s *Auth) Register(ctx context.Context, in RegisterInput) (*model.Member, *
 	if err := checkPassword(in.Password); err != nil {
 		return nil, nil, err
 	}
-	if in.Name == "" {
-		in.Name = in.Username
+	if in.Nickname == "" {
+		in.Nickname = in.Username
 	}
-	if utf8.RuneCountInString(in.Name) > 32 {
+	if utf8.RuneCountInString(in.Nickname) > 32 {
 		return nil, nil, fmt.Errorf("%w：昵称最多 32 个字符", ErrInvalidInput)
 	}
 	if in.CreateFamily && utf8.RuneCountInString(in.FamilyName) > 64 {
@@ -98,12 +98,12 @@ func (s *Auth) Register(ctx context.Context, in RegisterInput) (*model.Member, *
 	if in.CreateFamily {
 		name := in.FamilyName
 		if name == "" {
-			name = in.Name + "的家"
+			name = in.Nickname + "的家"
 		}
 		familyName = &name
 	}
 
-	member, err := s.repo.CreateMember(ctx, in.Username, string(hash), in.Name, familyName)
+	member, err := s.repo.CreateMember(ctx, in.Username, string(hash), in.Nickname, familyName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -284,6 +284,15 @@ func (s *Auth) ChangeAdminPassword(ctx context.Context, adminID uint64, oldPassw
 		return err
 	}
 	return s.repo.RevokeAllForSubject(ctx, model.SubjectAdmin, adminID)
+}
+
+// UpdateAdminNickname 只改管理员昵称。**没有任何改 username 的方法**，这是设计约束。
+func (s *Auth) UpdateAdminNickname(ctx context.Context, adminID uint64, nickname string) error {
+	nickname = strings.TrimSpace(nickname)
+	if nickname == "" || utf8.RuneCountInString(nickname) > 32 {
+		return fmt.Errorf("%w：昵称需 1–32 个字符", ErrInvalidInput)
+	}
+	return s.repo.UpdateAdminNickname(ctx, adminID, nickname)
 }
 
 // MemberByID / AdminByID 供鉴权中间件使用。

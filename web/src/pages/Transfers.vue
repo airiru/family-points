@@ -9,7 +9,7 @@ const members = ref([])
 const loading = ref(true)
 const limit = ref(50)
 
-const nameOf = id => (members.value.find(m => m.id === id) || {}).name || ('#' + id)
+const nameOf = id => (members.value.find(m => m.id === id) || {}).nickname || ('#' + id)
 
 async function load() {
   if (!store.familyId) { loading.value = false; return }

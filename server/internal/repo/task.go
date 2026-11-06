@@ -47,11 +47,11 @@ func (r *Task) Create(ctx context.Context, familyID, publisherID uint64, title s
 	}
 
 	var m struct {
-		Name  string `db:"name"`
-		Score int    `db:"score"`
+		Nickname string `db:"nickname"`
+		Score    int    `db:"score"`
 	}
 	if err := tx.GetContext(ctx, &m,
-		`SELECT name, score FROM members WHERE id = ? AND family_id = ? FOR UPDATE`,
+		`SELECT nickname, score FROM members WHERE id = ? AND family_id = ? FOR UPDATE`,
 		publisherID, familyID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -85,7 +85,7 @@ func (r *Task) Create(ctx context.Context, familyID, publisherID uint64, title s
 		`INSERT INTO records (family_id, member_id, member_name, title, points,
 		                      occurred_at, added_at, source)
 		 VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
-		familyID, publisherID, m.Name, fmt.Sprintf("发布任务：%s（冻结 %d 分）", title, points),
+		familyID, publisherID, m.Nickname, fmt.Sprintf("发布任务：%s（冻结 %d 分）", title, points),
 		now, now, model.SourceTask); err != nil {
 		return nil, err
 	}
@@ -210,10 +210,10 @@ func (r *Task) Close(ctx context.Context, familyID, taskID, publisherID uint64) 
 	}
 
 	var m struct {
-		Name string `db:"name"`
+		Nickname string `db:"nickname"`
 	}
 	if err := tx.GetContext(ctx, &m,
-		`SELECT name FROM members WHERE id = ? AND family_id = ?`, publisherID, familyID); err != nil {
+		`SELECT nickname FROM members WHERE id = ? AND family_id = ?`, publisherID, familyID); err != nil {
 		return nil, err
 	}
 
@@ -234,7 +234,7 @@ func (r *Task) Close(ctx context.Context, familyID, taskID, publisherID uint64) 
 		`INSERT INTO records (family_id, member_id, member_name, title, points,
 		                      occurred_at, added_at, source)
 		 VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
-		familyID, publisherID, m.Name,
+		familyID, publisherID, m.Nickname,
 		fmt.Sprintf("关闭任务：%s（退回冻结 %d 分）", t.Title, t.EscrowPoints),
 		now, now, model.SourceTask); err != nil {
 		return nil, err
@@ -488,15 +488,15 @@ func (r *Task) Vote(ctx context.Context, familyID, submissionID, voterID uint64,
 // approveSubmission 通过审核：冻结释放 → 转给完成者 → 写两条流水 → 关闭任务。
 func approveSubmission(ctx context.Context, tx *sqlx.Tx, familyID uint64, s *model.TaskSubmission, t *model.Task) error {
 	var publisher, completer struct {
-		ID   uint64 `db:"id"`
-		Name string `db:"name"`
+		ID       uint64 `db:"id"`
+		Nickname string `db:"nickname"`
 	}
 	if err := tx.GetContext(ctx, &publisher,
-		`SELECT id, name FROM members WHERE id = ? AND family_id = ?`, t.PublisherID, familyID); err != nil {
+		`SELECT id, nickname FROM members WHERE id = ? AND family_id = ?`, t.PublisherID, familyID); err != nil {
 		return err
 	}
 	if err := tx.GetContext(ctx, &completer,
-		`SELECT id, name FROM members WHERE id = ? AND family_id = ?`, s.MemberID, familyID); err != nil {
+		`SELECT id, nickname FROM members WHERE id = ? AND family_id = ?`, s.MemberID, familyID); err != nil {
 		return err
 	}
 
@@ -526,18 +526,18 @@ func approveSubmission(ctx context.Context, tx *sqlx.Tx, familyID uint64, s *mod
 	now := time.Now()
 	for _, row := range []struct {
 		memberID uint64
-		name     string
+		nickname string
 		title    string
 		points   int
 	}{
-		{publisher.ID, publisher.Name, fmt.Sprintf("任务悬赏：%s（转给 %s）", t.Title, completer.Name), -t.Points},
-		{completer.ID, completer.Name, fmt.Sprintf("完成任务：%s（来自 %s）", t.Title, publisher.Name), t.Points},
+		{publisher.ID, publisher.Nickname, fmt.Sprintf("任务悬赏：%s（转给 %s）", t.Title, completer.Nickname), -t.Points},
+		{completer.ID, completer.Nickname, fmt.Sprintf("完成任务：%s（来自 %s）", t.Title, publisher.Nickname), t.Points},
 	} {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO records (family_id, member_id, member_name, title, points,
 			                      occurred_at, added_at, source)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			familyID, row.memberID, row.name, row.title, row.points, now, now, model.SourceTask); err != nil {
+			familyID, row.memberID, row.nickname, row.title, row.points, now, now, model.SourceTask); err != nil {
 			return err
 		}
 	}

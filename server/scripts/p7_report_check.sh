@@ -12,7 +12,7 @@ chk() { if [ "$2" = "$3" ]; then echo "  ✅ $1  ($3)"; pass=$((pass+1)); else e
 jget() { python -c "import sys,json;d=json.load(sys.stdin);print(eval('d'+sys.argv[1]))" "$1" 2>/dev/null; }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 reg() { curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"name\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"; }
+  -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"nickname\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"; }
 grant() { ( cd "$(dirname "$0")/.." && "$TOOL" -member "$1" -points "$2" ) > /dev/null 2>&1; }
 
 TODAY=$(date +%Y-%m-%d)
@@ -54,10 +54,10 @@ chk "非法日期 → 400" "400" "$(code "$B/api/app/records?from=2026/01/01" -H
 
 echo "== 4. 两个榜口径不同 =="
 P=$(curl -s "$B/api/app/stats/ranking?type=points" -H "Authorization: Bearer $M1_AT")
-chk "积分榜第一名是 L（50 > 12）" "组长" "$(echo "$P" | jget "['data']['rows'][0]['name']")"
+chk "积分榜第一名是 L（50 > 12）" "组长" "$(echo "$P" | jget "['data']['rows'][0]['nickname']")"
 chk "积分榜 L=50" "50" "$(echo "$P" | jget "['data']['rows'][0]['score']")"
 S=$(curl -s "$B/api/app/stats/ranking?type=score&period=month" -H "Authorization: Bearer $M1_AT")
-chk "得分榜（本月）第一名是小孩" "小孩" "$(echo "$S" | jget "['data']['rows'][0]['name']")"
+chk "得分榜（本月）第一名是小孩" "小孩" "$(echo "$S" | jget "['data']['rows'][0]['nickname']")"
 chk "得分榜小孩本月 17 分" "17" "$(echo "$S" | jget "['data']['rows'][0]['period_score']")"
 chk "得分榜 L 为 0（devtool 加分不算得分）" "0" "$(echo "$S" | jget "['data']['rows'][1]['period_score']")"
 chk "连续打卡 3 天（11.2.3）" "3" "$(echo "$S" | jget "['data']['rows'][0]['streak']")"
@@ -80,8 +80,8 @@ ITEM=$(curl -s $B/api/app/item/list -H "Authorization: Bearer $L_AT" | jget "['d
 curl -s -o /dev/null -X POST $B/api/app/item/redeem -H "Authorization: Bearer $M1_AT" -H 'Content-Type: application/json' -d "{\"item_id\":$ITEM}"
 P2=$(curl -s "$B/api/app/stats/ranking?type=points" -H "Authorization: Bearer $M1_AT")
 S2=$(curl -s "$B/api/app/stats/ranking?type=score&period=month" -H "Authorization: Bearer $M1_AT")
-chk "兑换后积分榜小孩 17→12" "12" "$(echo "$P2" | python -c "import sys,json;d=json.load(sys.stdin);print([r['score'] for r in d['data']['rows'] if r['name']=='小孩'][0])")"
-chk "兑换后得分榜仍 17（只看赚到的）" "17" "$(echo "$S2" | python -c "import sys,json;d=json.load(sys.stdin);print([r['period_score'] for r in d['data']['rows'] if r['name']=='小孩'][0])")"
+chk "兑换后积分榜小孩 17→12" "12" "$(echo "$P2" | python -c "import sys,json;d=json.load(sys.stdin);print([r['score'] for r in d['data']['rows'] if r['nickname']=='小孩'][0])")"
+chk "兑换后得分榜仍 17（只看赚到的）" "17" "$(echo "$S2" | python -c "import sys,json;d=json.load(sys.stdin);print([r['period_score'] for r in d['data']['rows'] if r['nickname']=='小孩'][0])")"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"

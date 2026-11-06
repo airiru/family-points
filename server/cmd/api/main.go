@@ -52,11 +52,13 @@ func main() {
 	authMW := middleware.NewAuth(tokenMgr, authSvc)
 
 	familyRepo := repo.NewFamily(conn)
-	familySvc := service.NewFamily(familyRepo)
-	familyHandler := handler.NewFamily(familySvc)
+	invitationRepo := repo.NewInvitation(conn)
 
-	// 站内通知（旁路）：各 service 用它发「待投票 / 结果 / 到账」提醒
+	// 站内通知（旁路）：各 service 用它发「待投票 / 结果 / 到账 / 入组邀请」提醒
 	notifier := notify.New(repo.NewNotification(conn), familyRepo)
+
+	familySvc := service.NewFamily(familyRepo, authRepo, invitationRepo, notifier)
+	familyHandler := handler.NewFamily(familySvc)
 
 	ledgerSvc := service.NewLedger(repo.NewLedger(conn), familyRepo, notifier)
 	ledgerHandler := handler.NewLedger(ledgerSvc)

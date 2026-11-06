@@ -1,9 +1,11 @@
 -- 0001_init.down.sql —— 回滚全部表结构（顺序与依赖相反）
+DROP TABLE IF EXISTS family_invitations;
 DROP TABLE IF EXISTS coupon_votes;
 DROP TABLE IF EXISTS coupons;
 DROP TABLE IF EXISTS redemptions;
 DROP TABLE IF EXISTS refresh_tokens;
-DROP TABLE IF EXISTS devices;
+DROP TABLE IF EXISTS screen_device_reports;
+DROP TABLE IF EXISTS member_devices;
 DROP TABLE IF EXISTS screen_reports;
 DROP TABLE IF EXISTS screen_rules;
 DROP TABLE IF EXISTS notifications;

@@ -36,14 +36,14 @@ async function toggleHidden(m) {
 function askKick(m) {
   confirm.value = {
     kind: 'kick', member: m,
-    title: `踢出「${m.name}」？`,
+    title: `踢出「${m.nickname}」？`,
     desc: '踢出后该成员积分清零、family_id 置空，且不能再加入本组（写入 family_bans）。历史记录保留在原组。此操作不可撤销。',
   }
 }
 function askLeader(m) {
   confirm.value = {
     kind: 'leader', member: m,
-    title: `把组长转给「${m.name}」？`,
+    title: `把组长转给「${m.nickname}」？`,
     desc: '转让后你自己降为普通成员，对方成为组长。后台仍可再改回来，但组内只有一名组长。',
   }
 }
@@ -95,14 +95,14 @@ async function invite() {
     </div>
     <table>
       <thead>
-        <tr><th>成员</th><th>用户名</th><th>角色</th><th>可用</th><th>冻结</th><th>状态</th><th>加入时间</th><th></th></tr>
+        <tr><th>昵称</th><th>用户名（不可改）</th><th>角色</th><th>可用</th><th>冻结</th><th>状态</th><th>加入时间</th><th></th></tr>
       </thead>
       <tbody>
         <tr v-for="m in list" :key="m.id">
           <td>
             <div class="row">
-              <div class="avatar">{{ m.avatar || m.name[0] }}</div>
-              <div><b>{{ m.name }}</b><div class="hint">#{{ m.id }}</div></div>
+              <div class="avatar">{{ m.avatar || m.nickname[0] }}</div>
+              <div><b>{{ m.nickname }}</b><div class="hint">#{{ m.id }}</div></div>
             </div>
           </td>
           <td class="muted">{{ m.username }}</td>

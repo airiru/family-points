@@ -99,7 +99,7 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                me?.name.orEmpty().ifBlank { "我" },
+                                me?.nickname.orEmpty().ifBlank { "我" },
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 17.sp,
                             )
@@ -544,7 +544,7 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
                         CardBox {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(m.name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                    Text(m.nickname, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                                     Text(
                                         if (m.totalMin >= 60) "${m.totalMin / 60} 小时 ${m.totalMin % 60} 分"
                                         else "${m.totalMin} 分钟",

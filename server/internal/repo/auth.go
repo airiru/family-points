@@ -28,7 +28,7 @@ func NewAuth(db *sqlx.DB) *Auth { return &Auth{db: db} }
 func (r *Auth) MemberByUsername(ctx context.Context, username string) (*model.Member, error) {
 	var m model.Member
 	err := r.db.GetContext(ctx, &m,
-		`SELECT id, family_id, name, score, frozen_score, hidden, avatar,
+		`SELECT id, family_id, nickname, score, frozen_score, hidden, avatar,
 		        username, pass_hash, role, created_at
 		   FROM members WHERE username = ?`, username)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -44,7 +44,7 @@ func (r *Auth) MemberByUsername(ctx context.Context, username string) (*model.Me
 func (r *Auth) MemberByID(ctx context.Context, id uint64) (*model.Member, error) {
 	var m model.Member
 	err := r.db.GetContext(ctx, &m,
-		`SELECT id, family_id, name, score, frozen_score, hidden, avatar,
+		`SELECT id, family_id, nickname, score, frozen_score, hidden, avatar,
 		        username, pass_hash, role, created_at
 		   FROM members WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -59,7 +59,7 @@ func (r *Auth) MemberByID(ctx context.Context, id uint64) (*model.Member, error)
 // CreateMember 创建成员；familyName 非空时同事务创建家庭组并把该成员设为组长。
 //
 // 为什么同事务：只建成账号没建成组、或建成组却没设组长，都会留下不可用的中间态。
-func (r *Auth) CreateMember(ctx context.Context, username, passHash, name string, familyName *string) (*model.Member, error) {
+func (r *Auth) CreateMember(ctx context.Context, username, passHash, nickname string, familyName *string) (*model.Member, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -93,8 +93,8 @@ func (r *Auth) CreateMember(ctx context.Context, username, passHash, name string
 	}
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO members (family_id, name, username, pass_hash, role)
-		 VALUES (?, ?, ?, ?, ?)`, familyID, name, username, passHash, role)
+		`INSERT INTO members (family_id, nickname, username, pass_hash, role)
+		 VALUES (?, ?, ?, ?, ?)`, familyID, nickname, username, passHash, role)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (r *Auth) CreateMember(ctx context.Context, username, passHash, name string
 	}
 
 	return &model.Member{
-		ID: uint64(id), FamilyID: familyID, Name: name,
+		ID: uint64(id), FamilyID: familyID, Nickname: nickname,
 		Username: username, PassHash: passHash, Role: role,
 	}, nil
 }
@@ -132,7 +132,7 @@ func (r *Auth) UpdateMemberPassword(ctx context.Context, id uint64, passHash str
 func (r *Auth) AdminByUsername(ctx context.Context, username string) (*model.Admin, error) {
 	var a model.Admin
 	err := r.db.GetContext(ctx, &a,
-		`SELECT id, username, pass_hash, must_change_password, disabled, created_at
+		`SELECT id, username, nickname, pass_hash, must_change_password, disabled, created_at
 		   FROM admins WHERE username = ?`, username)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -147,7 +147,7 @@ func (r *Auth) AdminByUsername(ctx context.Context, username string) (*model.Adm
 func (r *Auth) AdminByID(ctx context.Context, id uint64) (*model.Admin, error) {
 	var a model.Admin
 	err := r.db.GetContext(ctx, &a,
-		`SELECT id, username, pass_hash, must_change_password, disabled, created_at
+		`SELECT id, username, nickname, pass_hash, must_change_password, disabled, created_at
 		   FROM admins WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -165,19 +165,32 @@ func (r *Auth) CountAdmins(ctx context.Context) (int, error) {
 	return n, err
 }
 
-// CreateAdmin 创建管理员（初始化默认账号用）。
+// CreateAdmin 创建管理员（初始化默认账号用）。nickname 缺省 = username，之后可改。
 func (r *Auth) CreateAdmin(ctx context.Context, username, passHash string, mustChange bool) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO admins (username, pass_hash, must_change_password) VALUES (?, ?, ?)`,
-		username, passHash, mustChange)
+		`INSERT INTO admins (username, nickname, pass_hash, must_change_password) VALUES (?, ?, ?, ?)`,
+		username, username, passHash, mustChange)
 	return err
+}
+
+// UpdateAdminNickname 只改管理员昵称。**username 没有任何写路径**，这是设计约束。
+func (r *Auth) UpdateAdminNickname(ctx context.Context, id uint64, nickname string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE admins SET nickname = ? WHERE id = ?`, nickname, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ListAdmins 列出全部管理员（不含 pass_hash）。
 func (r *Auth) ListAdmins(ctx context.Context) ([]model.Admin, error) {
 	list := []model.Admin{}
 	err := r.db.SelectContext(ctx, &list,
-		`SELECT id, username, '' AS pass_hash, must_change_password, disabled, created_at
+		`SELECT id, username, nickname, '' AS pass_hash, must_change_password, disabled, created_at
 		   FROM admins ORDER BY id`)
 	return list, err
 }

@@ -8,6 +8,8 @@ const list = ref([])
 const loading = ref(true)
 const creating = ref(false)
 const form = ref({ username: '', password: '' })
+const myNickname = ref('')
+const savingNick = ref(false)
 
 async function load() {
   loading.value = true
@@ -16,7 +18,29 @@ async function load() {
     list.value = d.admins || []
   } catch (e) { toastErr(e) } finally { loading.value = false }
 }
-onMounted(load)
+
+async function loadMine() {
+  try {
+    const me = await api('/admin/me')
+    myNickname.value = me.nickname || ''
+    store.me = me
+  } catch (e) { toastErr(e) }
+}
+
+// 只改 nickname。username 若被塞进请求体会被后端明确 400，这里根本不提供入口。
+async function saveNickname() {
+  savingNick.value = true
+  try {
+    const d = await api('/admin/me/profile', {
+      method: 'POST', body: { nickname: myNickname.value.trim() },
+    })
+    myNickname.value = d.nickname
+    store.me = { ...(store.me || {}), nickname: d.nickname }
+    toast('昵称已保存')
+  } catch (e) { toastErr(e) } finally { savingNick.value = false }
+}
+
+onMounted(() => { load(); loadMine() })
 
 async function create() {
   const u = form.value.username.trim()
@@ -42,6 +66,21 @@ async function toggle(a) {
 
 <template>
   <div class="card">
+    <div class="card-h"><h3>我的昵称</h3></div>
+    <div class="pad">
+      <div class="hint" style="margin-bottom:10px">
+        用户名 <b>{{ store.me ? store.me.username : '—' }}</b> 是登录凭证，注册后 <b>不可修改</b>；
+        昵称只用于显示，可以随时修改（1–32 字）。
+      </div>
+      <div class="row" style="gap:10px">
+        <input class="input" v-model="myNickname" maxlength="32" placeholder="昵称"
+               style="max-width:280px" @keyup.enter="saveNickname" />
+        <button class="btn" :disabled="savingNick" @click="saveNickname">保存昵称</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-h">
       <h3>管理员账号</h3><span class="sp"></span>
       <span class="hint">管理员不属于任何家庭组，只能走 <code>/api/admin/*</code></span>
@@ -54,7 +93,7 @@ async function toggle(a) {
           <td>
             <b>{{ a.username }}</b>
             <span v-if="store.me && a.id === store.me.id" class="tag blue" style="margin-left:6px">我</span>
-            <div class="hint">#{{ a.id }}</div>
+            <div class="hint">昵称 {{ a.nickname || '—' }} · #{{ a.id }}</div>
           </td>
           <td><span class="tag" :class="a.disabled ? 'bad' : 'ok'">{{ a.disabled ? '已停用' : '正常' }}</span></td>
           <td><span v-if="a.must_change_password" class="tag warn">待改初始密码</span><span v-else class="hint">已改</span></td>

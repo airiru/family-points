@@ -29,6 +29,26 @@ interface ApiService {
     @POST("api/app/password")
     suspend fun changePassword(@Body body: PasswordReq): Envelope<Unit>
 
+    // ---------- 待确认邀请（P3.1） ----------
+    // 组长侧挂 inFamily；被邀请人侧挂 app（未入组也能调用），别混用。
+    @POST("api/app/member/invite")
+    suspend fun inviteByUsername(@Body body: InviteByUsernameReq): Envelope<InvitationView>
+
+    @GET("api/app/member/invitations")
+    suspend fun familyInvitations(): Envelope<InvitationList>
+
+    @POST("api/app/member/invite/cancel")
+    suspend fun cancelInvitation(@Body body: InvitationIdReq): Envelope<InvitationCancel>
+
+    @GET("api/app/invitations")
+    suspend fun myInvitations(): Envelope<InvitationList>
+
+    @POST("api/app/invitation/accept")
+    suspend fun acceptInvitation(@Body body: InvitationIdReq): Envelope<InvitationView>
+
+    @POST("api/app/invitation/reject")
+    suspend fun rejectInvitation(@Body body: InvitationIdReq): Envelope<InvitationView>
+
     /** 登出：服务端会吊销该成员**全部** refresh token（docs 4.3 第 8 条）。
      *  只清本地 token 是假登出——refresh 还能用 30 天。 */
     @POST("api/app/logout")
@@ -206,7 +226,7 @@ data class PasswordReq(
 data class ConfirmReq(val confirm: Boolean = true)
 
 @kotlinx.serialization.Serializable
-data class RenameMemberReq(@kotlinx.serialization.SerialName("member_id") val memberId: Long, val name: String)
+data class RenameMemberReq(@kotlinx.serialization.SerialName("member_id") val memberId: Long, val nickname: String)
 
 @kotlinx.serialization.Serializable
 data class InviteCodeView(

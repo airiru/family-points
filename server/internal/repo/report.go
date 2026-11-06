@@ -76,7 +76,7 @@ func (r *Report) Records(ctx context.Context, f RecordFilter) ([]model.Record, i
 // MemberScore 是积分榜/得分榜的一行。
 type MemberScore struct {
 	MemberID    uint64  `db:"member_id" json:"member_id"`
-	Name        string  `db:"name" json:"name"`
+	Nickname    string  `db:"nickname" json:"nickname"`
 	Avatar      *string `db:"avatar" json:"avatar"`
 	Score       int     `db:"score" json:"score"`
 	FrozenScore int     `db:"frozen_score" json:"frozen_score"`
@@ -89,7 +89,7 @@ type MemberScore struct {
 func (r *Report) RankingPoints(ctx context.Context, familyID uint64) ([]MemberScore, error) {
 	list := []MemberScore{}
 	err := r.db.SelectContext(ctx, &list,
-		`SELECT id AS member_id, name, avatar, score, frozen_score, 0 AS period_score
+		`SELECT id AS member_id, nickname, avatar, score, frozen_score, 0 AS period_score
 		   FROM members
 		  WHERE family_id = ? AND hidden = 0
 		  ORDER BY (score + frozen_score) DESC, id ASC`, familyID)
@@ -102,14 +102,14 @@ func (r *Report) RankingPoints(ctx context.Context, familyID uint64) ([]MemberSc
 func (r *Report) RankingScore(ctx context.Context, familyID uint64, from, to time.Time) ([]MemberScore, error) {
 	list := []MemberScore{}
 	err := r.db.SelectContext(ctx, &list,
-		`SELECT m.id AS member_id, m.name, m.avatar, m.score, m.frozen_score,
+		`SELECT m.id AS member_id, m.nickname, m.avatar, m.score, m.frozen_score,
 		        COALESCE(SUM(r.points), 0) AS period_score
 		   FROM members m
 		   LEFT JOIN records r
 		          ON r.member_id = m.id AND r.family_id = m.family_id
 		         AND r.points > 0 AND r.occurred_at >= ? AND r.occurred_at < ?
 		  WHERE m.family_id = ? AND m.hidden = 0
-		  GROUP BY m.id, m.name, m.avatar, m.score, m.frozen_score
+		  GROUP BY m.id, m.nickname, m.avatar, m.score, m.frozen_score
 		  ORDER BY period_score DESC, m.id ASC`, from, to, familyID)
 	return list, err
 }

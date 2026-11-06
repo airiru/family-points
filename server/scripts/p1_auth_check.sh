@@ -16,7 +16,7 @@ jget() { python -c "import sys,json;d=json.load(sys.stdin);print(eval('d'+sys.ar
 
 echo "== 1. 注册（带创建家庭组）=="
 REG=$(curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d '{"username":"'$KID'","password":"Kid#2026pass","name":"小明","create_family":true,"family_name":"测试之家"}')
+  -d '{"username":"'$KID'","password":"Kid#2026pass","nickname":"小明","create_family":true,"family_name":"测试之家"}')
 echo "  $REG" | head -c 300; echo
 M_AT=$(echo "$REG" | jget "['data']['token']['access_token']")
 M_RT=$(echo "$REG" | jget "['data']['token']['refresh_token']")
@@ -52,7 +52,7 @@ chk "admin→app/me 401" "401" "$(curl -s -o /dev/null -w '%{http_code}' $B/api/
 
 echo "== 7. 验收 16：注册接口不产生管理员（admins 表仍只有 1 个，默认账号仍能登录）=="
 curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d '{"username":"'$KID2'","password":"Kid#2026pass","name":"小红"}' > /dev/null
+  -d '{"username":"'$KID2'","password":"Kid#2026pass","nickname":"小红"}' > /dev/null
 [ -n "$(admin_login "$B")" ] && R=200 || R=401
 chk "默认管理员仍可登录" "200" "$R"
 
@@ -72,9 +72,9 @@ chk "新密码登录成功" "200" "$(curl -s -o /dev/null -w '%{http_code}' -X P
 echo "== 10. 越权与输入校验 =="
 chk "无 token → 401" "401" "$(curl -s -o /dev/null -w '%{http_code}' $B/api/app/me)"
 chk "伪造 token → 401" "401" "$(curl -s -o /dev/null -w '%{http_code}' $B/api/app/me -H 'Authorization: Bearer abc.def.ghi')"
-chk "重复用户名 → 409" "409" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/api/register -H 'Content-Type: application/json' -d '{"username":"'$KID'","password":"Kid#2026pass","name":"x"}')"
-chk "弱密码 → 400" "400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/api/register -H 'Content-Type: application/json' -d '{"username":"weakpwd1","password":"123","name":"x"}')"
-chk "非法用户名 → 400" "400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/api/register -H 'Content-Type: application/json' -d '{"username":"a b","password":"Kid#2026pass","name":"x"}')"
+chk "重复用户名 → 409" "409" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/api/register -H 'Content-Type: application/json' -d '{"username":"'$KID'","password":"Kid#2026pass","nickname":"x"}')"
+chk "弱密码 → 400" "400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/api/register -H 'Content-Type: application/json' -d '{"username":"weakpwd1","password":"123","nickname":"x"}')"
+chk "非法用户名 → 400" "400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/api/register -H 'Content-Type: application/json' -d '{"username":"a b","password":"Kid#2026pass","nickname":"x"}')"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"

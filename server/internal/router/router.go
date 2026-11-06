@@ -64,6 +64,8 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.GET("/me", authHandler.MeAdmin)
 		admin.POST("/logout", authHandler.LogoutAdmin)
 		admin.POST("/password", authHandler.ChangeAdminPassword)
+		// 管理员资料：只改昵称，username 永不可改
+		admin.POST("/me/profile", authHandler.UpdateAdminProfile)
 
 		// 管理员跨组：family_id 只能走路径参数（4.3 第 3 条）
 		admin.GET("/family/:family_id", familyHandler.AdminInfo)
@@ -111,6 +113,11 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 
 		// 加入家庭组：此时还没入组，不能挂在 inFamily 下
 		app.POST("/family/join", familyHandler.AppJoin)
+
+		// P3.1 待确认邀请（被邀请人侧）：未入组也必须能查、能确认/拒绝
+		app.GET("/invitations", familyHandler.AppMyInvitations)
+		app.POST("/invitation/accept", familyHandler.AppAcceptInvitation)
+		app.POST("/invitation/reject", familyHandler.AppRejectInvitation)
 	}
 
 	// 组内接口：family_id 一律取自 token 主体，不接受任何请求参数
@@ -123,6 +130,11 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		// 邀请码：查看 / 重置（组长）
 		inFamily.GET("/family/invite-code", familyHandler.AppInviteCode)
 		inFamily.POST("/family/invite-code", familyHandler.AppResetInviteCode)
+
+		// P3.1 待确认邀请（组长侧）：发起 / 查看本组 / 取消
+		inFamily.POST("/member/invite", familyHandler.AppInviteByUsername)
+		inFamily.GET("/member/invitations", familyHandler.AppFamilyInvitations)
+		inFamily.POST("/member/invite/cancel", familyHandler.AppCancelInvitation)
 
 		// 不可逆操作：均要求 confirm=true
 		inFamily.POST("/family/leave", familyHandler.AppLeave)

@@ -17,7 +17,7 @@ const deviceDate = ref('')
 const deviceMemberId = ref(0)
 const deviceLimit = ref(50)
 
-const nameOf = id => (members.value.find(m => m.id === id) || {}).name || ('#' + id)
+const nameOf = id => (members.value.find(m => m.id === id) || {}).nickname || ('#' + id)
 const shortKey = k => !k ? '—' : (k.length > 14 ? k.slice(0, 8) + '…' + k.slice(-4) : k)
 
 async function load() {
@@ -47,7 +47,7 @@ onMounted(load)
       <h3>上报历史</h3><span class="sp"></span>
       <select class="input" style="width:140px" v-model.number="memberId" @change="load">
         <option :value="0">全部成员</option>
-        <option v-for="m in members" :key="m.id" :value="m.id">{{ m.name }}</option>
+        <option v-for="m in members" :key="m.id" :value="m.id">{{ m.nickname }}</option>
       </select>
       <select class="input" style="width:110px;margin-left:8px" v-model.number="limit" @change="load">
         <option :value="20">最近 20</option><option :value="50">最近 50</option><option :value="200">最近 200</option>
@@ -86,7 +86,7 @@ onMounted(load)
       <button v-if="deviceDate" class="btn ghost sm" style="margin-left:8px" @click="deviceDate = ''; load()">全部日期</button>
       <select class="input" style="width:140px;margin-left:8px" v-model.number="deviceMemberId" @change="load">
         <option :value="0">全部成员</option>
-        <option v-for="m in members" :key="m.id" :value="m.id">{{ m.name }}</option>
+        <option v-for="m in members" :key="m.id" :value="m.id">{{ m.nickname }}</option>
       </select>
       <select class="input" style="width:110px;margin-left:8px" v-model.number="deviceLimit" @change="load">
         <option :value="20">最近 20</option><option :value="50">最近 50</option><option :value="200">最近 200</option>

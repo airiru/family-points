@@ -11,7 +11,7 @@ jget() { python -c "import sys,json;d=json.load(sys.stdin);print(eval('d'+sys.ar
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 reg() { # reg <用户名> <昵称> <是否建组>
   curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-    -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"name\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"
+    -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"nickname\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"
 }
 
 echo "== 1. 造数据：组长 L + 待入组 M =="
@@ -82,7 +82,8 @@ curl -s -o /dev/null -X POST $B/api/app/member/hidden -H "Authorization: Bearer 
 chk "显示后成员列表含他" "True" "$(curl -s $B/api/app/family/members -H "Authorization: Bearer $T_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(any(m['id']==$L_ID for m in d['data']['members']))")"
 chk "组长改组名 → 200" "200" "$(code -X POST $B/api/app/family/rename -H "Authorization: Bearer $T_AT" -H 'Content-Type: application/json' -d '{"name":"改名后的家"}')"
 chk "成员改组名 → 403" "403" "$(code -X POST $B/api/app/family/rename -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"name":"x"}')"
-chk "本人改昵称 → 200" "200" "$(code -X POST $B/api/app/member/rename -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"name":"新昵称"}')"
+chk "本人改昵称 → 200" "200" "$(code -X POST $B/api/app/member/rename -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"nickname":"新昵称"}')"
+chk "成员改名带 username → 400" "400" "$(code -X POST $B/api/app/member/rename -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"nickname":"不改","username":"hacker"}')"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"

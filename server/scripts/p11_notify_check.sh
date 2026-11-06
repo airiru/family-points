@@ -10,7 +10,7 @@ chk() { if [ "$2" = "$3" ]; then echo "  ✅ $1  ($3)"; pass=$((pass+1)); else e
 jget() { python -c "import sys,json;d=json.load(sys.stdin);print(eval('d'+sys.argv[1]))" "$1" 2>/dev/null; }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 reg() { curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"name\":\"$2\",\"create_family\":$3,\"family_name\":\"通知组$RUN\"}"; }
+  -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"nickname\":\"$2\",\"create_family\":$3,\"family_name\":\"通知组$RUN\"}"; }
 # notif <token> <type> → 该类型未读通知条数
 notif() {
   curl -s "$B/api/app/notification/list?limit=50" -H "Authorization: Bearer $1" | python -c "
@@ -37,12 +37,15 @@ $DEVTOOL -member "nl$RUN" -points 100 >/dev/null 2>&1 || true
 $DEVTOOL -member "na$RUN" -points 50 >/dev/null 2>&1 || true
 
 echo "== 1. 个人资料：改名称 + 头像 =="
-chk "改名 200" "200" "$(code -X POST $B/api/app/me/profile -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d '{"name":"甲改名","avatar":"🐻"}')"
+chk "改昵称 200" "200" "$(code -X POST $B/api/app/me/profile -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d '{"nickname":"甲改名","avatar":"🐻"}')"
 ME=$(curl -s $B/api/app/me -H "Authorization: Bearer $A_AT")
-chk "名称已更新" "甲改名" "$(echo "$ME" | jget "['data']['name']")"
+chk "昵称已更新" "甲改名" "$(echo "$ME" | jget "['data']['nickname']")"
 chk "头像已更新" "🐻" "$(echo "$ME" | jget "['data']['avatar']")"
-chk "空名称+空头像 → 400" "400" "$(code -X POST $B/api/app/me/profile -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d '{}')"
-chk "名称超 32 字 → 400" "400" "$(code -X POST $B/api/app/me/profile -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"name\":\"$(python -c 'print("字"*33)')\"}")"
+chk "空昵称+空头像 → 400" "400" "$(code -X POST $B/api/app/me/profile -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d '{}')"
+chk "昵称超 32 字 → 400" "400" "$(code -X POST $B/api/app/me/profile -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"nickname\":\"$(python -c 'print("字"*33)')\"}")"
+chk "资料接口带 username → 400" "400" "$(code -X POST $B/api/app/me/profile -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d '{"nickname":"不改","username":"hacker"}')"
+chk "username 未被改写" "na$RUN" "$(curl -s $B/api/app/me -H "Authorization: Bearer $A_AT" | jget "['data']['username']")"
+chk "被拒请求也没有改掉昵称" "甲改名" "$(curl -s $B/api/app/me -H "Authorization: Bearer $A_AT" | jget "['data']['nickname']")"
 
 echo "== 2. 赠送到账通知 =="
 curl -s -o /dev/null -X POST $B/api/app/transfer/send -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"to_member_id\":$A_ID,\"amount\":5,\"note\":\"测试\"}"

@@ -107,28 +107,48 @@ CREATE TABLE family_bans (
   UNIQUE KEY uk_family_member (family_id, member_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 按用户名邀请的「待确认」状态机（P3.1，5.2.3）
+CREATE TABLE family_invitations (
+  id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id       BIGINT UNSIGNED NOT NULL,
+  inviter_id      BIGINT UNSIGNED NOT NULL,   -- 发起邀请的组长
+  invitee_id      BIGINT UNSIGNED NOT NULL,   -- 被邀请人（发起时必须未入组）
+  status          ENUM('pending','accepted','rejected','cancelled','expired') NOT NULL DEFAULT 'pending',
+  expires_at      DATETIME(3)  NOT NULL,      -- 7 天，与邀请码一致
+  decided_at      DATETIME(3)  NULL,
+  created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  -- 生成列：只有 pending 行参与唯一约束，其余状态为 NULL 不冲突。
+  -- 同组同一人最多一条待确认，历史 accepted/rejected/cancelled 可留多条追溯。
+  -- 与 members.leader_family_id 同构。
+  pending_invitee BIGINT UNSIGNED GENERATED ALWAYS AS (IF(status = 'pending', invitee_id, NULL)) STORED,
+  UNIQUE KEY uk_pending_invitee (family_id, pending_invitee),
+  KEY idx_invitee_status (invitee_id, status),
+  KEY idx_family_status (family_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 后台管理员账号（与前台成员完全独立，不参与积分）
 CREATE TABLE admins (
   id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  username   VARCHAR(20)  NOT NULL UNIQUE,
+  username   VARCHAR(20)  NOT NULL UNIQUE,  -- 登录凭证，注册后永不可改（5.1.6）
+  nickname   VARCHAR(32)  NOT NULL DEFAULT '',  -- 显示名，可改（5.4.9）；新建时回填为 username
   pass_hash  VARCHAR(60)  NOT NULL,          -- bcrypt
   must_change_password TINYINT(1) NOT NULL DEFAULT 1,  -- 首次登录强制改密（含默认账号）
   disabled   TINYINT(1)   NOT NULL DEFAULT 0,          -- 停用后无法登录（19.19）
   created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
   -- 注意：管理员是「网站运营者」，不属于任何家庭组，可跨组查看与管理。
-  -- 家庭用户（含组长）永远没有后台账号。
+  -- 家庭用户（含组长）永远没有后台账号；但管理员同样是「用户」，也有昵称。
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 成员（账号即成员：username 非空即可登录前台）
 CREATE TABLE members (
   id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   family_id       BIGINT UNSIGNED NULL,       -- 注册时为空；被组长邀请或自行创建家庭组后才有值
-  name            VARCHAR(32)  NOT NULL,
+  nickname        VARCHAR(32)  NOT NULL,      -- 显示名，可改（1–32 字）；**不是登录凭证**
   score           INT          NOT NULL DEFAULT 0,
   frozen_score    INT          NOT NULL DEFAULT 0,   -- 因发布任务被冻结的积分，不可动用
   hidden          TINYINT(1)   NOT NULL DEFAULT 0,
   avatar          VARCHAR(64)  NULL,          -- **预设头像标识**（如 'bear'），不是 URL；无自定义上传
-  username        VARCHAR(20)  NOT NULL UNIQUE,  -- 注册即创建账号，全局唯一 ⇒ 一人只属一个家庭组
+  username        VARCHAR(20)  NOT NULL UNIQUE,  -- 登录凭证，注册后永不可改；全局唯一 ⇒ 一人只属一个家庭组
   pass_hash       VARCHAR(60)  NOT NULL,         -- bcrypt
   role            ENUM('leader','member') NOT NULL DEFAULT 'member',  -- 组长/成员（前台角色）
   -- 「每组仅一名组长」下沉到数据库：组长时取 family_id，否则 NULL；UNIQUE 允许多个 NULL
@@ -403,6 +423,8 @@ CREATE TABLE refresh_tokens (
    所以它不能为空；`UNIQUE` 同时保证「一个账号只属一个家庭组」。
    （原文写「可空且唯一」是 v2 遗留，已作废。）
 2. **`records.member_name` 快照** —— 成员改名不污染历史。
+   **列名保留 `member_name` 不随 `nickname` 改名**：它是流水里的历史快照列，
+   改列名等于要求迁移生产库的历史数据，收益为零（见 5.1.6）。
 3. **`UNIQUE(member_id, report_date)`** —— 幂等下沉到数据库，重试不会产生重复结算。
 4. **不建外键约束** —— 一致性由 service 层事务 + 唯一索引保证。
    不建外键是为了避免级联误删与迁移时的锁风险；**删除成员时由 service 显式处理记录**。
@@ -415,6 +437,17 @@ CREATE TABLE refresh_tokens (
    变更组长必须在同一事务里「旧组长降级 + 新组长升级」，否则第二条 UPDATE 会撞唯一键。
 7. **连续天数不落计数器** —— 由 `screen_reports` 按自然日回溯计算（原 `members.streak_reset_at` 已删）。
    计数器在「覆盖上报」时极难回滚正确，回溯计算天然幂等。
+8. **登录凭证与显示名彻底分离（P3.1）** —— `username` 是登录凭证、全局唯一、注册后永不可改；
+   `nickname` 是显示名、可改、1–32 字符。`members` 与 `admins` **两张账号表都有这两个字段**。
+   API / DTO 一律用 `nickname`，不再出现 `name` 表示人。
+   早期 `members.name` 语义上本来就是昵称，只是名字没对齐，本阶段统一改名（不是新增能力）。
+9. **邀请的「同组同一人最多一条 pending」下沉到数据库** —— 用生成列
+   `pending_invitee = IF(status='pending', invitee_id, NULL)` + `UNIQUE(family_id, pending_invitee)`，
+   与组长唯一约束同构。应用层不做「先查再插」的竞态判断，撞 1062 直接转业务错误 409。
+   `expired` **不主动落库**：不设定时任务，读路径按 `expires_at` 惰性判定（与任务投票清扫同一取舍）。
+   唯一例外是**同组再次邀请同一人**：`Create` 会在同事务里把该人已过期的 pending 落为 `expired`
+   再插新行。否则生成列只看 `status`，一条过期的 pending 会永久占住 `uk_pending_invitee`，
+   而列表又不显示过期条目，组长连「取消」都拿不到 ID —— 这个人就再也邀不动了。
 
 ---
 
@@ -516,6 +549,12 @@ CREATE TABLE refresh_tokens (
 | 5.1.3 | 一个账号只能属于一个家庭组 | ⬜ `members.username` 全局唯一保证 |
 | 5.1.4 | 用户名规则 | ✅ 3–20 位，仅字母 / 数字 / 下划线 |
 | 5.1.5 | 密码规则 | ✅ 至少 8 位、最多 72 字节（bcrypt 上限），**不要求复杂度** |
+| 5.1.6 | **username 与 nickname 分离（P3.1）** | ✅ `username` 登录凭证、全局唯一、**注册后永不可改**；`nickname` 显示名、可改、1–32 字。`members` / `admins` 两张账号表都有，新建时不填昵称则回填为 `username`。所有改资料接口显式拒绝请求体里带 `username` |
+
+> **口径（2026-11-06 用户明确）**：原来 `members.name` 就是「昵称」、本来就可改，
+> 只是字段命名混着「名称 / 昵称」两套叫法；`username` 本来也**没有任何 UPDATE 路径**。
+> 本阶段做的是**统一命名为 `nickname`** + 给 `admins` 补昵称，不是新造一套身份体系。
+> `records.member_name` 是历史流水快照列，**列名保留不动**。
 
 > ⚠️ **创建家庭组 ≠ 获得后台管理员**。后台是给**网站运营者**用的，
 > 家庭用户（包括组长）**永远没有后台账号**，也没有任何后台入口。
@@ -526,9 +565,25 @@ CREATE TABLE refresh_tokens (
 |---|---|---|
 | 5.2.1 | **组长生成 / 重置邀请码** | ✅ 每组一个，重置后旧码立即失效 |
 | 5.2.2 | **用户输入邀请码加入家庭组** | ✅ 校验：码有效、本人 `family_id` 为空、未被该组禁入 |
-| 5.2.3 | 组长按用户名直接邀请 | ⬜ **未实现（P3.1）**：需「待确认邀请」状态机 + 新表，与邀请码并存。后台侧按用户名邀请已由 15.2.3 提供，但只拉「已注册且未入组」用户、没有确认环节，语义不同 |
-| 5.2.4 | 加入后 `family_id` 设为该组，`role='member'` | ✅ |
+| 5.2.3 | **App 侧按用户名发起「待确认邀请」** | ✅ **P3.1 已实现**：`family_invitations` 状态机 + 被邀请人确认/拒绝；与邀请码并存。后台 15.2.3 的「按用户名直拉入组」语义不变、独立保留 |
+| 5.2.4 | 加入后 `family_id` 设为该组，`role='member'` | ✅ 三条入组路径（邀请码 / 后台直邀 / 接受邀请）共用同一段入组事务 `joinTx` |
 | 5.2.5 | **邀请码有效期 7 天** | ✅ 过期后需组长重置；重置后旧码立即失效 |
+| 5.2.6 | **邀请有效期 7 天** | ✅ 与邀请码一致；**惰性判定**：不设定时任务，读列表与接受时按 `expires_at` 判断；`expired` 不主动落库，仅在同组再次邀请时由写路径顺手落地（见下） |
+| 5.2.7 | **同组同一人最多一条 pending** | ✅ 生成列 + `uk_pending_invitee` 兜底；重复邀请返回 **409**，不产生第二条 |
+| 5.2.8 | **被邀请人未入组也能查收 / 处理** | ✅ 三个接口挂 `/api/app` 而非 `RequireFamily()` 的 `inFamily` 组；`family_id` 一律取服务端邀请行，不接受请求体指定 |
+| 5.2.9 | **接受后其它组发来的 pending 一并作废** | ✅ 与入组在同一事务；避免一人多组。接受 / 拒绝 / 取消都写 `decided_at` |
+
+> **为什么前台「按用户名邀请」必须待确认，后台 15.2.3 却直接拉入组**：
+> 后台管理员是运营方、可跨组管理，直拉是管理动作；组长只是家庭用户，
+> 不能替别人决定归属。两条路径共用同一段 `joinTx` 入组 SQL，差别只在「谁触发」。
+>
+> **状态机**：`pending → accepted / rejected / cancelled`（落库），`expired` 默认只在读路径判定；
+> 同组再次邀请同一人时，写路径会先把该人**已过期的 pending** 落为 `expired` 再插新行，
+> 以释放 `uk_pending_invitee`（否则过期行会永久占用唯一键，且列表看不到它、无法取消）。
+> 发起校验顺序：用户名存在 → 不能邀自己 → 对方未入组 → 未被本组禁入。
+> 接受校验：邀请属于本人 → 仍 pending 且未过期 → 本人未入组 → 未被禁入；
+> 处理时再以 `FOR UPDATE` + 条件 UPDATE 兜住并发。
+> 通知与审计都是**业务成功后的旁路**：失败只记日志，不阻断邀请。
 
 ### 5.3 退出与踢出（积分清零 + 禁入）
 
@@ -559,7 +614,8 @@ CREATE TABLE refresh_tokens (
 | 5.4.5 | 修改密码 | ✅ `POST /api/admin/password` + Web 14.1a |
 | 5.4.6 | Token 刷新（Access 2h + Refresh 30d） | ✅ `/api/admin/refresh`、`/api/app/refresh`；refresh 存哈希、可吊销、轮换 |
 | 5.4.7 | **可管理所有家庭组的所有内容** | ✅ 成员、规则、任务、商品、设备、数据、审计（14 节 13 个页面） |
-| 5.4.8 | 管理员操作全部写审计日志 | ✅ `recordAudit` 28 个调用点，跨组操作额外带 `audit_family_id` |
+| 5.4.8 | 管理员操作全部写审计日志 | ✅ 调用点以 **21.2 表**为唯一事实源（不写死计数），跨组操作额外带 `audit_family_id` |
+| 5.4.9 | **管理员也有昵称，且可改** | ✅ `admins.nickname`；`POST /api/admin/me/profile` 只改昵称，Web 14.13 提供「我的昵称」卡片。`username` 同样永不可改，请求体带非空 `username` 直接 **400** |
 
 > **后台账号与前台账号毫无关系**：
 > - **不在同一张表**（`admins` vs `members`），字段、密码、token 全部独立
@@ -1185,7 +1241,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | # | 界面 | 关键内容 | 可见角色 |
 |---|---|---|---|
 | 13.1 | 启动页 | 检查前台 token，有效则直进主页 | 全部 |
-| 13.2 | 登录 / 注册 | 登录；注册创建账号，可顺带创建家庭组（成为组长） | 全部 |
+| 13.2 | 登录 / 注册 | 登录；注册创建账号（用户名 + 密码 + 昵称），可顺带创建家庭组（成为组长） | 全部 |
 | 13.3 | **积分榜 / 得分榜** | 顶部切换两个榜；积分榜看余额，得分榜看周/月表现；下方**积分趋势折线**（全组、周/月、`earned`/`net` 双线，2026-11-06 补） | 全部 |
 | 13.4 | 成员详情 | 该成员记录（分页） | 全部 |
 | 13.5 | 最近记录 | 分页、按成员筛选 | 全部 |
@@ -1196,12 +1252,19 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 13.10 | **任务投票** | 待投票列表、同意/反对、实时票数（X/Y） | 全部（**发布者除外**） |
 | 13.11 | 通知中心 | 未读列表、点击跳转、标记已读 | 全部 |
 | 13.12 | 屏幕时间（底部 tab，在积分榜前） | 权限状态、今日时长、每小时分布、近 7 天、**家庭成员详情（每人 + 各设备）**、上报状态 | 全部 |
-| 13.13 | **个人设置**（点「我的」头像进入） | 改名称、选头像（预设 emoji）、改密码 | 全部 |
-| 13.14 | **成员管理** | 邀请已注册用户加入、踢出成员、待处理邀请、**生成 / 重置邀请码** | **仅组长** |
+| 13.13 | **个人设置**（点「我的」头像进入） | 改**昵称**（`username` 只读展示、永不可改）、选头像（预设 emoji）、改密码 | 全部 |
+| 13.14 | **成员管理** | **按用户名发待确认邀请**、**本组已发邀请列表 / 取消**、踢出成员、**生成 / 重置邀请码** | **仅组长** |
 | 13.15 | **睡觉规则配置** | 睡觉时间点、允许时长、连续奖励档位 | **仅组长** |
 | 13.16 | **商品管理** | 商品增删改 | **仅组长** |
 
 **共 16 个界面**，其中 3 个（13.14–13.16）仅组长可见。
+
+> **未入组态（P3.1）**：`family_id` 为空时停在「加入家庭组」页，除邀请码输入框外，
+> 新增 **「我收到的邀请」卡片**：显示 `family_name` / 邀请人昵称 / 发出日期，提供**接受 / 拒绝**。
+> 它不是新界面，是 13.1 启动分流后的一个状态分支，故不占界面编号。
+> 接受成功后客户端必须重新拉 `/api/app/me`、刷新本地 `familyId` 并切到主界面，
+> 否则界面仍停在未入组态且后续组内请求带着旧身份。
+> 列表接口走 `/api/app/invitations`（**不要求已入组**），不能挂 `RequireFamily()` 的组内路由。
 
 > **导航改版（2026-11-05）**：底部 tab 改为 **屏幕 / 积分榜 / 任务 / 商城 / 我的**，
 > 屏幕时间提到第一位并作为独立 tab；**通知从 tab 移入「我的」**（带未读角标）。
@@ -1229,7 +1292,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 14.0 | **总览** | 全站计数（家庭组 / 成员 / 记录）+ 家庭组列表，点「进入」切当前组 |
 | 14.1 | 登录 | **仅登录，无注册入口**；管理员由部署时环境变量初始化（见 5.4） |
 | 14.1a | **修改初始密码** | 首次登录强制改密（5.4.2）；未改密前其余接口全 403，故必须单独有页 |
-| 14.2 | 成员管理 | 查看成员与头像（**仅预设**，改资料在 App 端 22.2）、隐藏、设组长、踢出、**按用户名邀请已注册用户**（15.2.3） |
+| 14.2 | 成员管理 | 查看成员 `username`（不可改）/ `nickname` 与头像（**仅预设**，改资料在 App 端 22.2）、隐藏、设组长、踢出、**按用户名直接拉入组**（15.2.3；后台管理动作，无确认环节） |
 | 14.3 | 睡觉规则 | 睡觉时间点、允许时长、连续奖励档位（与组长同权） |
 | 14.4 | 任务管理 | **只读**：查看全部任务与提交；审核走组内全员投票，后台**没有代审核接口** |
 | 14.5 | 兑换商城 | 商品管理；兑换撤销已按 9.4 移除 |
@@ -1239,11 +1302,12 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 14.9 | 审计日志 | 按成员/动作/时间筛选，查看 before/after |
 | 14.10 | 屏幕时间 | 查看上报历史 + **设备原始上报明细 / 已登记设备**（12.6；**只读，无手动录入**） |
 | 14.12 | 家庭组设置 | 组名、邀请码；**移交管理员不在本期范围**（管理员是运营方账号，与家庭组无归属关系） |
-| 14.13 | **管理员账号** | 列表、新建（首次登录强制改密）、停用（5.4.3） |
+| 14.13 | **管理员账号** | 列表（显示 `nickname`）、新建（首次登录强制改密）、停用（5.4.3）、**改我的昵称**（5.4.9） |
 
 **共 14 个页面**（12 个功能页 + 登录页 + 改密页）。设备管理页已随「去掉设备令牌」删除。相比早期版本删除了「记一笔」页与「手动录入」入口。
 
-> **实现状态（2026-11-06 核对）**：`web/`（Vue 3 + Vite）共 14 个页面（`src/pages/` 14 个 .vue，路由 16 条含 redirect），
+> **实现状态（2026-11-06 核对）**：`web/`（Vue 3 + Vite）共 14 个页面（`src/pages/` 14 个 .vue，路由 **15** 条含 redirect；
+> 口径坑：登录守卫 `beforeEach` 里也有一处 `path: '/login'`，用 `grep -c 'path:'` 会多数一条），
 > 直接对接 `/api/admin/*`。三处**有意只读**，不提供写操作：
 > **任务管理**（代审核会绕开「一人一票」，不做）、**赠送管理**（撤销已按 10.2.6 移除）、
 > **屏幕时间**（12 节：无手动录入入口）。记录与审计同样只读，记录是 append-only。
@@ -1271,7 +1335,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 
 | # | 接口 | 方法 | 说明 |
 |---|---|---|---|
-| 15.1.1 | `/api/register` | POST | 注册账号；可传 `createFamily` 顺带创建家庭组（**只成为组长，不产生后台身份**） |
+| 15.1.1 | `/api/register` | POST | 注册账号（`username` / `password` / `nickname`，昵称可省略，缺省回填为用户名）；可传 `createFamily` 顺带创建家庭组（**只成为组长，不产生后台身份**） |
 | 15.1.2 | `/api/admin/login` | POST | 后台登录 |
 | 15.1.3 | `/api/app/login` | POST | 前台登录 |
 | 15.1.3a | `/api/app/logout` | POST | 前台登出（吊销该成员全部 refresh；需 access，不要求已入组） |
@@ -1308,7 +1372,8 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.2.14 | `/api/admin/families` | GET | 所有家庭组列表（运营方视角） |
 | 15.2.15 | `/api/admin/family/:family_id` | GET | 跨组查看单个家庭组（**family_id 只能走路径参数**） |
 | 15.2.16 | `/api/admin/family/:family_id/members` | GET | 跨组查看成员（含被隐藏的） |
-| 15.2.19 | `/api/admin/me` | GET | 当前管理员信息（含 `must_change_password`） |
+| 15.2.19 | `/api/admin/me` | GET | 当前管理员信息（含 `username` / `nickname` / `must_change_password`） |
+| 15.2.19a | `/api/admin/me/profile` | POST | **只改当前管理员的昵称**（5.4.9）；请求体带非空 `username` 直接 400（用户名永不可改） |
 
 > **已移除**：`/api/admin/score/*`（记一笔）、`/api/admin/screen/report-manual`（手动录入）。
 > 接口层**直接删除，返回 404**，不是隐藏。
@@ -1322,7 +1387,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 > | 15.2.8 `/api/admin/task/*` | 代审核会绕开「一人一票」，**明确不做**（14.4）；后台只有只读的 15.2.31 |
 > | 15.2.11 `/api/admin/device/*` | 设备令牌机制 2026-11-05 **整体删除**，上报改走 15.4 的成员登录态 |
 > | 15.3.22 `/api/app/member/avatar` | 已并入 15.3.42 `/api/app/me/profile`（名称 + 预设头像标识一次提交） |
-> | 15.3.32 `/api/app/member/invite` | **组长按用户名直接邀请未实现**（5.2.3，排到 P3.1，需待确认邀请状态机 + 新表）；后台侧同名能力已由 15.2.3 提供 |
+> | 15.3.32 `/api/app/member/invite` | 早期写成「组长直接拉入组」，该语义**明确不做**；P3.1 以「待确认邀请」新语义重新登记为 **15.3.43**（5.2.3）。旧编号作废，后台直拉仍是 15.2.3 |
 >
 > 原则：**未实现的功能留在功能章节写清状态，不在接口清单里写死路径**。
 
@@ -1362,6 +1427,9 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.3.29 | `/api/app/me` | GET | 当前成员信息（`score` / `frozen_score` / `role` / `family_id`） |
 | 15.3.30 | `/api/app/screen/reports` | GET | 结算历史（本人；组长可查他人） |
 | 15.3.31 | `/api/app/task/detail` | GET | 任务详情：提交列表 + 每条的票数与票 |
+| 15.3.46 | `/api/app/invitations` | GET | **我收到的邀请**（待确认 + 历史处理记录）。**挂在 `app` 组、`family_id` 为空也能调**（5.2.8），不经过 `RequireFamily()` |
+| 15.3.47 | `/api/app/invitation/accept` | POST | **接受邀请**（`invitation_id`）：同事务置 `accepted` + 走 `joinTx` 入组 + 取消本人其它 pending；返回邀请对象 |
+| 15.3.48 | `/api/app/invitation/reject` | POST | **拒绝邀请**（`invitation_id`）：置 `rejected` + `decided_at`；返回邀请对象 |
 
 **仅组长（`role='leader'`）**
 
@@ -1376,7 +1444,10 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.3.39 | `/api/app/screen-rule` · `/api/app/screen-rule/save` | GET/POST | 每成员屏幕时间规则（保存限**组长**） |
 | 15.3.40 | `/api/app/coupons/pending` | GET | 本组待我核销的券（投票入口） |
 | 15.3.41 | `/api/app/coupon/detail` | GET | 券详情 + 核销投票明细（`coupon_id`） |
-| 15.3.42 | `/api/app/me/profile` | POST | 改自己的资料（名称、**预设**头像标识；不接受 URL） |
+| 15.3.42 | `/api/app/me/profile` | POST | 改自己的资料（**昵称** + **预设**头像标识；不接受 URL，不接受 `username`） |
+| 15.3.43 | `/api/app/member/invite` | POST | **按用户名发起待确认邀请**（5.2.3，`username`）；不直接入组；同组同一人已有 pending 返回 **409** |
+| 15.3.44 | `/api/app/member/invitations` | GET | 本组已发出的邀请（含被邀请人昵称 / 状态 / 有效期）；过期 pending 不显示且不落库 |
+| 15.3.45 | `/api/app/member/invite/cancel` | POST | 取消本组一条 pending 邀请（`invitation_id`）；非本组或非 pending 一律 **404** |
 
 ### 15.4 屏幕上报接口（成员登录态，2026-11-05 起无需令牌）
 
@@ -1741,13 +1812,19 @@ FROM task_votes WHERE submission_id=?;
 |---|---|
 | 管理员账号 | `admin.create` · `admin.disable` |
 | 家庭组 / 成员 | `member.invite` · `member.kick` · `member.leave` · `member.hidden` · `leader.transfer` · `family.rename` |
+| 待确认邀请（P3.1） | `invite.create` · `invite.accept` · `invite.reject` · `invite.cancel` |
 | 规则 | `rule.save` · `screen_rule.save` |
 | 商品 / 积分流转 | `item.save` · `item.delete` · `item.redeem` · `transfer.send` |
 | 任务 | `task.create` · `task.close` · `task.submit` · `task.vote` |
 | 导出 | `records.export` |
-| 认证 | `auth.login` · `auth.password`（2026-11-06 补齐） |
+| 认证 / 管理员资料 | `auth.login` · `auth.password`（2026-11-06 补齐） · `auth.profile`（P3.1：管理员改昵称） |
 
 > 调用约定：**业务成功后才写**，失败路径不记；写入失败由 `audit.Writer` 吞掉，不影响主流程。
+>
+> **待确认邀请的审计口径（P3.1）**：`invite.create` / `invite.cancel` 是组长在组内操作，
+> 直接走 `recordAudit` 自动取主体；`invite.accept` / `invite.reject` 时主体**还没入组**（JWT 里
+> `family_id` 为 NULL），必须用 `recordAuditAs` 显式传入**服务端邀请行**的 `family_id`，
+> 不能从请求体取，也不能留空。这是对 21.4 第 4/5 条的补充而非放宽。
 >
 > **认证审计的口径（2026-11-06）**：只记**成功**事件——失败登录不改任何状态，按上面的调用约定不记。
 > `before` / `after` 只放 `username` 与 `relogin_required` 标记，**绝不写明文密码或哈希**。
@@ -1768,7 +1845,7 @@ FROM task_votes WHERE submission_id=?;
 
 | # | 功能 | 状态 |
 |---|---|---|
-| 21.3.1 | 全量写入审计日志 | ✅ 已接入：兑换/赠送/任务(发布·提交·投票·关闭)/成员(踢出·退出·隐藏·转让)/规则/商品/改组名/登录·改密（设备令牌已整体删除，无此事件） |
+| 21.3.1 | 全量写入审计日志 | ✅ 已接入：兑换/赠送/任务(发布·提交·投票·关闭)/成员(踢出·退出·隐藏·转让)/规则/商品/改组名/登录·改密/邀请(发起·接受·拒绝·取消)（设备令牌已整体删除，无此事件） |
 | 21.3.2 | Web 后台查询（按成员 / 动作 / 时间筛选） | ✅ `GET /api/admin/audit/list`，另支持 family_id 与分页 |
 | 21.3.3 | 单条记录查看 before/after 差异 | ✅ 接口直接返回 `before` / `after` JSON（已脱敏） |
 | 21.3.4 | 日志保留期与清理（**180 天**，每日分批清理） | ⚠️ 未做：需要定时任务，属部署阶段（19.13 已定 180 天） |
@@ -1793,7 +1870,7 @@ FROM task_votes WHERE submission_id=?;
 
 | # | 功能 | 状态 |
 |---|---|---|
-| 22.1.1 | 通知生成（任务待审 / 审核结果 / 兑换成功 / 收到赠送） | ✅ 全部已实现：`task_submitted` · `task_decided` · `coupon_pending` · `coupon_decided` · `transfer_in` · `redeem_success` · `kicked`（2026-11-06 补齐兑换成功） |
+| 22.1.1 | 通知生成（任务待审 / 审核结果 / 兑换成功 / 收到赠送 / 收到邀请 / 邀请被处理） | ✅ 全部已实现：`task_submitted` · `task_decided` · `coupon_pending` · `coupon_decided` · `transfer_in` · `redeem_success` · `kicked` · `invite_received` · `invite_decided`（2026-11-06 补齐兑换成功与 P3.1 邀请通知） |
 | 22.1.2 | 未读数角标 | ✅ 由 `/api/app/state` 的 `unread_count` 提供 |
 | 22.1.3 | 通知列表与标记已读 | ✅ 列表（含 `unread=1` 过滤）、单条/全部已读 |
 | 22.1.4 | 点击跳转到对应对象 | ✅ 通知带 `ref_type` / `ref_id`，跳转由客户端实现 |
@@ -1809,6 +1886,13 @@ FROM task_votes WHERE submission_id=?;
 > 已整体删除；**新增通知必须在 `notify.Service` 加语义方法，不要回到 handler 直写 repo**。
 > `redeem_success` 发给兑换者本人，`ref_type=redemption` / `ref_id` 为兑换单 ID
 > （券与扣分同事务生成，repo 未在返回值里带 coupon ID，不为通知改 repo 返回结构）。
+>
+> **P3.1 邀请通知**：`invite_received` 只发给被邀请人、`invite_decided` 只发给发起邀请的组长，
+> `ref_type=invitation` / `ref_id` 为邀请 ID；取消邀请**不发**通知。
+> ⚠️ **已知限制**：通知列表 `/api/app/notification/list` 挂在 `inFamily` 组，
+> 被邀请人**尚未入组时看不到** `invite_received`；未入组侧的可靠入口是 15.3.46 邀请列表
+> 与 13 节的「我收到的邀请」卡片。该通知是入组后的历史留痕，不承担触达职责
+> （不为此放开通知接口的鉴权——通知内容带 `family_id`，边界不能放宽）。
 
 ### 22.2 成员头像
 
@@ -2009,6 +2093,19 @@ FROM task_votes WHERE submission_id=?;
 130. 成员登录成功后落 `auth.login`（`operator_type=member`，`operator_id` 与 `family_id` 均正确）；管理员登录落 `auth.login`（`operator_type=system`、`family_id` 为空）。
 131. 改密成功后落 `auth.password`；登录 / 改密的**失败路径不写审计**。
 132. 认证审计的 `before` / `after` 不含任何密码、哈希或 token 字段；审计写入失败不阻断登录与改密。
+
+**2026-11-06 P3.1：username 不可改 / 昵称统一 / 按用户名待确认邀请（5.1.6 / 5.2.3 / 5.4.9 / 15.3.43–48；p12）**
+133. `members` 与 `admins` 均有 `nickname`、`members.name` 已清除；`family_invitations.pending_invitee` 为 STORED 生成列且 `uk_pending_invitee` 存在；`go run ./cmd/migrate -verify` 全绿。
+134. 注册不传 `nickname` 时回填为 `username`；注册 / `/api/app/me` / 成员列表 / 榜单的显示名一律是 `nickname`，响应里不再出现 `name`；`records.member_name` 列名保留且改名不污染历史快照。
+135. `POST /api/app/me/profile`、`POST /api/app/member/rename`、`POST /api/admin/me/profile` 带 `username` 一律 **400**，库里 `username` 不变；管理员改昵称成功后 `/api/admin/me` 返回新昵称。
+136. 发起邀请校验：用户名不存在 **400**、邀自己 **400**、邀已入组用户 **409**、普通成员发起 **403**；失败路径不写 `invite.create` 审计。
+137. 正常发起返回裸邀请对象（`status=pending` + `family_name` + `invitee_nickname`），**不直接入组**；同组同一人重复发起 **409**，本组列表只有 1 条 pending。
+138. 未入组用户调 `GET /api/app/invitations` 返回 **200**（挂 `app` 组而非 `inFamily`），只看到发给自己的邀请、带邀请人昵称；看不到别人的邀请；组内通知接口对未入组仍 **403**（22.1 已记限制）。
+139. 拒绝：`status=rejected`、写 `decided_at`、仍未入组；重复拒绝 / 再接受同一邀请 **404**；组长列表显示 `rejected` 并收到 `invite_decided`。
+140. 接受：`status=accepted`、`family_id` 变为该组、`role=member`；其它组发来的 pending 同事务置 `cancelled`，再接受 **404**；审计 `invite.accept` 的 `family_id` 取服务端邀请行而非 NULL。
+141. 取消：组长可查本组已发邀请并取消 pending；重复取消 / 跨组取消 **404**；取消后对方看到的是 `cancelled` 历史行，不再是 pending。
+142. 过期：把 `expires_at` 改到过去后，两条列表都不显示该 pending、接受返回 **400**「邀请已过期」；**同组再次邀请同一人仍成功**（写路径先把过期 pending 落为 `expired` 释放唯一键），旧行在组长列表显示 `expired`。
+143. 审计 `invite.create` / `invite.accept` / `invite.reject` / `invite.cancel` 只在业务成功后写；通知 `invite_received` 只给被邀请人、`invite_decided` 只给发起组长，取消不发通知。
 ---
 
 ## 24. 开发起点与实施顺序（2026-11-03 新增）
@@ -2052,7 +2149,8 @@ FROM task_votes WHERE submission_id=?;
 **P9 已完成（2026-11-04）**：Android 客户端（`android/`，16 个界面，含设备自动上报与夜间时长采集）
 **已真实构建通过** —— `./gradlew assembleDebug` → `app-debug.apk` 19 MB（JDK 17 + Gradle 8.9）；
 商品券与核销投票（9.6）前后端均已落地；Web 后台 14 个页面已上线（`web/`）。
-数据库已按「开发阶段不兼容旧数据」重建，迁移 squash 为单一 `0001_init`（version=1，20 张表）。
+数据库已按「开发阶段不兼容旧数据」重建，迁移 squash 为单一 `0001_init`；
+**表清单以 `go run ./cmd/migrate -verify` 为唯一事实源**（该命令会逐项核对生成列与唯一键），不在正文写死表数。
 **真机验证（2026-11-04）**：在 HUAWEI ANA-AN00（Android 12 / API 31）上 `adb install` 成功，
 登录、积分榜（4 名成员真实余额与冻结额）、任务、商城（余额不足置灰 + 我的券入口）、
 我的（组长工具按角色显示）**逐屏截图核对通过**；链路走 `adb reverse tcp:8080`。
@@ -2061,7 +2159,9 @@ FROM task_votes WHERE submission_id=?;
 **仍未验证**：token 自动刷新、券核销投票全链路。
 **未来升级（暂不实现）**：全服任务与家庭星已设计、暂缓（见 25 节），排在 P9 之后再说。
 **撤销兑换 / 撤销赠送已按用户要求移除**（2026-11-03），接口返回 404，脚本里有断言兜住。
-P3 未做的部分：**按用户名邀请（5.2.3）**需要「待确认邀请」状态机 + 新表，单独排到 P3.1。
+**P3.1 已完成（2026-11-06）**：按用户名「待确认邀请」（5.2.3）落地，含 `family_invitations` 状态机、
+被邀请人确认 / 拒绝、7 天惰性过期与唯一键释放；同时统一 `username`（永不可改）/ `nickname`（可改）命名，
+并给 `admins` 补昵称（5.1.6 / 5.4.9）。验收见 `server/scripts/p12_invite_check.sh` 与 23 节 133–143。
 
 **顺序理由**：P1/P2 是**所有接口的前置**，晚做就要回头改每个 handler；
 P4 的账目模型定不下来，P5–P7 全部无法结算；审计（P8）放最后是因为它**旁路**，

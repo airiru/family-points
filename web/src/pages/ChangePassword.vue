@@ -29,9 +29,9 @@ async function submit() {
     // 这里直接用刚设置的新密码重新登录，拿一对全新的 token。
     const d = await api('/admin/login', {
       method: 'POST',
-      body: { username: token.name(), password: newPwd.value },
+      body: { username: token.username(), password: newPwd.value },
     })
-    token.set(d.token.access_token, token.name(), d.token.refresh_token)
+    token.set(d.token.access_token, token.username(), d.token.refresh_token)
 
     await Promise.all([loadMe(), loadFamilies()])
     router.replace('/')

@@ -36,11 +36,11 @@ chk "改密后后台接口可用" "200" "$(code $B/api/admin/me -H "Authorizatio
 
 echo "== 1. 现场造 A / B 两个家庭组 =="
 RA=$(curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d "{\"username\":\"pa$RUN\",\"password\":\"Kid#2026pass\",\"name\":\"甲组家长\",\"create_family\":true,\"family_name\":\"甲组$RUN\"}")
+  -d "{\"username\":\"pa$RUN\",\"password\":\"Kid#2026pass\",\"nickname\":\"甲组家长\",\"create_family\":true,\"family_name\":\"甲组$RUN\"}")
 FA_ID=$(echo "$RA" | jget "['data']['member']['family_id']")
 FA_AT=$(echo "$RA" | jget "['data']['token']['access_token']")
 RB=$(curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d "{\"username\":\"pb$RUN\",\"password\":\"Kid#2026pass\",\"name\":\"乙组家长\",\"create_family\":true,\"family_name\":\"乙组$RUN\"}")
+  -d "{\"username\":\"pb$RUN\",\"password\":\"Kid#2026pass\",\"nickname\":\"乙组家长\",\"create_family\":true,\"family_name\":\"乙组$RUN\"}")
 FB_ID=$(echo "$RB" | jget "['data']['member']['family_id']")
 echo "  A 组 family_id=$FA_ID  B 组 family_id=$FB_ID"
 chk "A/B 是两个不同的组" "True" "$([ "$FA_ID" != "$FB_ID" ] && echo True || echo False)"
@@ -66,7 +66,7 @@ chk "admin token 打 app 接口 → 401" "401" "$(code $B/api/app/family -H "Aut
 
 echo "== 6. 未入组用户被挡在组内接口外 =="
 NF=$(curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d "{\"username\":\"pn$RUN\",\"password\":\"Kid#2026pass\",\"name\":\"无组人\"}")
+  -d "{\"username\":\"pn$RUN\",\"password\":\"Kid#2026pass\",\"nickname\":\"无组人\"}")
 NF_AT=$(echo "$NF" | jget "['data']['token']['access_token']")
 chk "未入组访问 /api/app/family → 403" "403" "$(code $B/api/app/family -H "Authorization: Bearer $NF_AT")"
 chk "未入组访问 /api/app/me → 200（不需要组）" "200" "$(code $B/api/app/me -H "Authorization: Bearer $NF_AT")"

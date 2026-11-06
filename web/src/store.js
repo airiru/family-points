@@ -5,7 +5,7 @@ import { api } from './api'
 const FAMILY_KEY = 'fp_admin_family'
 
 export const store = reactive({
-  me: null,          // { id, username, must_change_password }
+  me: null,          // { id, username（不可改）, nickname（可改）, must_change_password }
   families: [],
   familyId: Number(localStorage.getItem(FAMILY_KEY)) || 0,
   loading: false,

@@ -215,7 +215,7 @@ func newMigrator(cfg config.DB) (*migrate.Migrate, error) {
 	c.User = cfg.User
 	c.Passwd = cfg.Password
 	c.DBName = cfg.Name
-	c.MultiStatements = true      // 一个 .sql 文件里有多个 CREATE TABLE
+	c.MultiStatements = true // 一个 .sql 文件里有多个 CREATE TABLE
 	c.Timeout = 10 * time.Second
 	dsn := "mysql://" + c.FormatDSN()
 
@@ -229,6 +229,7 @@ var expectedTables = []string{
 	"audit_logs", "notifications", "screen_rules", "screen_reports",
 	"screen_device_reports", "member_devices",
 	"refresh_tokens", "redemptions", "coupons", "coupon_votes",
+	"family_invitations",
 }
 
 // verifySchema 核对 P0 的完成判据：表齐全 + 几条关键约束真的生效。
@@ -332,6 +333,54 @@ func verifySchema(cfg config.DB) error {
 		return fmt.Errorf("families 缺少 invite_code_expires_at")
 	}
 	fmt.Println("✅ families.invite_code_expires_at 存在")
+
+	// 6. username / nickname 分离：两张账号表都要有 nickname，members 不得残留旧 name 列
+	for _, table := range []string{"members", "admins"} {
+		var n int
+		if err := conn.QueryRow(
+			`SELECT COUNT(*) FROM information_schema.columns
+			 WHERE table_schema = ? AND table_name = ? AND column_name = 'nickname'`,
+			cfg.Name, table).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%s 缺少 nickname（可改显示名）列", table)
+		}
+	}
+	var oldName int
+	if err := conn.QueryRow(
+		`SELECT COUNT(*) FROM information_schema.columns
+		 WHERE table_schema = ? AND table_name = 'members' AND column_name = 'name'`,
+		cfg.Name).Scan(&oldName); err != nil {
+		return err
+	}
+	if oldName != 0 {
+		return fmt.Errorf("members 仍残留旧 name 列，应已改名为 nickname")
+	}
+	fmt.Println("✅ username / nickname 分离：members + admins 均有 nickname，旧 name 已清除")
+
+	// 7. 待确认邀请：pending 生成列 + 唯一键，保证同组同一人最多一条待确认
+	var invExtra string
+	if err := conn.QueryRow(
+		`SELECT extra FROM information_schema.columns
+		 WHERE table_schema = ? AND table_name = 'family_invitations' AND column_name = 'pending_invitee'`,
+		cfg.Name).Scan(&invExtra); err != nil {
+		return fmt.Errorf("family_invitations.pending_invitee 不存在: %w", err)
+	}
+	if !strings.Contains(strings.ToUpper(invExtra), "STORED GENERATED") {
+		return fmt.Errorf("pending_invitee 不是生成列：%s", invExtra)
+	}
+	var invIdx int
+	if err := conn.QueryRow(
+		`SELECT COUNT(*) FROM information_schema.statistics
+		 WHERE table_schema = ? AND table_name = 'family_invitations' AND index_name = 'uk_pending_invitee'`,
+		cfg.Name).Scan(&invIdx); err != nil {
+		return err
+	}
+	if invIdx == 0 {
+		return fmt.Errorf("缺少唯一索引 uk_pending_invitee")
+	}
+	fmt.Println("✅ family_invitations：生成列 + uk_pending_invitee 生效")
 
 	fmt.Println("\n结构核对全部通过")
 	return nil

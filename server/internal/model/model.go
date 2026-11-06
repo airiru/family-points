@@ -13,10 +13,13 @@ const (
 )
 
 // Member 对应 members 表。family_id 可空：注册后未入组时为空。
+//
+// username 是登录凭证，注册后**永不可改**（全仓没有任何 UPDATE username 路径）；
+// nickname 是显示名，可自由修改。records.member_name 存的是当时的昵称快照，不受改名影响。
 type Member struct {
 	ID          uint64    `db:"id" json:"id"`
 	FamilyID    *uint64   `db:"family_id" json:"family_id"`
-	Name        string    `db:"name" json:"name"`
+	Nickname    string    `db:"nickname" json:"nickname"`
 	Score       int       `db:"score" json:"score"`
 	FrozenScore int       `db:"frozen_score" json:"frozen_score"`
 	Hidden      bool      `db:"hidden" json:"hidden"`
@@ -31,9 +34,11 @@ type Member struct {
 func (m *Member) InFamily() bool { return m.FamilyID != nil }
 
 // Admin 对应 admins 表。管理员不属于任何家庭组。
+// 与 Member 一样：username 永不可改，nickname 可改。
 type Admin struct {
 	ID                 uint64    `db:"id" json:"id"`
 	Username           string    `db:"username" json:"username"`
+	Nickname           string    `db:"nickname" json:"nickname"`
 	PassHash           string    `db:"pass_hash" json:"-"`
 	MustChangePassword bool      `db:"must_change_password" json:"must_change_password"`
 	Disabled           bool      `db:"disabled" json:"disabled"`
@@ -52,6 +57,38 @@ type Family struct {
 // InviteCodeUsable 判断邀请码是否仍可用（7 天有效期，5.2.5）。
 func (f *Family) InviteCodeUsable(now time.Time) bool {
 	return f.InviteCodeExpiresAt != nil && now.Before(*f.InviteCodeExpiresAt)
+}
+
+// ---------- 待确认邀请（P3.1） ----------
+
+const (
+	InvitationPending   = "pending"
+	InvitationAccepted  = "accepted"
+	InvitationRejected  = "rejected"
+	InvitationCancelled = "cancelled"
+	InvitationExpired   = "expired"
+)
+
+// InvitationUsable 判断邀请是否仍可被处理：状态 pending 且未过期。
+// 过期只在这里判定（惰性），不设定时任务 —— 与任务投票清扫同一取舍。
+func InvitationUsable(status string, expiresAt, now time.Time) bool {
+	return status == InvitationPending && now.Before(expiresAt)
+}
+
+// FamilyInvitation 对应 family_invitations 表。
+// 后三个字段是 JOIN 出的展示辅助列，不落库。
+type FamilyInvitation struct {
+	ID              uint64     `db:"id" json:"id"`
+	FamilyID        uint64     `db:"family_id" json:"family_id"`
+	InviterID       uint64     `db:"inviter_id" json:"inviter_id"`
+	InviteeID       uint64     `db:"invitee_id" json:"invitee_id"`
+	Status          string     `db:"status" json:"status"`
+	ExpiresAt       time.Time  `db:"expires_at" json:"expires_at"`
+	DecidedAt       *time.Time `db:"decided_at" json:"decided_at"`
+	CreatedAt       time.Time  `db:"created_at" json:"created_at"`
+	FamilyName      string     `db:"family_name" json:"family_name"`
+	InviterNickname string     `db:"inviter_nickname" json:"inviter_nickname"`
+	InviteeNickname string     `db:"invitee_nickname" json:"invitee_nickname"`
 }
 
 // Item 是商城商品。

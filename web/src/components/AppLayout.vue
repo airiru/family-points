@@ -89,7 +89,7 @@ async function logout() {
       </div>
 
       <div class="foot">
-        管理员 {{ store.me ? store.me.username : '—' }}<br />
+        管理员 {{ store.me ? (store.me.nickname || store.me.username) : '—' }}<br />
         <span style="color:#8A6A45" v-if="store.me && store.me.must_change_password">
           ⚠ 尚未修改初始密码 ·
           <a href="javascript:;" style="color:var(--primary)" @click="router.push('/change-password')">去修改</a>

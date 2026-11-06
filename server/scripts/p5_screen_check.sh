@@ -10,7 +10,7 @@ chk() { if [ "$2" = "$3" ]; then echo "  ✅ $1  ($3)"; pass=$((pass+1)); else e
 jget() { python -c "import sys,json;d=json.load(sys.stdin);print(eval('d'+sys.argv[1]))" "$1" 2>/dev/null; }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 reg() { curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
-  -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"name\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"; }
+  -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"nickname\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"; }
 score() { curl -s $B/api/app/me -H "Authorization: Bearer $1" | jget "['data']['score']"; }
 # 上报：report <member_token> <date> <total> <night> [device_key] [model]
 # 2026-11-05 起不再需要设备令牌，改用成员登录态 + 客户端自报设备标识。

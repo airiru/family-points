@@ -279,20 +279,26 @@ func (h *Family) AppUpdateProfile(c *gin.Context) {
 		return
 	}
 	var in struct {
-		Name   string `json:"name"`
-		Avatar string `json:"avatar"`
+		Nickname string `json:"nickname"`
+		Avatar   string `json:"avatar"`
+		Username string `json:"username"` // 只用于显式拒绝，绝不写入
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		httpx.BadRequest(c, "请求体格式不正确")
 		return
 	}
-	updated, err := h.svc.UpdateMyProfile(c.Request.Context(), m, in.Name, in.Avatar)
+	// username 永不可改：传了就 400，不静默忽略（与 /api/admin/me/profile 同口径）。
+	if in.Username != "" {
+		httpx.BadRequest(c, "用户名注册后不可修改")
+		return
+	}
+	updated, err := h.svc.UpdateMyProfile(c.Request.Context(), m, in.Nickname, in.Avatar)
 	if err != nil {
 		fail(c, err)
 		return
 	}
 	httpx.OK(c, gin.H{
-		"id": updated.ID, "name": updated.Name, "avatar": updated.Avatar,
+		"id": updated.ID, "nickname": updated.Nickname, "avatar": updated.Avatar,
 		"role": updated.Role, "family_id": updated.FamilyID,
 	})
 }
@@ -329,18 +335,138 @@ func (h *Family) AppRenameMember(c *gin.Context) {
 	}
 	var in struct {
 		MemberID uint64 `json:"member_id"`
-		Name     string `json:"name"`
+		Nickname string `json:"nickname"`
+		Username string `json:"username"` // 只用于显式拒绝，绝不写入
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		httpx.BadRequest(c, "请求体格式不正确")
 		return
 	}
+	if in.Username != "" {
+		httpx.BadRequest(c, "用户名注册后不可修改")
+		return
+	}
 	if in.MemberID == 0 {
 		in.MemberID = m.ID // 不传就是改自己
 	}
-	if err := h.svc.RenameMember(c.Request.Context(), m, in.MemberID, in.Name); err != nil {
+	if err := h.svc.RenameMember(c.Request.Context(), m, in.MemberID, in.Nickname); err != nil {
 		fail(c, err)
 		return
 	}
-	httpx.OK(c, gin.H{"member_id": in.MemberID, "name": in.Name})
+	httpx.OK(c, gin.H{"member_id": in.MemberID, "nickname": in.Nickname})
+}
+
+// ---------- 待确认邀请（P3.1） ----------
+
+// AppInviteByUsername POST /api/app/member/invite —— 组长按用户名发起邀请（不直接入组）。
+func (h *Family) AppInviteByUsername(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		Username string `json:"username"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	inv, err := h.svc.InviteByUsername(c.Request.Context(), m, in.Username)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	recordAudit(c, "invite.create", "invitation", &inv.ID, nil,
+		gin.H{"username": in.Username, "invitee_id": inv.InviteeID, "status": inv.Status})
+	// 直接返回邀请对象，不再包一层 {"invitation": ...}：
+	// 客户端 Envelope<InvitationView> 的 data 就是这一行，包一层会静默解析成全默认值。
+	httpx.OK(c, inv)
+}
+
+// AppFamilyInvitations GET /api/app/member/invitations —— 组长看本组发出的邀请。
+func (h *Family) AppFamilyInvitations(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	list, err := h.svc.FamilyInvitations(c.Request.Context(), m)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"items": list})
+}
+
+// AppCancelInvitation POST /api/app/member/invite/cancel —— 组长取消待确认邀请。
+func (h *Family) AppCancelInvitation(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		InvitationID uint64 `json:"invitation_id"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if err := h.svc.CancelInvitation(c.Request.Context(), m, in.InvitationID); err != nil {
+		fail(c, err)
+		return
+	}
+	recordAudit(c, "invite.cancel", "invitation", &in.InvitationID, nil, nil)
+	httpx.OK(c, gin.H{"cancelled": true})
+}
+
+// AppMyInvitations GET /api/app/invitations —— 我收到的邀请。
+// 挂在 app 组（未入组可用），family_id 一律来自服务端邀请行。
+func (h *Family) AppMyInvitations(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	list, err := h.svc.MyInvitations(c.Request.Context(), m)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"items": list})
+}
+
+// AppAcceptInvitation / AppRejectInvitation：接受 / 拒绝邀请。
+func (h *Family) AppAcceptInvitation(c *gin.Context) { h.decideInvitation(c, true) }
+func (h *Family) AppRejectInvitation(c *gin.Context) { h.decideInvitation(c, false) }
+
+func (h *Family) decideInvitation(c *gin.Context, accept bool) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		InvitationID uint64 `json:"invitation_id"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	inv, err := h.svc.DecideInvitation(c.Request.Context(), m, in.InvitationID, accept)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	action := "invite.reject"
+	if accept {
+		action = "invite.accept"
+	}
+	// 此时主体还没入组（family_id 为 NULL），显式用服务端邀请行的 family_id
+	recordAuditAs(c, action, "invitation", &in.InvitationID, m.ID, "member", &inv.FamilyID,
+		gin.H{"status": inv.Status, "family_id": inv.FamilyID})
+	// 直接返回邀请对象，不再包一层 {"invitation": ...}：
+	// 客户端 Envelope<InvitationView> 的 data 就是这一行，包一层会静默解析成全默认值。
+	httpx.OK(c, inv)
 }

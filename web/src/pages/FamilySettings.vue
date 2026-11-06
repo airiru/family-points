@@ -64,7 +64,7 @@ const leader = computed(() => members.value.find(m => m.role === 'leader'))
         </div>
         <div style="display:flex;justify-content:space-between;font-size:13px">
           <span class="muted">当前组长</span>
-          <b>{{ leader ? leader.name : '—' }}</b>
+          <b>{{ leader ? leader.nickname : '—' }}</b>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:13px">
           <span class="muted">创建时间</span>
@@ -81,7 +81,7 @@ const leader = computed(() => members.value.find(m => m.role === 'leader'))
         <thead><tr><th>成员</th><th>角色</th><th>总积分</th></tr></thead>
         <tbody>
           <tr v-for="m in members" :key="m.id">
-            <td><div class="row"><div class="avatar">{{ m.avatar || m.name[0] }}</div>{{ m.name }}</div></td>
+            <td><div class="row"><div class="avatar">{{ m.avatar || m.nickname[0] }}</div>{{ m.nickname }}</div></td>
             <td><span class="tag" :class="m.role === 'leader' ? 'lead' : 'gray'">{{ m.role === 'leader' ? '组长' : '成员' }}</span></td>
             <td class="num">{{ m.score + m.frozen_score }}</td>
           </tr>

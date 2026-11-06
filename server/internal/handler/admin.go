@@ -243,7 +243,7 @@ func (h *Admin) CreateAdmin(c *gin.Context) {
 		return
 	}
 	recordAudit(c, "admin.create", "admin", &admin.ID, nil, gin.H{"username": admin.Username})
-	httpx.OK(c, gin.H{"id": admin.ID, "username": admin.Username})
+	httpx.OK(c, gin.H{"id": admin.ID, "username": admin.Username, "nickname": admin.Nickname})
 }
 
 // DisableAdmin POST /api/admin/accounts/disable —— 停用 / 启用。

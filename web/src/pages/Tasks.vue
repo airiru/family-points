@@ -8,7 +8,7 @@ const tasks = ref([])
 const members = ref([])
 const loading = ref(true)
 
-const nameOf = id => (members.value.find(m => m.id === id) || {}).name || ('#' + id)
+const nameOf = id => (members.value.find(m => m.id === id) || {}).nickname || ('#' + id)
 // 后端只有 open / taken / closed 三态：任务通过投票后直接置 closed，
 // 用 completed_by 区分「已完成」和「发布者关闭」——不存在 status==='done'。
 const isDone = t => t.status === 'closed' && !!t.completed_by

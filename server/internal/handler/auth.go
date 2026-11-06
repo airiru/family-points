@@ -33,7 +33,7 @@ func (h *Auth) Register(c *gin.Context) {
 		"member": gin.H{
 			"id":        member.ID,
 			"username":  member.Username,
-			"name":      member.Name,
+			"nickname":  member.Nickname,
 			"role":      member.Role,
 			"family_id": member.FamilyID,
 		},
@@ -64,6 +64,7 @@ func (h *Auth) LoginAdmin(c *gin.Context) {
 		"admin": gin.H{
 			"id":       admin.ID,
 			"username": admin.Username,
+			"nickname": admin.Nickname,
 		},
 		"token": pair,
 	})
@@ -92,7 +93,7 @@ func (h *Auth) LoginMember(c *gin.Context) {
 		"member": gin.H{
 			"id":        member.ID,
 			"username":  member.Username,
-			"name":      member.Name,
+			"nickname":  member.Nickname,
 			"role":      member.Role,
 			"family_id": member.FamilyID,
 		},
@@ -214,8 +215,39 @@ func (h *Auth) MeAdmin(c *gin.Context) {
 	httpx.OK(c, gin.H{
 		"id":                   admin.ID,
 		"username":             admin.Username,
+		"nickname":             admin.Nickname,
 		"must_change_password": admin.MustChangePassword,
 	})
+}
+
+// UpdateAdminProfile POST /api/admin/me/profile —— 只改昵称。
+//
+// username 是登录凭证，**永不可改**：若请求体带了 username（无论值是什么）一律 400，
+// 而不是静默忽略 —— 让「不可改」成为可验证的契约，也防止将来有人误加写路径。
+func (h *Auth) UpdateAdminProfile(c *gin.Context) {
+	admin, ok := middleware.CurrentAdmin(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		Nickname string `json:"nickname"`
+		Username string `json:"username"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if in.Username != "" {
+		httpx.BadRequest(c, "用户名注册后不可修改")
+		return
+	}
+	if err := h.svc.UpdateAdminNickname(c.Request.Context(), admin.ID, in.Nickname); err != nil {
+		fail(c, err)
+		return
+	}
+	recordAudit(c, "auth.profile", "admin", &admin.ID, nil, gin.H{"nickname": in.Nickname})
+	httpx.OK(c, gin.H{"id": admin.ID, "username": admin.Username, "nickname": in.Nickname})
 }
 
 // MeMember GET /api/app/me
@@ -228,7 +260,7 @@ func (h *Auth) MeMember(c *gin.Context) {
 	httpx.OK(c, gin.H{
 		"id":           m.ID,
 		"username":     m.Username,
-		"name":         m.Name,
+		"nickname":     m.Nickname,
 		"role":         m.Role,
 		"family_id":    m.FamilyID,
 		"score":        m.Score,
@@ -236,5 +268,3 @@ func (h *Auth) MeMember(c *gin.Context) {
 		"avatar":       m.Avatar,
 	})
 }
-
-

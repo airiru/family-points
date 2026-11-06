@@ -45,6 +45,25 @@
 - 文档：features 8.4（不变量）、12.1（余额下限）、10.5（澄清只约束主动支出）、
   23 节验收 123–127；行为锁在 `p5_screen_check.sh` 第 10 节。
 
+## 〇之三、账号字段与待确认邀请（2026-11-06 用户明确，P3.1 已实现）
+
+- **`username` 是登录凭证、全局唯一、注册后永不可改**；本来就没有 `UPDATE username` 路径，
+  P3.1 把它写成显式不变量：三个改资料接口带 `username` 一律 **400**，不静默忽略。
+- **`nickname` 是显示名、可改、1–32 字**，`members` / `admins` **两张账号表都有**。
+  早期 `members.name` 语义上本来就是昵称，只是「名称 / 昵称」两套叫法混用；P3.1 统一命名为
+  `nickname` + 给 `admins` 补昵称，**不是新造身份体系**。`records.member_name` 是历史流水快照列，保留旧名。
+- **组长按用户名邀请必须经对方确认**（`family_invitations` 状态机）；后台 15.2.3 的
+  「按用户名直拉入组」是运营方管理动作，语义不同、**保留不动**。两条路径共用同一段 `joinTx` 入组 SQL。
+- **未入组可用的接口挂 `/api/app` 组，不能挂 `RequireFamily()` 的 `inFamily`**：
+  查收 / 接受 / 拒绝都在 `app` 组；`family_id` 一律取服务端邀请行，
+  审计用 `recordAuditAs` 显式传主体（主体此时 family_id 为 NULL）。
+- **同组同一人最多一条 pending** 用生成列 `pending_invitee` + `uk_pending_invitee` 下沉到 DB，
+  撞 1062 转 409，不做「先查再插」；接受时同事务入组 + 取消其它组 pending。
+- **过期惰性判定的隐藏死锁**：`expired` 不主动落库（无定时任务），但生成列只看 `status`，
+  一条过期 pending 会永久占住唯一键，而列表又不显示它 → 拿不到 ID 取消、再也邀不动这个人。
+  解法：`Create` 同事务先 `UPDATE ... SET status='expired' WHERE expires_at <= now` 再插新行。
+  **「不落库」不等于「永远不能落库」，写路径该清扫时必须清扫。**
+
 ## 一、仓库现状：**v3 三层已全部落地**（2026-11-06 复核磁盘）
 
 > 2026-11-03 用户拍板「一切从 0 开始」，v1 全套（Vue + Worker + KV）删除；
@@ -387,10 +406,11 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
 
 ### 6.2 真·功能缺口（11-06 查代码确认没有）
 
+> **P3.1 已于 11-06 完成并移出本表**（待确认邀请 + nickname 统一，见〇之三、23 节 133–143）。
+
 | 项 | 落点 |
 |---|---|
 | 审计日志 180 天定时清理、日志导出 | 全仓无 ticker/cron；21.3.4 ⚠️ / 21.3.5 ⬜（**记录** CSV 导出已有，日志导出没有） |
-| **P3.1 组长按用户名直接邀请** | 5.2.3：需「待确认邀请」状态机 + 新表；后台侧 15.2.3 语义不同（只拉未入组用户、无确认环节）。**唯一要动表结构的项** |
 | Android 补算最近 7 天 / 国产 ROM 保活引导 | 12.2.5 `runNow()` 只补「昨天」；12.2.8 未做 |
 | 投票过期仅惰性清扫 | `repo/task.go` 读路径 `ExpireDue`，无定时任务（家庭量级够，属设计取舍不是 bug） |
 
@@ -417,3 +437,12 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
 - `p8b_admin_check.sh` 会把默认管理员密码改成 `admins123`，跑完回归需
   `DELETE FROM admins` + `migrate -seed-admin` 复位。
 - 数据库是远端开发库；本机起 API 做验收后记得停进程，临时浏览器脚本/截图**验完即删**。
+- **DTO 改字段是静默破坏**：`name → nickname` 后 Go 忽略旧字段并回退成 `username`；
+  Kotlin `ignoreUnknownKeys = true` + 全默认值字段会把 `{invitation:{...}}` 解析成空对象。
+  两端都**不报错**，只有全量回归 + 真实 DOM 点检能发现。改 DTO 必须同轮改所有脚本断言 + 返回体形状。
+- **Web 是 hash 路由**：URL 的 pathname 不变，点检判据要用主界面专属元素（如「退出登录」）；
+  `page.goto('/#/xxx')` 后要 `waitForSelector` 等目标页元素，固定 sleep 会读到上一页的 DOM。
+- 验收脚本内要 `export NO_PROXY=127.0.0.1,localhost`（p12 已内置、旧脚本靠运行时 export），
+  否则会话 `HTTP_PROXY` 会把 `127.0.0.1:8080` 变成误导性 502。
+- `cmd/devtool` 除 `-points` 外新增 `-expire-invitation <id>`（仅 dev），
+  用于走真实的「过期惰性判定」代码，不靠等 7 天，不引 Python MySQL 依赖。

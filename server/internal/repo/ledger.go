@@ -100,12 +100,12 @@ func (r *Ledger) Redeem(ctx context.Context, familyID, memberID uint64, item *mo
 	// 1. 锁住成员行：并发下防止两个请求同时看到「余额够」
 	var m struct {
 		ID       uint64 `db:"id"`
-		Name     string `db:"name"`
+		Nickname string `db:"nickname"`
 		Score    int    `db:"score"`
 		FamilyID uint64 `db:"family_id"`
 	}
 	if err := tx.GetContext(ctx, &m,
-		`SELECT id, name, score, family_id FROM members WHERE id = ? AND family_id = ? FOR UPDATE`,
+		`SELECT id, nickname, score, family_id FROM members WHERE id = ? AND family_id = ? FOR UPDATE`,
 		memberID, familyID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -142,7 +142,7 @@ func (r *Ledger) Redeem(ctx context.Context, familyID, memberID uint64, item *mo
 		`INSERT INTO records (family_id, member_id, member_name, title, points,
 		                      occurred_at, added_at, source, redemption_id)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		familyID, memberID, m.Name, "兑换 "+item.Name, -item.Cost,
+		familyID, memberID, m.Nickname, "兑换 "+item.Name, -item.Cost,
 		now, now, model.SourceRedeem, redemptionID); err != nil {
 		return nil, err
 	}
@@ -176,13 +176,13 @@ func (r *Ledger) SendTransfer(ctx context.Context, familyID, fromID, toID uint64
 
 	// 1. 按 id 升序加锁（ORDER BY id 是死锁防护的关键）
 	type memberRow struct {
-		ID    uint64 `db:"id"`
-		Name  string `db:"name"`
-		Score int    `db:"score"`
+		ID       uint64 `db:"id"`
+		Nickname string `db:"nickname"`
+		Score    int    `db:"score"`
 	}
 	var rows []memberRow
 	if err := tx.SelectContext(ctx, &rows,
-		`SELECT id, name, score FROM members
+		`SELECT id, nickname, score FROM members
 		  WHERE id IN (?, ?) AND family_id = ? ORDER BY id FOR UPDATE`,
 		fromID, toID, familyID); err != nil {
 		return nil, err
@@ -239,18 +239,18 @@ func (r *Ledger) SendTransfer(ctx context.Context, familyID, fromID, toID uint64
 	tid := uint64(transferID)
 	for _, row := range []struct {
 		memberID uint64
-		name     string
+		nickname string
 		title    string
 		points   int
 	}{
-		{fromID, from.Name, "赠送给 " + to.Name, -amount},
-		{toID, to.Name, "来自 " + from.Name + " 的赠送", amount},
+		{fromID, from.Nickname, "赠送给 " + to.Nickname, -amount},
+		{toID, to.Nickname, "来自 " + from.Nickname + " 的赠送", amount},
 	} {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO records (family_id, member_id, member_name, title, points,
 			                      occurred_at, added_at, source, transfer_id)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			familyID, row.memberID, row.name, row.title, row.points,
+			familyID, row.memberID, row.nickname, row.title, row.points,
 			now, now, model.SourceTransfer, tid); err != nil {
 			return nil, err
 		}

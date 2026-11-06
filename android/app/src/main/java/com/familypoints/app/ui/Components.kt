@@ -167,7 +167,7 @@ fun MemberRow(
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    member.name,
+                    member.nickname,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
                     maxLines = 1,

@@ -295,7 +295,7 @@ func (s *Screen) Reports(ctx context.Context, me *model.Member, memberID uint64,
 // FamilyMemberDay 是一个成员某天的屏幕时间汇总（含各设备明细）。
 type FamilyMemberDay struct {
 	MemberID uint64                  `json:"member_id"`
-	Name     string                  `json:"name"`
+	Nickname string                  `json:"nickname"`
 	Role     string                  `json:"role"`
 	TotalMin int                     `json:"total_min"`
 	NightMin *int                    `json:"night_min"`
@@ -353,7 +353,7 @@ func (s *Screen) FamilyDay(ctx context.Context, me *model.Member, rawDate string
 	view := &FamilyDayView{Date: date.Format("2006-01-02")}
 	for _, m := range members {
 		item := FamilyMemberDay{
-			MemberID: m.ID, Name: m.Name, Role: m.Role,
+			MemberID: m.ID, Nickname: m.Nickname, Role: m.Role,
 			Devices: devByMember[m.ID],
 		}
 		if item.Devices == nil {

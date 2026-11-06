@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS family_bans (
 -- 后台管理员账号（网站运营者，不属于任何家庭组，不参与积分）
 CREATE TABLE IF NOT EXISTS admins (
   id                   BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  username             VARCHAR(20)  NOT NULL UNIQUE,
+  username             VARCHAR(20)  NOT NULL UNIQUE,   -- 登录凭证，注册后**永不可改**
+  nickname             VARCHAR(32)  NOT NULL DEFAULT '', -- 显示名，可改；缺省 = username
   pass_hash            VARCHAR(60)  NOT NULL,
   must_change_password TINYINT(1)   NOT NULL DEFAULT 1,
   disabled             TINYINT(1)   NOT NULL DEFAULT 0,
@@ -34,12 +35,12 @@ CREATE TABLE IF NOT EXISTS admins (
 CREATE TABLE IF NOT EXISTS members (
   id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   family_id        BIGINT UNSIGNED NULL,
-  name             VARCHAR(32)  NOT NULL,
+  nickname         VARCHAR(32)  NOT NULL,              -- 显示名，可改；注册缺省 = username
   score            INT          NOT NULL DEFAULT 0,
   frozen_score     INT          NOT NULL DEFAULT 0,
   hidden           TINYINT(1)   NOT NULL DEFAULT 0,
   avatar           VARCHAR(64)  NULL,
-  username         VARCHAR(20)  NOT NULL UNIQUE,
+  username         VARCHAR(20)  NOT NULL UNIQUE,       -- 登录凭证，注册后**永不可改**
   pass_hash        VARCHAR(60)  NOT NULL,
   role             ENUM('leader','member') NOT NULL DEFAULT 'member',
   leader_family_id BIGINT UNSIGNED GENERATED ALWAYS AS (IF(role='leader', family_id, NULL)) STORED,
@@ -317,4 +318,25 @@ CREATE TABLE IF NOT EXISTS coupon_votes (
   created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   UNIQUE KEY uk_coupon_voter (coupon_id, voter_id),
   KEY idx_coupon (coupon_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 待确认邀请（P3.1）：组长按用户名发起 → 被邀请人确认后才入组。
+-- 与邀请码并存；后台 15.2.3 的「按用户名直拉」不写这张表（语义不同）。
+-- 过期只由读路径判定，不设定时任务（与任务投票的惰性清扫同一取舍）。
+CREATE TABLE IF NOT EXISTS family_invitations (
+  id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id       BIGINT UNSIGNED NOT NULL,
+  inviter_id      BIGINT UNSIGNED NOT NULL,   -- 发起邀请的组长
+  invitee_id      BIGINT UNSIGNED NOT NULL,   -- 被邀请人（发起时必须未入组）
+  status          ENUM('pending','accepted','rejected','cancelled','expired') NOT NULL DEFAULT 'pending',
+  expires_at      DATETIME(3)  NOT NULL,      -- 7 天，与邀请码一致
+  decided_at      DATETIME(3)  NULL,
+  created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  -- 生成列：只有 pending 行参与唯一约束，其余状态为 NULL 不冲突。
+  -- 同组同一人最多一条待确认，历史 accepted/rejected/cancelled 可留多条追溯。
+  -- 与 members.leader_family_id 同构。
+  pending_invitee BIGINT UNSIGNED GENERATED ALWAYS AS (IF(status = 'pending', invitee_id, NULL)) STORED,
+  UNIQUE KEY uk_pending_invitee (family_id, pending_invitee),
+  KEY idx_invitee_status (invitee_id, status),
+  KEY idx_family_status (family_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

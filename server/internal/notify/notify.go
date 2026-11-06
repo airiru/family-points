@@ -25,13 +25,15 @@ func New(n *repo.Notification, f *repo.Family) *Service {
 
 // 通知类型（前端据此决定跳转）。
 const (
-	TypeTaskSubmitted = "task_submitted" // 有人提交任务，等你投票
-	TypeTaskDecided   = "task_decided"   // 你的任务被通过/驳回
-	TypeCouponPending = "coupon_pending" // 有人发起券核销，等你投票
-	TypeCouponDecided = "coupon_decided" // 你的券核销通过/驳回
-	TypeTransferIn    = "transfer_in"    // 收到积分
-	TypeKicked        = "kicked"         // 被移出家庭组
-	TypeRedeemSuccess = "redeem_success" // 兑换成功，商品券已生成
+	TypeTaskSubmitted  = "task_submitted"  // 有人提交任务，等你投票
+	TypeTaskDecided    = "task_decided"    // 你的任务被通过/驳回
+	TypeCouponPending  = "coupon_pending"  // 有人发起券核销，等你投票
+	TypeCouponDecided  = "coupon_decided"  // 你的券核销通过/驳回
+	TypeTransferIn     = "transfer_in"     // 收到积分
+	TypeKicked         = "kicked"          // 被移出家庭组
+	TypeRedeemSuccess  = "redeem_success"  // 兑换成功，商品券已生成
+	TypeInviteReceived = "invite_received" // 收到入组邀请（P3.1）
+	TypeInviteDecided  = "invite_decided"  // 邀请已被接受 / 拒绝（通知发起的组长）
 )
 
 // one 发给单个成员。
@@ -125,6 +127,25 @@ func (s *Service) RedeemSuccess(ctx context.Context, familyID, memberID uint64, 
 	s.one(ctx, familyID, memberID, TypeRedeemSuccess,
 		"兑换成功", "「"+rd.ItemName+"」已生成商品券，扣 "+itoa(rd.Cost)+" 分",
 		"redemption", rd.ID)
+}
+
+// InviteReceived 被邀请人收到入组邀请（P3.1）。
+//
+// family_id 一律来自服务端的邀请行，不取请求参数。注意：未入组成员的通知列表
+// 挂在 inFamily 组不可访问，所以被邀请人的主入口是 GET /api/app/invitations；
+// 这条通知在其入组后会作为历史记录出现在通知中心。
+func (s *Service) InviteReceived(ctx context.Context, familyID, inviteeID, invitationID uint64, familyName, inviterNickname string) {
+	s.one(ctx, familyID, inviteeID, TypeInviteReceived,
+		"收到入组邀请", inviterNickname+" 邀请你加入「"+familyName+"」", "invitation", invitationID)
+}
+
+// InviteDecided 邀请被处理 → 通知发起的组长。
+func (s *Service) InviteDecided(ctx context.Context, familyID, inviterID, invitationID uint64, accepted bool, inviteeNickname string) {
+	title, body := "邀请被拒绝", inviteeNickname+" 拒绝了你的入组邀请"
+	if accepted {
+		title, body = "邀请已接受", inviteeNickname+" 已加入家庭组"
+	}
+	s.one(ctx, familyID, inviterID, TypeInviteDecided, title, body, "invitation", invitationID)
 }
 
 func itoa(n int) string {

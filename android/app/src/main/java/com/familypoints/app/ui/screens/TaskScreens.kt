@@ -117,9 +117,9 @@ fun TaskListScreen(vm: AppViewModel, nav: NavHostController) {
             items(visible, key = { it.id }) { task ->
                 TaskCard(
                     task = task,
-                    publisherName = members.firstOrNull { it.id == task.publisherId }?.name ?: "成员",
+                    publisherName = members.firstOrNull { it.id == task.publisherId }?.nickname ?: "成员",
                     assigneeName = task.assigneeId?.let { id ->
-                        members.firstOrNull { it.id == id }?.name
+                        members.firstOrNull { it.id == id }?.nickname
                     },
                     onClick = { nav.navigate(Routes.taskDetail(task.id)) },
                 )
@@ -272,10 +272,10 @@ fun TaskDetailScreen(vm: AppViewModel, nav: NavHostController, taskId: Long) {
                     Text(task.title, style = MaterialTheme.typography.titleLarge)
                     Text(
                         buildString {
-                            append(members.firstOrNull { it.id == task.publisherId }?.name ?: "成员")
+                            append(members.firstOrNull { it.id == task.publisherId }?.nickname ?: "成员")
                             append(" 发布")
                             if (task.status == "taken" || task.status == "submitted" || task.status == "closed") {
-                                val an = members.firstOrNull { it.id == task.assigneeId }?.name
+                                val an = members.firstOrNull { it.id == task.assigneeId }?.nickname
                                 if (an != null) append(" · $an 接取")
                             }
                         },
