@@ -354,13 +354,8 @@ func (s *Family) InviteByUsername(ctx context.Context, me *model.Member, usernam
 	if target.InFamily() {
 		return nil, ErrAlreadyInFamily
 	}
-	banned, err := s.families.IsBanned(ctx, *me.FamilyID, target.ID)
-	if err != nil {
-		return nil, err
-	}
-	if banned {
-		return nil, ErrBanned
-	}
+	// 不校验封禁：封禁只挡「本人申请加入」，组长主动邀请应当能把他拉回来
+	// （2026-11-06 定：被踢出/主动退出默认封禁，但可以通过邀请再次加入）。
 
 	f, err := s.families.ByID(ctx, *me.FamilyID)
 	if err != nil {
@@ -407,16 +402,15 @@ func (s *Family) DecideInvitation(ctx context.Context, me *model.Member, invitat
 	if me.InFamily() {
 		return nil, ErrAlreadyInFamily
 	}
-	banned, err := s.families.IsBanned(ctx, inv.FamilyID, me.ID)
-	if err != nil {
-		return nil, err
-	}
-	if banned {
-		return nil, ErrBanned
-	}
-
+	// 不校验封禁：凭邀请入组是组长主动同意的，封禁不应再拦（2026-11-06 定）。
 	if err := s.invitations.Decide(ctx, invitationID, me.ID, accept); err != nil {
 		return nil, err
+	}
+	if accept {
+		// 人已经回到组里，封禁标记必须一起清掉，否则「在组内但被禁入」的状态自相矛盾
+		if err := s.families.ClearBan(ctx, inv.FamilyID, me.ID); err != nil {
+			return nil, err
+		}
 	}
 	s.notifier.InviteDecided(ctx, inv.FamilyID, inv.InviterID, invitationID, accept, me.Nickname)
 	return s.invitations.ByID(ctx, invitationID)

@@ -102,7 +102,8 @@ fun AppNav(vm: AppViewModel) {
     when (val s = session) {
         Session.Loading -> SplashScreen()
         Session.LoggedOut -> AuthNav(vm)
-        is Session.NoFamily -> FamilyScreen(vm, nav = null)
+        // 未入组也要能看到底部导航（2026-11-06 反馈），各 tab 自行给占位
+        is Session.NoFamily -> MainNav(vm)
         is Session.Ready -> MainNav(vm)
     }
 }

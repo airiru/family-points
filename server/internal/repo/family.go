@@ -215,6 +215,16 @@ func (r *Family) IsBanned(ctx context.Context, familyID, memberID uint64) (bool,
 	return n > 0, err
 }
 
+// ClearBan 解除某成员对某组的禁入。
+//
+// 2026-11-06 起语义调整为：**封禁只挡「自己申请加入」，不挡「组长邀请」**。
+// 组长把被封禁的人重新邀请进来时，必须同时解除封禁，否则他人在组里却仍被标记为禁入。
+func (r *Family) ClearBan(ctx context.Context, familyID, memberID uint64) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM family_bans WHERE family_id = ? AND member_id = ?`, familyID, memberID)
+	return err
+}
+
 // Join 把成员加入家庭组（调用方需先校验：未入组、未被禁入、码有效）。
 //
 // 同时**给新成员补一条屏幕时间规则**（复制组长的配置）：否则他的设备一上报就报

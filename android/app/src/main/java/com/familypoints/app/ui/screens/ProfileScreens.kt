@@ -76,7 +76,12 @@ import com.familypoints.app.ui.theme.Sub
 @Composable
 fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
     val session by vm.session.collectAsStateWithLifecycle()
-    val me = (session as? Session.Ready)?.me
+    // 未入组时 session 是 NoFamily，但 me 仍然要读出来——否则「我的」页会显示空昵称/空用户名
+    val me = when (val s = session) {
+        is Session.Ready -> s.me
+        is Session.NoFamily -> s.me
+        else -> null
+    }
     val familyName by vm.familyName.collectAsStateWithLifecycle()
     val unread by vm.unread.collectAsStateWithLifecycle()
     var confirmLogout by remember { mutableStateOf(false) }
@@ -133,7 +138,7 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                                 .clip(RoundedCornerShape(11.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center,
-                        ) { Text("👪", fontSize = 16.sp) }
+                        ) { Text("🏡", fontSize = 16.sp) }
                         Spacer(Modifier.width(11.dp))
                         Column(Modifier.weight(1f)) {
                             Text("所在家庭", fontWeight = FontWeight.Medium, fontSize = 14.sp)
@@ -360,6 +365,15 @@ fun NotificationsScreen(vm: AppViewModel, nav: NavHostController) {
 
 @Composable
 fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = false) {
+    // 未加入家庭：屏幕时间没有可上报/可查看的组，给占位而不是空页面
+    val _sess by vm.session.collectAsStateWithLifecycle()
+    val _noFamily = _sess is Session.NoFamily ||
+        ((_sess as? Session.Ready)?.me?.familyId == null && _sess !is Session.Loading)
+    if (_noFamily) {
+        NoFamilyHint(nav, "屏幕时间", "屏幕时间")
+        return
+    }
+
     val context = LocalContext.current
     val reader = remember { UsageStatsReader(context) }
     var hasPermission by remember { mutableStateOf(reader.hasPermission()) }

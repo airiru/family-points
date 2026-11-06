@@ -62,6 +62,15 @@ import com.familypoints.app.ui.theme.Sub
 
 @Composable
 fun ShopScreen(vm: AppViewModel, nav: NavHostController) {
+    // 未加入家庭时只给占位，不去打需要家庭上下文的接口（否则满屏 403）
+    val _sess by vm.session.collectAsStateWithLifecycle()
+    val _noFamily = _sess is Session.NoFamily ||
+        ((_sess as? Session.Ready)?.me?.familyId == null && _sess !is Session.Loading)
+    if (_noFamily) {
+        NoFamilyHint(nav, "商城", "商城")
+        return
+    }
+
     val items by vm.items.collectAsStateWithLifecycle()
     val session by vm.session.collectAsStateWithLifecycle()
     val me = (session as? Session.Ready)?.me
