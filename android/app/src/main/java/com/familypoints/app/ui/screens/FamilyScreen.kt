@@ -59,7 +59,7 @@ import com.familypoints.app.ui.theme.Sub
  * 家庭码只读：8 位、唯一、建组时生成，**永不可更改**；能否被搜到由组长在家庭管理里切换。
  */
 @Composable
-fun FamilyScreen(vm: AppViewModel, nav: NavHostController) {
+fun FamilyScreen(vm: AppViewModel, nav: NavHostController?, onBack: (() -> Unit)? = null) {
     val session by vm.session.collectAsStateWithLifecycle()
     val me = (session as? Session.Ready)?.me
     val inFamily = me?.familyId != null
@@ -86,7 +86,7 @@ fun FamilyScreen(vm: AppViewModel, nav: NavHostController) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader(title = "所在家庭", onBack = { nav.popBackStack() })
+        ScreenHeader(title = "所在家庭", onBack = onBack)
 
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -164,11 +164,28 @@ fun FamilyScreen(vm: AppViewModel, nav: NavHostController) {
                                 Avatar(m.avatar, size = 38)
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(m.nickname, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(m.nickname, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                        Spacer(Modifier.width(6.dp))
+                                        // 职位贴在昵称旁边，而不是占右侧位置
+                                        if (m.role == "leader") {
+                                            Pill("组长", Primary, com.familypoints.app.ui.theme.PrimarySoft)
+                                        }
+                                        // 本人额外标一个「我」，避免在名单里找自己
+                                        if (m.id == me?.id) {
+                                            Spacer(Modifier.width(4.dp))
+                                            Pill("我", Sub, Line)
+                                        }
+                                    }
                                     Text("用户名 ${m.username}", fontSize = 11.5.sp, color = Sub)
                                 }
-                                if (m.role == "leader") Pill("组长", Primary, com.familypoints.app.ui.theme.PrimarySoft)
-                                else Text("${m.score} 分", fontSize = 12.sp, color = Sub)
+                                Text(
+                                    "${m.score}",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 15.sp,
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text("分", fontSize = 11.sp, color = Sub)
                             }
                         }
                     }
@@ -177,7 +194,7 @@ fun FamilyScreen(vm: AppViewModel, nav: NavHostController) {
                 if (me?.isLeader == true) {
                     item {
                         Button(
-                            onClick = { nav.navigate(com.familypoints.app.ui.nav.Routes.MANAGE_MEMBERS) },
+                            onClick = { nav?.navigate(com.familypoints.app.ui.nav.Routes.MANAGE_MEMBERS) },
                             modifier = Modifier.fillMaxWidth().height(44.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = com.familypoints.app.ui.theme.PrimarySoft,
@@ -324,6 +341,15 @@ fun FamilyScreen(vm: AppViewModel, nav: NavHostController) {
                 }
             }
 
+            if (nav == null) {
+                // 未入组时这个页面就是根页面，没有返回栈；给一个退出口，避免卡死
+                item {
+                    androidx.compose.material3.TextButton(
+                        onClick = { vm.logout() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("退出登录", color = Sub, fontSize = 13.sp) }
+                }
+            }
             item { Spacer(Modifier.height(12.dp)) }
         }
     }

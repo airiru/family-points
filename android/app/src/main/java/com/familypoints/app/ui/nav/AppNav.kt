@@ -38,7 +38,6 @@ import com.familypoints.app.ui.screens.CouponsScreen
 import com.familypoints.app.ui.screens.FamilyScreen
 import com.familypoints.app.ui.screens.GiftScreen
 import com.familypoints.app.ui.screens.GoodsScreen
-import com.familypoints.app.ui.screens.JoinFamilyScreen
 import com.familypoints.app.ui.screens.LoginScreen
 import com.familypoints.app.ui.screens.ManageMembersScreen
 import com.familypoints.app.ui.screens.MemberDetailScreen
@@ -103,7 +102,7 @@ fun AppNav(vm: AppViewModel) {
     when (val s = session) {
         Session.Loading -> SplashScreen()
         Session.LoggedOut -> AuthNav(vm)
-        is Session.NoFamily -> JoinFamilyScreen(vm, s.me)
+        is Session.NoFamily -> FamilyScreen(vm, nav = null)
         is Session.Ready -> MainNav(vm)
     }
 }

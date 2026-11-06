@@ -110,21 +110,8 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                                 color = Sub,
                             )
                         }
-                        // 右：归属（我在哪个家、什么角色）。积分不在这里显示，
-                        // 统一放到下面的「积分管理」，避免同一个数字在屏幕上出现两次。
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                familyName.ifBlank { "未加入家庭" },
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp,
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Pill(
-                                if (me?.isLeader == true) "组长" else "成员",
-                                if (me?.isLeader == true) Primary else Sub,
-                                if (me?.isLeader == true) PrimarySoft else MaterialTheme.colorScheme.surfaceVariant,
-                            )
-                        }
+                        // 家庭与职位不再放这里——下面的「所在家庭」与家庭页各有更合适的位置，
+                        // 一张卡上重复三处信息只会更乱（2026-11-06 反馈）。
                         Spacer(Modifier.width(6.dp))
                         Text("›", fontSize = 18.sp, color = Sub)
                     }
@@ -140,6 +127,14 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
             item {
                 CardBox(modifier = Modifier.clickable { nav.navigate(Routes.FAMILY) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(11.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("👪", fontSize = 16.sp) }
+                        Spacer(Modifier.width(11.dp))
                         Column(Modifier.weight(1f)) {
                             Text("所在家庭", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                             Text(
