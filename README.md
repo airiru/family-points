@@ -1,78 +1,159 @@
-> ⚠️ **本文件已失效（2026-11-03）**：v1（Vue + Cloudflare Worker + KV）的代码已按用户决策
-> **全部删除**，仓库改为 v3（自建服务器：MySQL 8 + Go + Web 后台 + Kotlin 原生 App）。
-> 下文描述的文件结构、构建命令、部署步骤**均不存在**，请勿照做。
-> 功能与架构的唯一依据是 [`docs/features.md`](docs/features.md)；旧代码可用
-> `git show 46ff29e:worker/index.js` 取回。本 README 待 v3 起手时整份重写。
+# 家庭积分榜 · v3（自建服务器）
 
-# 家庭积分榜（Vue 3 + Cloudflare Workers 版）
+多成员家庭积分系统：睡觉规则自动计分、任务悬赏与全员投票、积分赠送、兑换商城与商品券、
+屏幕时间自动采集上报、榜单与趋势。三端自建，**没有云函数、没有第三方托管数据库**。
 
-多成员积分管理系统：自定义计分规则（如"按时睡觉 +1"、"晚睡半小时 -3"，可配连续打卡奖励）、积分排行榜、自定义兑换商城、账号权限、历史记录。前端为 **Vue 3 + Vite**，数据接口由 **Cloudflare Worker** 提供，数据保存在 **Cloudflare KV**，多成员访问共享同一份数据。
+> **功能与架构的唯一事实源是 [`docs/features.md`](docs/features.md)**（数据模型、业务规则、
+> 接口清单、验收要点）。本文件只负责「怎么跑起来」和「去哪查」，不复述业务细节。
+> 项目处于**开发阶段**：不兼容任何旧数据，数据库可随时重建（见「开发约定」）。
+> 部署方案（features 16 节）与待决策项（19 节）**仍挂起**，不影响本地开发。
 
-## 项目结构
+## 一眼看懂
+
+**数据流**：`web/`（开发期由 Vite 把 `/api` 代理到 `:8080`）与 `android/`（`API_BASE_URL` 直连）
+都只连 `server/`；**只有 `server/` 访问 MySQL**，所有业务判定都在服务端。
+管理后台给**运营方管理员**用，家庭成员只用 Android App，两者 token 互不通用。
 
 ```
-├── index.html          # Vite 入口 HTML
-├── src/                # Vue 前端
-│   ├── main.js         # 应用入口
-│   ├── App.vue         # 根组件：hash 路由（积分榜/后台设置）+ 登录门控 + 全局弹窗/提示
-│   ├── pages/          # HomePage（主页只读）、AdminPage（后台管理）、LoginPage（登录/初始化）
-│   ├── store.js        # 共享状态与全部业务操作
-│   └── style.css       # 全局样式
-├── worker/index.js     # Cloudflare Worker：/api/* 数据接口（KV 读写、登录鉴权、连续打卡奖励）
-├── wrangler.jsonc      # Cloudflare Workers 部署配置（构建产物目录、KV 绑定）
-├── dev-server.mjs      # 本地联调服务器（托管 dist/ + 模拟 /api，仅开发用）
-└── vite.config.js
+MySQL 8  ──sqlx──  server/ Go+Gin :8080  ──/api 代理──  web/ Vue3 :5173
+                            │
+                            └──HTTP（API_BASE_URL）──  android/ Compose
 ```
 
-## 部署（Cloudflare Workers）
+| 层 | 目录 | 技术栈 | 说明 |
+|---|---|---|---|
+| 服务端 | `server/` | Go 1.25 + Gin + sqlx + golang-migrate | 21 张表，双前缀鉴权，全部业务判定在服务端 |
+| 管理后台 | `web/` | Vue 3 + Vite 6 + vue-router | 14 个 .vue 页面，仅管理员使用 |
+| 客户端 | `android/` | Kotlin 2.0 + Jetpack Compose + Hilt + WorkManager | 16 个界面，屏幕时间自动采集上报 |
+| 文档 | `docs/features.md` | — | 25 节，功能 / 接口 / 验收唯一事实源 |
+| 记忆 | `.memory/` | memory-handoff 协议 | 提炼层 `MEMORY.md` + 按日追加日志 |
+| 原型 | `design/` | HTML | Android 15 高保真界面原型 |
 
-1. **安装依赖并登录 Cloudflare**
+## 环境要求
 
-   ```bash
-   npm install
-   npx wrangler login
-   ```
+| 项 | 版本 / 说明 |
+|---|---|
+| Go | 1.25+（国内构建建议设 `GOPROXY=https://goproxy.cn,direct`、`GOSUMDB=off`） |
+| MySQL | 8.0+（需要建库或已存在库的写权限；迁移会执行 DDL） |
+| Node.js | 18+（Vite 6） |
+| JDK / Android SDK | JDK **17**（AGP 8.7 不接受更高版本）、platform 35、Gradle 8.9 走 wrapper |
+| 验收脚本 | bash + curl + Python 3 |
 
-2. **创建 KV 命名空间并填入 ID**
+## 快速开始
 
-   ```bash
-   npx wrangler kv namespace create KV
-   ```
+### 1. 配置
 
-   命令会输出一个 `id`，把它填进 `wrangler.jsonc` 里 `kv_namespaces[0].id`（这是唯一需要手动填的一处配置）。
-
-3. **构建并部署**
-
-   ```bash
-   npm run deploy   # = vite build + wrangler deploy
-   ```
-
-   部署完成后会输出 `https://family-points.<你的子域>.workers.dev`，打开即可使用。
-
-4. **首次使用**：打开网页会要求创建管理员账号（一次性初始化），之后所有账号在「后台设置 → 账号」里管理，无需再改任何配置。
-
-> 也可以在 Cloudflare 控制台把 Worker 连接到 GitHub 仓库（Workers Builds），推送代码自动构建部署；构建命令同样用 `npm run build`。
-
-## 本地开发
+`.env` 放在**仓库根目录**（`server/` 下启动时会自动读 `../.env`），已被 gitignore：
 
 ```bash
-npm install
-npm run dev           # Vite 开发服务器（页面可看，API 需另外起服务）
-npx wrangler dev      # 或：构建后在真实 Workers 运行时本地联调（自动模拟 KV）
-node dev-server.mjs   # 或：轻量 Node 联调服务器（托管 dist/ 并模拟 /api，数据存内存）
+cp .env.example .env
+# 必填：DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME / JWT_SECRET / ADMIN_PASSWORD
 ```
 
-## 功能说明
+| 变量 | 用途 |
+|---|---|
+| `APP_ENV` / `HTTP_ADDR` | `dev` / `:8080` |
+| `DB_*` | MySQL 连接；`DB_NAME` 缺省 `family_points` |
+| `JWT_SECRET` | token 签名密钥 |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | **仅初始化默认管理员时用一次** |
+| `ACCESS_TTL` / `REFRESH_TTL` | 默认 `2h` / `720h`（30 天） |
 
-- **主页（积分榜）**：按积分实时排名（🥇🥈🥉），点击成员查看全部记录；🔥 显示连续打卡天数；最近记录列表可按成员筛选
-- **后台设置**（仅管理员）：成员管理、计分规则、记一笔、兑换商城
-- **计分规则**：自定义名称和 ± 分值；可选"连续打卡奖励"——该规则每连续打卡 N 天自动额外奖 M 分（中断重新计数，一天多次打卡不重复计天，按东八区）
-- **记一笔**：选成员点规则一步计分；也支持自定义事项 ± 分值
-- **兑换商城**：管理员可代任何成员兑换；成员登录后可在主页用自己的积分自助兑换
-- **账号即成员**：给成员设置登录（用户名/密码）后，TA 就能登录查看自己的积分并自助兑换；可设为管理员（能进后台修改）或普通成员（只读 + 自助兑换）。不需要登录的成员可以不设置登录
+### 2. 建表 + 初始化管理员（在 `server/` 下）
 
-## 注意事项
+```bash
+cd server
+go run ./cmd/migrate             # 建库并升级到最新
+go run ./cmd/migrate -verify     # 核对表齐全 + 关键约束（改过表结构必跑）
+go run ./cmd/migrate -seed-admin # 幂等：已有管理员则跳过
+```
 
-- Cloudflare KV 写入后需要短暂时间同步到全球节点，家庭使用场景下延迟可忽略。
-- KV 最终一致：极小概率下两人同时写会有一次写入被覆盖，日常家庭使用几乎不会遇到。
-- 从阿里云 ESA 版迁移：数据格式兼容，把旧 KV `jifen` 空间里 `state` 键的值导入新 KV 命名空间即可保留原有积分数据（`wrangler kv key put state --path=state.json`）。
+`ADMIN_USERNAME` 首次登录**强制改密**，未改密前除改密接口外后台一律 403。
+其它可用参数：`-version`、`-down N`、`-list`、`-grants`、`-check-ddl`、`-force N`、
+`-reset`（**仅 `APP_ENV=dev`，删光全部表重建**）。
+
+### 3. 起后端
+
+```bash
+cd server
+go run ./cmd/api                 # http://127.0.0.1:8080
+curl http://127.0.0.1:8080/healthz   # {"ok":true,"data":{"env":"dev","db":"up"}}
+```
+
+`/healthz` 会真的 Ping 一次库，能区分「服务活着」与「库挂了」。
+
+### 4. 起管理后台
+
+```bash
+cd web
+npm install
+npm run dev                      # http://127.0.0.1:5173，/api 已代理到 8080
+```
+
+### 5. 构建 Android（可选）
+
+```bash
+cd android
+export JAVA_HOME=/path/to/jdk-17
+export ANDROID_HOME=/path/to/Android/Sdk
+./gradlew assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
+```
+
+后端地址由 `build.gradle.kts` 的 `API_BASE_URL` 决定：模拟器默认 `http://10.0.2.2:8080/`；
+真机推荐 `adb reverse tcp:8080 tcp:8080` 配合 `-PapiBaseUrl=http://127.0.0.1:8080/`。
+详见 [`android/README.md`](android/README.md) 与 [`web/README.md`](web/README.md)。
+
+## 门禁与验收
+
+| 检查 | 命令 | 判据 |
+|---|---|---|
+| 服务端编译 | `cd server && go build ./... && go vet ./...` | 无输出即通过 |
+| 表结构 | `cd server && go run ./cmd/migrate -verify` | 「结构核对全部通过」 |
+| 接口对账 | `cd server && python scripts/api_audit.py` | **双向零漂移**（见下） |
+| Web 构建 | `cd web && npm run build` | 产物在 `web/dist/` |
+| Android 构建 | `cd android && ./gradlew assembleDebug` | `BUILD SUCCESSFUL` |
+| 接口回归 | `cd server && bash scripts/p1_auth_check.sh`（p1–p11 及 p8b，共 12 个脚本） | 各脚本「失败 0 项」 |
+
+接口回归脚本需要先起好 API（默认打 `127.0.0.1:8080`），依赖 `lib_admin.sh` 统一的管理员登录
+（脚本会改管理员密码，写死密码会集体假红）。`p5` / `p7` 等脚本还会用 `python` 解析 JSON。
+
+> **`api_audit.py` 是硬门禁**：`docs/features.md` 第 15 节登记的接口必须和
+> `server/internal/router/router.go` **双向一一对应**。
+> 新增接口要同轮登记 15.2 / 15.3；**未实现的功能只在功能章节写状态，不要在接口清单里写死路径**。
+
+## 接口约定（速查）
+
+- 响应统一 `{ ok: bool, data?: any, error?: string }`
+- `/api/admin/*` 只认 `typ=admin` 的 token；`/api/app/*` 只认 `typ=member`；两者互不通用
+- 跨组操作 `family_id` **只能走路径参数**（后台）、前台一律取自 token 主体
+- 公开接口：`/api/register`、两个 `login`、两个 `refresh`；`/api/app/logout` 只需有效 access
+- 屏幕时间上报用**成员登录态**，设备令牌机制已于 2026-11-05 整体删除
+- 完整清单：features 15 节；鉴权细节：features 4 节
+
+## 文档索引
+
+| 想查什么 | 去哪 |
+|---|---|
+| 架构 / 技术选型 / 表结构 | features 1–3 节（`server/migrations/0001_init.up.sql` 是 DDL 事实源） |
+| 角色权限 / 账号 / 家庭组 | features 4–6 节 |
+| 睡觉规则 / 积分流转 / 商城 / 赠送 / 榜单 | features 7–11 节 |
+| 屏幕时间（含多设备、后台设备明细） | features 12 节 |
+| Android 界面 / Web 后台页面 | features 13 / 14 节 |
+| 接口清单 / 对账 | features 15 节 + `scripts/api_audit.py` |
+| 部署 / 待决策（**挂起**） | features 16 / 19 节 |
+| 审计 / 通知 / 验收要点 | features 21–23 节 |
+| 实施顺序 / 未来设计（未实现） | features 24 / 25 节 |
+| 跨会话上下文 | `.memory/MEMORY.md` + `.memory/YYYY-MM-DD.md`（memory-handoff 协议） |
+
+## 开发约定
+
+1. **不兼容旧数据**：开发阶段不为旧版本 / 旧字段写兼容层，`-reset` 重建数据库是日常手段。
+2. **文档先行**：改了表结构就跑 `-verify`，增删接口就跑 `api_audit.py`；文档是事实源，代码向它对齐。
+3. **前端不做业务判定**：积分结算、夜间判定、投票结果等一律以服务端结果为准。
+4. **按阶段提交**：先对账 → 只 `add` 本阶段路径 → 提交；临时产物（点检脚本 / 截图）不入库。
+5. **记忆只留线索**：`.memory/` 日志按日追加，凡能从磁盘验证的结论，动手前先复核。
+
+## 历史
+
+v1（Vue 3 + Cloudflare Workers + KV）的代码已于 2026-11-03 按决策**全部删除**，
+需要对照时可用 `git show 46ff29e:worker/index.js` 取回。当前仓库从 v3 起，
+不含任何 v1 兼容代码。

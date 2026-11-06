@@ -526,7 +526,7 @@ CREATE TABLE refresh_tokens (
 |---|---|---|
 | 5.2.1 | **组长生成 / 重置邀请码** | ✅ 每组一个，重置后旧码立即失效 |
 | 5.2.2 | **用户输入邀请码加入家庭组** | ✅ 校验：码有效、本人 `family_id` 为空、未被该组禁入 |
-| 5.2.3 | 组长按用户名直接邀请 | ⬜ 对方确认后加入；与邀请码并存 |
+| 5.2.3 | 组长按用户名直接邀请 | ⬜ **未实现（P3.1）**：需「待确认邀请」状态机 + 新表，与邀请码并存。后台侧按用户名邀请已由 15.2.3 提供，但只拉「已注册且未入组」用户、没有确认环节，语义不同 |
 | 5.2.4 | 加入后 `family_id` 设为该组，`role='member'` | ✅ |
 | 5.2.5 | **邀请码有效期 7 天** | ✅ 过期后需组长重置；重置后旧码立即失效 |
 
@@ -918,17 +918,20 @@ SELECT member_id, SUM(points) AS period_score
 
 ### 12.2 功能项
 
+> 状态于 2026-11-06 按 `android/app/src/main/java/.../screen/` 与 `ui/screens/ProfileScreens.kt`
+> 逐条复核：早期整片 ⬜ 是采集链路落地前的标记，现已按实际实现更新。
+
 | # | 功能 | 状态 |
 |---|---|---|
-| 12.2.1 | 权限引导（`PACKAGE_USAGE_STATS`） | ⬜ |
-| 12.2.2 | 采集当日总时长（`queryEvents` 配对 RESUMED/PAUSED） | ⬜ **不用 `INTERVAL_DAILY`** |
-| 12.2.3 | 排除系统应用与息屏时段 | ⬜ |
-| 12.2.4 | 每日定时上报（WorkManager） | ⬜ |
-| 12.2.5 | 打开 App 补算最近 7 天 | ⬜ 可靠性主要来源 |
-| 12.2.6 | 失败重试（指数退避） | ⬜ |
-| 12.2.7 | 上报状态展示 | ⬜ |
-| 12.2.8 | 国产 ROM 保活引导 | ⬜ |
-| 12.2.9 | **采集并上报夜间时段使用分钟数**（`night_min`） | ✅ 服务端已支持；Android 端 `ScreenReportWorker` + `UsageStatsReader` 已实现（含跨零点切分） |
+| 12.2.1 | 权限引导（`PACKAGE_USAGE_STATS`） | ✅ `hasPermission()` 用 AppOps 判定，未授权时页面跳 `Settings.ACTION_USAGE_ACCESS_SETTINGS` |
+| 12.2.2 | 采集当日总时长（`queryEvents` 配对 RESUMED/PAUSED） | ✅ `UsageStatsReader.read`，**不用 `INTERVAL_DAILY`** |
+| 12.2.3 | 排除系统应用与息屏时段 | ✅ 排除本应用 / 系统 UI / 设置 / 常见桌面；息屏由 `ACTIVITY_PAUSED` / `ACTIVITY_STOPPED` 结算，**无独立 `SCREEN_OFF` 监听** |
+| 12.2.4 | 每日定时上报（WorkManager） | ✅ `ReportScheduler` 每日 21:00 上报「昨天」的完整数据（联网约束） |
+| 12.2.5 | 打开 App 补算最近 7 天 | ⬜ **部分**：`runNow()` 只补算「昨天」这一个完整日；最近 7 天逐日补传未做，近 7 天只在本地明细视图展示（12.5，小时桶不上传） |
+| 12.2.6 | 失败重试（指数退避） | ✅ Worker 返回 `Result.retry()`，用 WorkManager 默认指数退避（未显式设 `setBackoffCriteria`）；服务端按「成员×日」幂等，重试不会重复计分 |
+| 12.2.7 | 上报状态展示 | ✅ 屏幕时间页「上报状态」卡片（权限 / 设备型号 / 同步状态） |
+| 12.2.8 | 国产 ROM 保活引导 | ⬜ **未做**；当前靠「打开 App 补算一次」兜底（12.2.5） |
+| 12.2.9 | **采集并上报夜间时段使用分钟数**（`night_min`） | ✅ 服务端已支持；Android 端 `ScreenReportWorker` + `UsageStatsReader` 已实现（含跨零点切分、按本机登录成员取规则） |
 
 ### 12.3 结算事务（MySQL 版）
 
@@ -1206,16 +1209,16 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 14.0 | **总览** | 全站计数（家庭组 / 成员 / 记录）+ 家庭组列表，点「进入」切当前组 |
 | 14.1 | 登录 | **仅登录，无注册入口**；管理员由部署时环境变量初始化（见 5.4） |
 | 14.1a | **修改初始密码** | 首次登录强制改密（5.4.2）；未改密前其余接口全 403，故必须单独有页 |
-| 14.2 | 成员管理 | 查看成员、隐藏、设组长、头像（**仅预设**）、**邀请已注册用户** |
+| 14.2 | 成员管理 | 查看成员与头像（**仅预设**，改资料在 App 端 22.2）、隐藏、设组长、踢出、**按用户名邀请已注册用户**（15.2.3） |
 | 14.3 | 睡觉规则 | 睡觉时间点、允许时长、连续奖励档位（与组长同权） |
-| 14.4 | 任务管理 | 查看全部任务与提交、代审核 |
-| 14.5 | 兑换商城 | 商品管理、兑换撤销 |
-| 14.6 | 赠送管理 | 赠送记录、撤销赠送 |
+| 14.4 | 任务管理 | **只读**：查看全部任务与提交；审核走组内全员投票，后台**没有代审核接口** |
+| 14.5 | 兑换商城 | 商品管理；兑换撤销已按 9.4 移除 |
+| 14.6 | 赠送管理 | **只读**赠送记录；撤销赠送已按 10.2.6 移除 |
 | 14.7 | 记录 | **只读**：分页、筛选、搜索、导出 CSV（**无删除**） |
 | 14.8 | 统计 | 积分榜、得分榜（周/月）、积分趋势图 |
 | 14.9 | 审计日志 | 按成员/动作/时间筛选，查看 before/after |
 | 14.10 | 屏幕时间 | 查看上报历史 + **设备原始上报明细 / 已登记设备**（12.6；**只读，无手动录入**） |
-| 14.12 | 家庭组设置 | 组名、移交管理员 |
+| 14.12 | 家庭组设置 | 组名、邀请码；**移交管理员不在本期范围**（管理员是运营方账号，与家庭组无归属关系） |
 | 14.13 | **管理员账号** | 列表、新建（首次登录强制改密）、停用（5.4.3） |
 
 **共 14 个页面**（12 个功能页 + 登录页 + 改密页）。设备管理页已随「去掉设备令牌」删除。相比早期版本删除了「记一笔」页与「手动录入」入口。
@@ -1262,9 +1265,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 |---|---|---|---|
 | 15.2.1 | `/api/admin/password` | POST | 改密码 |
 | 15.2.1a | `/api/admin/logout` | POST | 后台登出（吊销该管理员全部 refresh） |
-| 15.2.2 | `/api/admin/family` | GET/POST | 查看 / 改名 |
-| 15.2.3 | `/api/admin/family/:family_id/invite` | POST | 按用户名把已注册用户拉进该组 |
-| 15.2.4 | `/api/admin/family/transfer-admin` | POST | 移交管理员 |
+| 15.2.3 | `/api/admin/family/:family_id/invite` | POST | 按用户名把**已注册且未入组**的用户拉进该组（14.2） |
 | 15.2.5 | `/api/admin/family/:family_id/member/kick` | POST | 踢出成员（组长不可直接踢，须先换组长） |
 | 15.2.22 | `/api/admin/family/:family_id/member/hidden` | POST | 隐藏 / 显示成员 |
 | 15.2.23 | `/api/admin/family/:family_id/member/leader` | POST | 后台指定新组长（同事务降旧升新） |
@@ -1280,10 +1281,8 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.2.37 | `/api/admin/family/:family_id/screen-device-reports` | GET | 设备原始上报 + 已登记设备（只读，`date` / `member_id` 0=全组 / `limit`；见 12.6） |
 | 15.2.6 | `/api/admin/family/:family_id/rule/save` | POST | 睡觉规则与连续奖励档位（与组长同权） |
 | 15.2.7 | `/api/admin/family/:family_id/item/save` | POST | 商品增改（与组长同权；撤销兑换已按 9.4 移除） |
-| 15.2.8 | `/api/admin/task/*` | POST | 查看全部、代审核 |
 | 15.2.9 | `/api/admin/audit/list` | GET | 审计日志查询 |
 | 15.2.10 | `/api/admin/export/records` | GET | 导出 CSV |
-| 15.2.11 | `/api/admin/device/*` | POST | 设备生成 / 吊销 |
 | 15.2.12 | `/api/admin/state` | GET | 后台初始化数据 |
 | 15.2.13 | `/api/admin/accounts` · `/api/admin/accounts/disable` | GET/POST | 管理员账号列表 / 新增 / 停用（不能停用自己） |
 | 15.2.14 | `/api/admin/families` | GET | 所有家庭组列表（运营方视角） |
@@ -1293,6 +1292,19 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 
 > **已移除**：`/api/admin/score/*`（记一笔）、`/api/admin/screen/report-manual`（手动录入）。
 > 接口层**直接删除，返回 404**，不是隐藏。
+>
+> **接口清单清理（2026-11-06）**：以下旧编号不再登记路径，避免与路由对账时产生「文档有、代码无」：
+>
+> | 旧编号 | 去向 |
+> |---|---|
+> | 15.2.2 `/api/admin/family` | 早期聚合写法；已拆为 15.2.15（查看）与 15.2.24（改名） |
+> | 15.2.4 `/api/admin/family/transfer-admin` | **移交管理员不在本期范围**（14.12）：管理员是运营方账号，与家庭组无归属关系；跨组指定组长走 15.2.23 |
+> | 15.2.8 `/api/admin/task/*` | 代审核会绕开「一人一票」，**明确不做**（14.4）；后台只有只读的 15.2.31 |
+> | 15.2.11 `/api/admin/device/*` | 设备令牌机制 2026-11-05 **整体删除**，上报改走 15.4 的成员登录态 |
+> | 15.3.22 `/api/app/member/avatar` | 已并入 15.3.42 `/api/app/me/profile`（名称 + 预设头像标识一次提交） |
+> | 15.3.32 `/api/app/member/invite` | **组长按用户名直接邀请未实现**（5.2.3，排到 P3.1，需待确认邀请状态机 + 新表）；后台侧同名能力已由 15.2.3 提供 |
+>
+> 原则：**未实现的功能留在功能章节写清状态，不在接口清单里写死路径**。
 
 ### 15.3 前台接口（`typ='member'`）
 
@@ -1320,8 +1332,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.3.18 | `/api/app/notification/list` | GET | 通知列表 |
 | 15.3.19 | `/api/app/notification/read` | POST | 标记已读 |
 | 15.3.20 | `/api/app/stats/ranking` | GET | `type=points`（积分榜）或 `type=score`（得分榜，带 `period=week\|month`） |
-| 15.3.21 | `/api/app/stats/trend` | GET | 趋势图 |
-| 15.3.22 | `/api/app/member/avatar` | POST | 改自己的头像（**只接受预设标识**，见 22.2） |
+| 15.3.21 | `/api/app/stats/trend` | GET | 趋势图（Android 积分榜页 13.3 画 earned / net 双线） |
 | 15.3.23 | `/api/app/family/leave` | POST | 自行退出家庭组（积分清零 + 写入 `family_bans`） |
 | 15.3.24 | `/api/app/family` | GET | 本组信息（**family_id 取自 token**，不接受任何参数） |
 | 15.3.25 | `/api/app/family/members` | GET | 本组成员（过滤被隐藏的） |
@@ -1336,7 +1347,6 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 
 | # | 接口 | 方法 | 说明 |
 |---|---|---|---|
-| 15.3.32 | `/api/app/member/invite` | POST | 邀请已注册用户加入（按用户名） |
 | 15.3.33 | `/api/app/member/remove` | POST | 踢出成员（积分清零 + 写入 `family_bans`；**需 `confirm=true`**） |
 | 15.3.34 | `/api/app/family/invite-code` | GET/POST | 查看 / 重置邀请码 |
 | 15.3.35 | `/api/app/rule` · `/api/app/rule/save` | GET/POST | 睡觉规则与连续奖励档位（保存限**组长**） |
@@ -1705,24 +1715,26 @@ FROM task_votes WHERE submission_id=?;
 
 ### 21.2 记录范围
 
-| 动作 | action 值 | 是否记 before/after |
-|---|---|---|
-| 删除记录 | `record.delete` | 是（完整记录快照） |
-| 积分清零 | `member.reset` | 是（原积分） |
-| 成员邀请 / 踢出 | `member.invite` / `member.remove` | 是 |
-| 规则增删改 | `rule.*` | 是 |
-| 兑换 / 撤销兑换 | `item.redeem` / `item.revoke` | 是 |
-| 积分赠送 / 撤销 | `transfer.send` / `transfer.revoke` | 是 |
-| 任务审核 | `task.review` | 是 |
-| 设备生成 / 吊销 | `device.*` | 是 |
-| 登录 / 修改密码 | `auth.login` / `auth.password` | 否（仅记录事件） |
+**以 `server/internal/handler/*` 里的 `recordAudit(...)` 调用为唯一事实源**（2026-11-06 核对）：
 
-> **实现命名（2026-11-03）**：实际写入的 action 与上表略有出入，以代码为准：
-> `item.save` / `item.delete` / `item.redeem` / `transfer.send` / `task.create` /
-> `task.submit` / `task.vote` / `task.close` / `member.leave` / `member.kick` /
-> `member.hidden` / `leader.transfer` / `family.rename` / `rule.save` /
-> `screen_rule.save` / `device.create` / `device.revoke`。
-> **未记**：登录、改密码（原计划「仅记录事件」，目前未落库）。
+| 分类 | 实际写入的 action |
+|---|---|
+| 管理员账号 | `admin.create` · `admin.disable` |
+| 家庭组 / 成员 | `member.invite` · `member.kick` · `member.leave` · `member.hidden` · `leader.transfer` · `family.rename` |
+| 规则 | `rule.save` · `screen_rule.save` |
+| 商品 / 积分流转 | `item.save` · `item.delete` · `item.redeem` · `transfer.send` |
+| 任务 | `task.create` · `task.close` · `task.submit` · `task.vote` |
+| 导出 | `records.export` |
+
+> 调用约定：**业务成功后才写**，失败路径不记；写入失败由 `audit.Writer` 吞掉，不影响主流程。
+> `before` 只有少数写入点提供（如 `member.leave` / App 侧 `leader.transfer` 的旧值），
+> 其余多为 `after` 快照——需要完整前后对比时以 `audit_logs` 里实际存的 JSON 为准。
+>
+> **早期规划但不存在**的 action（勿再引用）：`record.delete` / `member.reset`（记录 append-only、
+> 积分清零发生在 leave/kick 流程里）、`item.revoke` / `transfer.revoke`（撤销能力已移除）、
+> `task.review`（审核走组内全员投票，见 14.4）、`device.create` / `device.revoke`
+> （设备令牌 2026-11-05 整体删除）、`auth.login` / `auth.password`
+> （**登录与改密至今未落审计**，仍属已知缺口）。
 
 ### 21.3 功能项
 

@@ -51,6 +51,8 @@ Manifest 已开 `usesCleartextTraffic`，开发期可直接用 HTTP。
 
 ### 积分
 - **积分榜**（`score + frozen_score` 净额）与**得分榜**（区间正分毛额）双榜切换，得分榜支持周/月
+- **趋势折线**（2026-11-06）：积分榜页用 `Canvas + drawLine` 画 earned 实线 / net 虚线，周/月切换联动；
+  只画服务端 `/api/app/stats/trend` 的结果，客户端不做业务判定（零新增依赖）
 - 成员详情、全量记录流水
 - 赠送积分（选人 + 金额 + 附言，实时校验余额）
 - 商城兑换（余额校验 + 二次确认）
@@ -90,7 +92,7 @@ app/src/main/java/com/familypoints/app/
     ├── AppViewModel.kt       全部业务动作与会话状态
     ├── Components.kt         通用组件
     ├── nav/AppNav.kt         导航 + 底部 Tab
-    └── screens/              16 个界面（按功能分 6 个文件）
+    └── screens/              16 个界面（按功能分 7 个文件）
 ```
 
 ## 已知未实现
@@ -99,7 +101,7 @@ app/src/main/java/com/familypoints/app/
 |---|---|
 | ~~商品券与核销投票~~ | ✅ **已实现**（2026-11-03 后端 + 客户端同步落地，见 9.6）：我的券三态、用券发起核销、跨家庭投票 |
 | 头像自定义上传 | 决策为「仅预设头像」（19.14），当前直接渲染 emoji |
-| 趋势图 | 接口 `stats/trend` 已接，界面暂未画折线 |
+| ~~趋势图~~ | ✅ **已实现**（2026-11-06）：积分榜页双线折线；顺带修掉 `TrendPoint` DTO 的 `label/value` 与后端 `date/earned/net` 错配 |
 | 通知点击跳转 | 目前只做已读，未做深链到具体任务 |
 
 ## 验证状态
@@ -150,6 +152,10 @@ POST /api/device/screen/report  200 (58-byte body，含 night_min)
 screen_reports  revision 1 → 2 → 3（覆盖重算）
 night_ok = true，连续第 3 天命中「满 3 天 +5」档位 → 当天 +7 / -3
 ```
+
+> ⚠️ 上面这行是 **2026-11-04 当时的历史路径**。设备令牌机制已于 2026-11-05 整体删除，
+> 现在上报走 `POST /api/app/screen/report`（成员登录态 + `device_key` / `device_model`），
+> 详见 features 12 节与 15.4 节。此处保留原始记录，不改写历史。
 
 **过程中修掉的 4 个 bug**（都是「编译能过、跑起来才发现」）：
 
