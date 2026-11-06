@@ -452,28 +452,29 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
                     }
                 }
 
-                item {
-                    CardBox {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("家庭成员", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Spacer(Modifier.weight(1f))
+                // 自己已经在最上面展示过了，这里只列**其他成员**。
+                // 只有一个人的家庭整段不显示——否则会看到一张只有自己名字、
+                // 点进去还和自己一模一样内容的卡片，纯噪音。
+                val others = familyScreen?.members.orEmpty().filter { it.memberId != myId }
+                if (others.isNotEmpty()) {
+                    item {
+                        CardBox {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("其他成员", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    familyScreen?.date ?: "",
+                                    fontSize = 11.5.sp, color = Sub,
+                                )
+                            }
                             Text(
-                                familyScreen?.date ?: "",
+                                "点任意成员可查看他的每小时与近 7 天明细。总时长 = 该成员全部设备相加。",
                                 fontSize = 11.5.sp, color = Sub,
+                                modifier = Modifier.padding(top = 4.dp),
                             )
                         }
-                        Text(
-                            "点任意成员可查看他的每小时与近 7 天明细。总时长 = 该成员全部设备相加。",
-                            fontSize = 11.5.sp, color = Sub,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
                     }
-                }
-                val fam = familyScreen?.members.orEmpty()
-                if (fam.isEmpty()) {
-                    item { EmptyState("还没有人上报，打开 App 或今晚 21:00 后会出现") }
-                } else {
-                    items(fam, key = { "fm-${it.memberId}" }) { m ->
+                    items(others, key = { "fm-${it.memberId}" }) { m ->
                         CardBox(modifier = Modifier.clickable {
                             nav.navigate("screenMember/${m.memberId}")
                         }) {
