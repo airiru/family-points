@@ -20,7 +20,7 @@ report() {
 }
 
 echo "== 1. 建组时自动写入默认配置 =="
-L=$(reg "l5$RUN" "组长" true); L_AT=$(echo "$L" | jget "['data']['token']['access_token']")
+L=$(reg "l5$RUN" "组长" true); L_AT=$(echo "$L" | jget "['data']['token']['access_token']"); L_ID=$(echo "$L" | jget "['data']['member']['id']")
 CODE=$(curl -s $B/api/app/family/invite-code -H "Authorization: Bearer $L_AT" | jget "['data']['invite_code']")
 M=$(reg "m5$RUN" "小孩" false); M_AT=$(echo "$M" | jget "['data']['token']['access_token']"); M_ID=$(echo "$M" | jget "['data']['member']['id']")
 curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"
@@ -111,6 +111,24 @@ chk "明细带设备型号" "True" "$(echo "$DET" | python -c "import sys,json;d
 chk "已登记设备 2 台" "2" "$(echo "$DET" | python -c "import sys,json;d=json.load(sys.stdin);print(len([x for x in d['data']['devices'] if x['member_id']==$M_ID]))")"
 chk "按成员筛选只返回该成员" "True" "$(curl -s "$B/api/admin/family/$FID/screen-device-reports?member_id=$M_ID" -H "Authorization: Bearer $A_ADMIN" | python -c "import sys,json;d=json.load(sys.stdin);print(all(r['member_id']==$M_ID for r in d['data']['reports']))")"
 chk "日期格式非法 → 400" "400" "$(code "$B/api/admin/family/$FID/screen-device-reports?date=2026/10/25" -H "Authorization: Bearer $A_ADMIN")"
+
+echo "== 10. 余额可为负：自动扣分无下限，主动支出仍校验（8.4）=="
+# 阈值 0 / 超标扣 1000 / 不加分；不传夜间三项 → 关闭夜间判定，每次上报只产生 -1000
+chk "保存高扣分规则 → 200" "200" "$(code -X POST $B/api/app/screen-rule/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"threshold_min\":0,\"bonus_points\":0,\"penalty_points\":1000}")"
+BAL0=$(score "$M_AT")
+R10=$(report "$M_AT" 2026-11-01 200 1 devA 手机)
+chk "超标上报只扣日总量 -1000" "-1000" "$(echo "$R10" | jget "['data']['day_points']")"
+BAL1=$(score "$M_AT")
+chk "第一次扣分 = 原 -1000" "$((BAL0-1000))" "$BAL1"
+chk "余额已扣成负数" "True" "$([ "$BAL1" -lt 0 ] && echo True || echo False)"
+R11=$(report "$M_AT" 2026-11-02 200 1 devA 手机)
+chk "负余额后第二次仍扣 -1000" "-1000" "$(echo "$R11" | jget "['data']['day_points']")"
+BAL2=$(score "$M_AT")
+chk "负余额后继续扣：新余额 = 旧 -1000" "$((BAL1-1000))" "$BAL2"
+NEG_REC=$(curl -s "$B/api/app/records?limit=200" -H "Authorization: Bearer $M_AT")
+chk "两条负分流水都落库" "2" "$(echo "$NEG_REC" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['source']=='screen' and r['points']==-1000))")"
+chk "负余额时赠送 → 400" "400" "$(code -X POST $B/api/app/transfer/send -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"to_member_id\":$L_ID,\"amount\":1}")"
+chk "拒绝后余额不变" "$BAL2" "$(score "$M_AT")"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"
