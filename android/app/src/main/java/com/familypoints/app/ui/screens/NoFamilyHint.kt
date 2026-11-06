@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.familypoints.app.ui.CardBox
+import com.familypoints.app.ui.ScreenHeader
 import com.familypoints.app.ui.theme.Primary
 import com.familypoints.app.ui.theme.Sub
 
@@ -31,6 +32,9 @@ import com.familypoints.app.ui.theme.Sub
 @Composable
 fun NoFamilyHint(nav: NavHostController, title: String, need: String) {
     Column(Modifier.fillMaxSize()) {
+        // 每个 tab 的标题由各自页面画（和正常状态一致），占位页也必须画，
+        // 否则未入组时前四个 tab 会「没有标题」——2026-11-06 反馈。
+        ScreenHeader(title = title, onBack = null)
         Column(
             Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.Top,
