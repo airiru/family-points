@@ -136,6 +136,28 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                 }
             }
 
+            // 所在家庭：右侧显示组名，点进去看成员 / 家庭码 / 退出
+            item {
+                CardBox(modifier = Modifier.clickable { nav.navigate(Routes.FAMILY) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("所在家庭", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                            Text(
+                                if (me?.familyId != null) "查看成员与家庭码" else "还没有加入家庭",
+                                fontSize = 11.5.sp, color = Sub,
+                            )
+                        }
+                        Text(
+                            familyName.ifBlank { "未加入" },
+                            fontSize = 13.5.sp,
+                            color = if (me?.familyId != null) Sub else Primary,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("›", fontSize = 18.sp, color = Sub)
+                    }
+                }
+            }
+
             item {
                 CardBox {
                     Text("积分管理", fontSize = 12.sp, color = Sub, fontWeight = FontWeight.SemiBold)

@@ -20,6 +20,8 @@ data class TokenPair(
 @Serializable
 data class MemberBrief(
     val id: Long,
+    /** 登录账号；后端 MemberBrief 一直返回，DTO 之前没接（家庭页要展示）。 */
+    val username: String = "",
     val nickname: String,
     val role: String = "member",
     val avatar: String? = null,
@@ -51,13 +53,13 @@ data class FamilyView(
     val id: Long,
     val name: String,
     @SerialName("invite_code") val inviteCode: String? = null,
-    @SerialName("invite_code_expires_at") val inviteCodeExpiresAt: String? = null,
+    @SerialName("code_hidden") val codeHidden: Boolean = false,
 )
 
 @Serializable
 data class StateView(
     val family: FamilyBrief = FamilyBrief(),
-    val me: MemberBrief = MemberBrief(0, ""),
+    val me: MemberBrief = MemberBrief(id = 0, nickname = ""),
     val members: List<MemberBrief> = emptyList(),
     @SerialName("unread_count") val unreadCount: Int = 0,
     // 单笔可赠送上限（= 可用积分），由后端给出，前端不自己拿 score 当上限
@@ -425,6 +427,44 @@ data class DayPoint(
     @SerialName("night_min") val nightMin: Int? = null,
 )
 
+/** 家庭码（2026-11-06）：8 位、唯一、永不可更改，可设为隐藏。 */
+@Serializable
+data class FamilyCodeView(
+    val code: String = "",
+    val hidden: Boolean = false,
+)
+
+/** 按家庭码搜索的结果。隐藏或不存在都是 found=false，无法区分。 */
+@Serializable
+data class FamilySearchView(
+    val found: Boolean = false,
+    @SerialName("family_id") val familyId: Long = 0,
+    val name: String = "",
+    @SerialName("member_count") val memberCount: Int = 0,
+)
+
+@Serializable
+data class CreateFamilyReq(val name: String)
+
+@Serializable
+data class CodeHiddenReq(val hidden: Boolean)
+
+@Serializable
+data class FamilyCreatedView(
+    @SerialName("family_id") val familyId: Long = 0,
+    val name: String = "",
+    val code: String = "",
+)
+
+@Serializable
+data class RequestJoinReq(val code: String)
+
+@Serializable
+data class DecideRequestReq(
+    @SerialName("invitation_id") val invitationId: Long,
+    val accept: Boolean,
+)
+
 /** 个人资料更新（昵称 / 头像）。 */
 @Serializable
 data class ProfileReq(
@@ -457,6 +497,8 @@ data class InvitationView(
     @SerialName("family_id") val familyId: Long = 0,
     @SerialName("inviter_id") val inviterId: Long = 0,
     @SerialName("invitee_id") val inviteeId: Long = 0,
+    /** invite = 组长邀请我；request = 我凭家庭码申请加入 */
+    val direction: String = "invite",
     val status: String = "",
     @SerialName("expires_at") val expiresAt: String = "",
     @SerialName("decided_at") val decidedAt: String? = null,

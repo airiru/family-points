@@ -9,6 +9,11 @@ import com.familypoints.app.data.api.CouponView
 import com.familypoints.app.data.api.CouponVoteReq
 import com.familypoints.app.data.api.CreateTaskReq
 import com.familypoints.app.data.api.FamilyRenameReq
+import com.familypoints.app.data.api.CodeHiddenReq
+import com.familypoints.app.data.api.FamilySearchView
+import com.familypoints.app.data.api.CreateFamilyReq
+import com.familypoints.app.data.api.RequestJoinReq
+import com.familypoints.app.data.api.DecideRequestReq
 import com.familypoints.app.data.api.FamilyScreenView
 import com.familypoints.app.data.api.HiddenReq
 import com.familypoints.app.data.api.ItemIdReq
@@ -300,13 +305,99 @@ class AppViewModel @Inject constructor(
         _screenRules.value = api.screenRules().data?.items.orEmpty()
     }
 
+    /** 家庭码隐藏状态（2026-11-06）。 */
+    private val _codeHidden = MutableStateFlow(false)
+    val codeHidden: StateFlow<Boolean> = _codeHidden.asStateFlow()
+
     fun loadInviteCode() = launchBusy(showBusy = false) {
-        _inviteCode.value = api.inviteCode().data?.inviteCode
+        val d = api.familyCode().data
+        _inviteCode.value = d?.code
+        _codeHidden.value = d?.hidden ?: false
     }
 
-    fun resetInviteCode() = launchBusy {
-        _inviteCode.value = api.resetInviteCode().data?.inviteCode
-        _message.value = "邀请码已重置"
+    /** 组长设置家庭码是否可被搜索到。码本身永不变更。 */
+    fun setCodeHidden(hidden: Boolean) = launchBusy {
+        val resp = api.setCodeHidden(CodeHiddenReq(hidden))
+        if (resp.ok) {
+            _codeHidden.value = resp.data?.hidden ?: hidden
+            _message.value = if (hidden) "家庭码已隐藏，别人搜不到" else "家庭码已公开，可被搜到"
+        } else {
+            _message.value = resp.error ?: "设置失败"
+        }
+    }
+
+    // ---------------- 未入组者：搜索 / 建组 / 申请（2026-11-06） ----------------
+
+    private val _familySearch = MutableStateFlow<FamilySearchView?>(null)
+    val familySearch: StateFlow<FamilySearchView?> = _familySearch.asStateFlow()
+
+    private val _myJoinRequests = MutableStateFlow<List<InvitationView>>(emptyList())
+    val myJoinRequests: StateFlow<List<InvitationView>> = _myJoinRequests.asStateFlow()
+
+    /** 本组待审批的入组申请（组长）。 */
+    private val _pendingRequests = MutableStateFlow<List<InvitationView>>(emptyList())
+    val pendingRequests: StateFlow<List<InvitationView>> = _pendingRequests.asStateFlow()
+
+    fun clearFamilySearch() { _familySearch.value = null }
+
+    fun searchFamily(code: String) = launchBusy {
+        val resp = api.searchFamily(code.trim().uppercase())
+        if (!resp.ok) {
+            _message.value = resp.error ?: "搜索失败"
+            return@launchBusy
+        }
+        _familySearch.value = resp.data
+    }
+
+    fun requestJoin(code: String, onDone: () -> Unit = {}) = launchBusy {
+        val resp = api.requestJoin(RequestJoinReq(code.trim().uppercase()))
+        if (resp.ok) {
+            _message.value = "已提交申请，等待组长审批"
+            loadMyJoinRequests()
+            onDone()
+        } else {
+            _message.value = resp.error ?: "申请失败"
+        }
+    }
+
+    fun createFamily(name: String, onDone: () -> Unit = {}) = launchBusy {
+        val resp = api.createFamily(CreateFamilyReq(name.trim()))
+        if (resp.ok) {
+            _message.value = "已创建「${resp.data?.name ?: ""}」"
+            refreshAfterFamilyChange()
+            onDone()
+        } else {
+            _message.value = resp.error ?: "创建失败"
+        }
+    }
+
+    fun loadMyJoinRequests() = launchBusy(showBusy = false) {
+        _myJoinRequests.value = api.myJoinRequests().data?.items.orEmpty()
+    }
+
+    fun loadPendingRequests() = launchBusy(showBusy = false) {
+        _pendingRequests.value = api.pendingJoinRequests().data?.items.orEmpty()
+    }
+
+    fun decideJoinRequest(id: Long, accept: Boolean) = launchBusy {
+        val resp = api.decideJoinRequest(DecideRequestReq(id, accept))
+        _message.value = if (resp.ok) {
+            if (accept) "已同意加入" else "已拒绝"
+        } else {
+            resp.error ?: "操作失败"
+        }
+        loadPendingRequests()
+        loadOverview()
+    }
+
+    /** 家庭关系变了（入组/建组/退出）之后统一刷新身份与概览。 */
+    fun refreshAfterFamilyChange() {
+        viewModelScope.launch {
+            runCatching { api.me().data }.getOrNull()?.let { me ->
+                _session.value = Session.Ready(me)
+            }
+            loadOverview()
+        }
     }
 
     // ---------------- 待确认邀请（P3.1） ----------------

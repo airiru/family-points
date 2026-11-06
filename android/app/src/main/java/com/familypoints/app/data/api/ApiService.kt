@@ -68,11 +68,32 @@ interface ApiService {
     @POST("api/app/family/rename")
     suspend fun renameFamily(@Body body: FamilyRenameReq): Envelope<Unit>
 
-    @GET("api/app/family/invite-code")
-    suspend fun inviteCode(): Envelope<InviteCodeView>
+    /** 家庭码：全员可读；只有「改隐藏」是组长权限。 */
+    @GET("api/app/family/code")
+    suspend fun familyCode(): Envelope<FamilyCodeView>
 
-    @POST("api/app/family/invite-code")
-    suspend fun resetInviteCode(): Envelope<InviteCodeView>
+    @POST("api/app/family/code/hidden")
+    suspend fun setCodeHidden(@Body body: CodeHiddenReq): Envelope<FamilyCodeView>
+
+    // ---------- 未入组者：搜索 / 建组 / 申请加入 ----------
+    @GET("api/app/family/search")
+    suspend fun searchFamily(@Query("code") code: String): Envelope<FamilySearchView>
+
+    @POST("api/app/family/create")
+    suspend fun createFamily(@Body body: CreateFamilyReq): Envelope<FamilyCreatedView>
+
+    @POST("api/app/family/request")
+    suspend fun requestJoin(@Body body: RequestJoinReq): Envelope<InvitationView>
+
+    @GET("api/app/family/requests/mine")
+    suspend fun myJoinRequests(): Envelope<InvitationList>
+
+    // ---------- 组长：审批入组申请 ----------
+    @GET("api/app/family/requests")
+    suspend fun pendingJoinRequests(): Envelope<InvitationList>
+
+    @POST("api/app/family/request/decide")
+    suspend fun decideJoinRequest(@Body body: DecideRequestReq): Envelope<InvitationView>
 
     @POST("api/app/family/leave")
     suspend fun leaveFamily(@Body body: ConfirmReq): Envelope<Unit>

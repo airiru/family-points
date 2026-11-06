@@ -78,32 +78,92 @@ func (s *Family) Members(ctx context.Context, familyID uint64, includeHidden boo
 	return out, nil
 }
 
-// InviteCode 返回本组邀请码及其有效期（组长可见）。
-func (s *Family) InviteCode(ctx context.Context, me *model.Member) (code string, expiresAt *time.Time, err error) {
-	if err := requireLeader(me); err != nil {
-		return "", nil, err
+// FamilyCode 返回本组家庭码与隐藏状态。
+//
+// **全员可读**：家庭码不是密钥，成员都可能需要把它告诉家人；
+// 只有「改隐藏」是组长权限（SetCodeHidden）。
+func (s *Family) FamilyCode(ctx context.Context, me *model.Member) (code string, hidden bool, err error) {
+	if !me.InFamily() {
+		return "", false, ErrNotInFamily
 	}
 	f, err := s.families.ByID(ctx, *me.FamilyID)
 	if err != nil {
-		return "", nil, err
+		return "", false, err
 	}
-	return f.InviteCode, f.InviteCodeExpiresAt, nil
+	return f.InviteCode, f.CodeHidden, nil
 }
 
-// ResetInviteCode 重置邀请码（旧码立即失效，5.2.5）。
-func (s *Family) ResetInviteCode(ctx context.Context, me *model.Member) (string, time.Time, error) {
+// SetCodeHidden 组长设置家庭码是否可被搜索到。
+//
+// 隐藏只影响「按码搜索」，**不影响凭码直接加入**——否则隐藏等于关闭入组，
+// 而需求只是「不想被陌生人搜到」。
+func (s *Family) SetCodeHidden(ctx context.Context, me *model.Member, hidden bool) error {
 	if err := requireLeader(me); err != nil {
-		return "", time.Time{}, err
+		return err
+	}
+	return s.families.SetCodeHidden(ctx, *me.FamilyID, hidden)
+}
+
+// FamilySearchView 是按家庭码搜索的结果。
+//
+// 只暴露「组名 + 成员数」，不返回邀请码本身、不返回成员名单：
+// 搜索的用途只是确认「是不是这个家」，加入后自然能看到全部信息。
+type FamilySearchView struct {
+	Found       bool   `json:"found"`
+	FamilyID    uint64 `json:"family_id"`
+	Name        string `json:"name"`
+	MemberCount int    `json:"member_count"`
+}
+
+// SearchByCode 按家庭码查找家庭（仅限**尚未入组**的成员）。
+//
+// 家庭码被组长设为隐藏时，返回 found=false 且不带任何提示——
+// 不能返回「存在但隐藏」，那等于泄露了码的有效性。
+func (s *Family) SearchByCode(ctx context.Context, me *model.Member, code string) (*FamilySearchView, error) {
+	if me.InFamily() {
+		return nil, ErrAlreadyInFamily
+	}
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return nil, fmt.Errorf("%w：请填写家庭码", ErrInvalidInput)
+	}
+	f, err := s.families.ByInviteCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return &FamilySearchView{Found: false}, nil
+		}
+		return nil, err
+	}
+	if f.CodeHidden {
+		return &FamilySearchView{Found: false}, nil
+	}
+	members, err := s.families.Members(ctx, f.ID, false)
+	if err != nil {
+		return nil, err
+	}
+	return &FamilySearchView{
+		Found: true, FamilyID: f.ID, Name: f.Name, MemberCount: len(members),
+	}, nil
+}
+
+// CreateFamily 给尚未入组的成员新建家庭，创建者成为组长。
+func (s *Family) CreateFamily(ctx context.Context, me *model.Member, name string) (*model.Family, error) {
+	if me.InFamily() {
+		return nil, ErrAlreadyInFamily
+	}
+	name = strings.TrimSpace(name)
+	if name == "" || utf8.RuneCountInString(name) > 64 {
+		return nil, fmt.Errorf("%w：家庭组名需 1–64 个字符", ErrInvalidInput)
 	}
 	code, err := s.families.NewInviteCode(ctx)
 	if err != nil {
-		return "", time.Time{}, err
+		return nil, err
 	}
-	expires := time.Now().Add(7 * 24 * time.Hour)
-	if err := s.families.ResetInviteCode(ctx, *me.FamilyID, code, expires); err != nil {
-		return "", time.Time{}, err
+	fid, err := s.families.CreateFamilyForMember(ctx, me.ID, name, code)
+	if err != nil {
+		return nil, err
 	}
-	return code, expires, nil
+	return s.families.ByID(ctx, fid)
 }
 
 // Join 凭邀请码加入家庭组。
@@ -124,9 +184,6 @@ func (s *Family) Join(ctx context.Context, me *model.Member, code string) (*mode
 			return nil, ErrInviteCodeInvalid
 		}
 		return nil, err
-	}
-	if !f.InviteCodeUsable(time.Now()) {
-		return nil, ErrInviteCodeInvalid
 	}
 	banned, err := s.families.IsBanned(ctx, f.ID, me.ID)
 	if err != nil {
@@ -309,7 +366,7 @@ func (s *Family) InviteByUsername(ctx context.Context, me *model.Member, usernam
 	if err != nil {
 		return nil, err
 	}
-	id, err := s.invitations.Create(ctx, *me.FamilyID, me.ID, target.ID, time.Now().Add(invitationTTL))
+	id, err := s.invitations.Create(ctx, *me.FamilyID, me.ID, target.ID, repo.DirectionInvite, time.Now().Add(invitationTTL))
 	if err != nil {
 		return nil, err
 	}
@@ -362,6 +419,84 @@ func (s *Family) DecideInvitation(ctx context.Context, me *model.Member, invitat
 		return nil, err
 	}
 	s.notifier.InviteDecided(ctx, inv.FamilyID, inv.InviterID, invitationID, accept, me.Nickname)
+	return s.invitations.ByID(ctx, invitationID)
+}
+
+// RequestJoin 凭家庭码申请加入（**需组长审批**，不是直接入组）。
+//
+// 与 Join 的区别：Join 是「凭码直接入组」，那是后台/老版本行为；
+// App 侧 2026-11-06 起统一走申请-审批，避免任何人拿到码就能进门。
+// 家庭码被隐藏时不允许申请——隐藏的语义就是「不对外可见」。
+func (s *Family) RequestJoin(ctx context.Context, me *model.Member, code string) (*model.FamilyInvitation, error) {
+	if me.InFamily() {
+		return nil, ErrAlreadyInFamily
+	}
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return nil, fmt.Errorf("%w：请填写家庭码", ErrInvalidInput)
+	}
+	f, err := s.families.ByInviteCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			return nil, ErrInviteCodeInvalid
+		}
+		return nil, err
+	}
+	if f.CodeHidden {
+		return nil, ErrInviteCodeInvalid
+	}
+	banned, err := s.families.IsBanned(ctx, f.ID, me.ID)
+	if err != nil {
+		return nil, err
+	}
+	if banned {
+		return nil, ErrBanned
+	}
+	id, err := s.invitations.Create(ctx, f.ID, me.ID, me.ID, repo.DirectionRequest, time.Now().Add(invitationTTL))
+	if err != nil {
+		return nil, err
+	}
+	s.notifier.JoinRequested(ctx, f.ID, me.ID, me.Nickname, f.Name)
+	return s.invitations.ByID(ctx, id)
+}
+
+// MyJoinRequests 我发出的入组申请（未入组时看「等待审批」）。
+func (s *Family) MyJoinRequests(ctx context.Context, me *model.Member) ([]model.FamilyInvitation, error) {
+	return s.invitations.MyRequests(ctx, me.ID, time.Now())
+}
+
+// PendingJoinRequests 本组待审批的入组申请（组长）。
+func (s *Family) PendingJoinRequests(ctx context.Context, me *model.Member) ([]model.FamilyInvitation, error) {
+	if err := requireLeader(me); err != nil {
+		return nil, err
+	}
+	return s.invitations.PendingRequests(ctx, *me.FamilyID, time.Now())
+}
+
+// DecideJoinRequest 组长审批入组申请。同意时复用同一段入组事务。
+func (s *Family) DecideJoinRequest(ctx context.Context, me *model.Member, invitationID uint64, accept bool) (*model.FamilyInvitation, error) {
+	if err := requireLeader(me); err != nil {
+		return nil, err
+	}
+	if invitationID == 0 {
+		return nil, fmt.Errorf("%w：缺少 invitation_id", ErrInvalidInput)
+	}
+	inv, err := s.invitations.ByID(ctx, invitationID)
+	if err != nil {
+		return nil, err
+	}
+	// 不是本组的申请 → 按「不存在」处理，不泄露别组数据
+	if inv.FamilyID != *me.FamilyID || inv.Direction != repo.DirectionRequest ||
+		inv.Status != model.InvitationPending {
+		return nil, repo.ErrNotFound
+	}
+	if !model.InvitationUsable(inv.Status, inv.ExpiresAt, time.Now()) {
+		return nil, fmt.Errorf("%w：申请已过期", ErrInvitationExpired)
+	}
+	if err := s.invitations.DecideByFamily(ctx, *me.FamilyID, invitationID, accept); err != nil {
+		return nil, err
+	}
+	s.notifier.JoinDecided(ctx, inv.FamilyID, inv.InviteeID, accept)
 	return s.invitations.ByID(ctx, invitationID)
 }
 

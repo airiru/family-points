@@ -113,6 +113,12 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 
 		// 加入家庭组：此时还没入组，不能挂在 inFamily 下
 		app.POST("/family/join", familyHandler.AppJoin)
+		// 未入组者的两条路：凭家庭码搜索加入 / 自己建一个家
+		app.GET("/family/search", familyHandler.AppSearchFamily)
+		app.POST("/family/create", familyHandler.AppCreateFamily)
+		// 凭码申请加入 + 查看自己的申请状态（都要求未入组，挂在 app 组）
+		app.POST("/family/request", familyHandler.AppRequestJoin)
+		app.GET("/family/requests/mine", familyHandler.AppMyJoinRequests)
 
 		// P3.1 待确认邀请（被邀请人侧）：未入组也必须能查、能确认/拒绝
 		app.GET("/invitations", familyHandler.AppMyInvitations)
@@ -128,8 +134,12 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		inFamily.POST("/family/rename", familyHandler.AppRenameFamily)
 
 		// 邀请码：查看 / 重置（组长）
-		inFamily.GET("/family/invite-code", familyHandler.AppInviteCode)
-		inFamily.POST("/family/invite-code", familyHandler.AppResetInviteCode)
+		// 家庭码：全员可读（不是密钥），只有「改隐藏」是组长权限
+		inFamily.GET("/family/code", familyHandler.AppInviteCode)
+		inFamily.POST("/family/code/hidden", familyHandler.AppSetCodeHidden)
+		// 入组申请的审批（组长）
+		inFamily.GET("/family/requests", familyHandler.AppPendingJoinRequests)
+		inFamily.POST("/family/request/decide", familyHandler.AppDecideJoinRequest)
 
 		// P3.1 待确认邀请（组长侧）：发起 / 查看本组 / 取消
 		inFamily.POST("/member/invite", familyHandler.AppInviteByUsername)

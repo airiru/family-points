@@ -25,7 +25,7 @@ func NewFamily(db *sqlx.DB) *Family { return &Family{db: db} }
 func (r *Family) ByID(ctx context.Context, id uint64) (*model.Family, error) {
 	var f model.Family
 	err := r.db.GetContext(ctx, &f,
-		`SELECT id, name, invite_code, invite_code_expires_at, created_at
+		`SELECT id, name, invite_code, code_hidden, created_at
 		   FROM families WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -117,7 +117,7 @@ func (r *Family) MemberInFamily(ctx context.Context, familyID, memberID uint64) 
 func (r *Family) ByInviteCode(ctx context.Context, code string) (*model.Family, error) {
 	var f model.Family
 	err := r.db.GetContext(ctx, &f,
-		`SELECT id, name, invite_code, invite_code_expires_at, created_at
+		`SELECT id, name, invite_code, code_hidden, created_at
 		   FROM families WHERE invite_code = ?`, code)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -134,12 +134,51 @@ func (r *Family) UpdateName(ctx context.Context, familyID uint64, name string) e
 	return err
 }
 
-// ResetInviteCode 重置邀请码并刷新有效期。
-func (r *Family) ResetInviteCode(ctx context.Context, familyID uint64, code string, expiresAt time.Time) error {
+// SetCodeHidden 设置家庭码是否隐藏（只有组长能改，权限在 service 层校验）。
+//
+// 只改可见性，**不改码本身**——家庭码建组后永不变更。
+func (r *Family) SetCodeHidden(ctx context.Context, familyID uint64, hidden bool) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE families SET invite_code = ?, invite_code_expires_at = ? WHERE id = ?`,
-		code, expiresAt, familyID)
+		`UPDATE families SET code_hidden = ? WHERE id = ?`, hidden, familyID)
 	return err
+}
+
+// CreateFamilyForMember 给「尚未入组」的成员新建家庭并把他设为组长。
+//
+// 与注册时建组走同一套逻辑（含默认屏幕配置），区别只是成员已存在。
+// 同事务：只建成组没设组长、或成员与组不一致，都会留下不可用状态。
+func (r *Family) CreateFamilyForMember(ctx context.Context, memberID uint64, name, code string) (uint64, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO families (name, invite_code) VALUES (?, ?)`, name, code)
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	fid := uint64(id)
+
+	// 只有「当前没有组」的成员才能建组，条件写进 WHERE 防止并发下把已入组的人抢走
+	out, err := tx.ExecContext(ctx,
+		`UPDATE members SET family_id = ?, role = ? WHERE id = ? AND family_id IS NULL`,
+		fid, model.RoleLeader, memberID)
+	if err != nil {
+		return 0, err
+	}
+	if n, _ := out.RowsAffected(); n == 0 {
+		return 0, ErrNotFound
+	}
+	if err := seedDefaultScreenConfig(ctx, tx, fid, memberID); err != nil {
+		return 0, err
+	}
+	return fid, tx.Commit()
 }
 
 // InviteCodeTaken 判断邀请码是否已被别的组占用。

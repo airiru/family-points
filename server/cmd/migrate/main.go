@@ -321,18 +321,20 @@ func verifySchema(cfg config.DB) error {
 	}
 	fmt.Println("✅ 幂等唯一键齐全（screen_reports / task_votes / family_bans）")
 
-	// 5. families.invite_code_expires_at（邀请码 7 天有效期）
-	var cnt int
-	if err := conn.QueryRow(
-		`SELECT COUNT(*) FROM information_schema.columns
-		 WHERE table_schema = ? AND table_name = 'families' AND column_name = 'invite_code_expires_at'`,
-		cfg.Name).Scan(&cnt); err != nil {
-		return err
+	// 5. families.code_hidden（家庭码隐藏开关，2026-11-06 取代原 7 天有效期）
+	{
+		var n int
+		if err := conn.QueryRow(
+			`SELECT COUNT(*) FROM information_schema.columns
+			 WHERE table_schema = ? AND table_name = 'families' AND column_name = 'code_hidden'`,
+			cfg.Name).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("families 缺少 code_hidden")
+		}
 	}
-	if cnt == 0 {
-		return fmt.Errorf("families 缺少 invite_code_expires_at")
-	}
-	fmt.Println("✅ families.invite_code_expires_at 存在")
+	fmt.Println("✅ families.code_hidden 存在")
 
 	// 6. username / nickname 分离：两张账号表都要有 nickname，members 不得残留旧 name 列
 	for _, table := range []string{"members", "admins"} {

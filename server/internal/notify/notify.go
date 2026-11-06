@@ -34,6 +34,8 @@ const (
 	TypeRedeemSuccess  = "redeem_success"  // 兑换成功，商品券已生成
 	TypeInviteReceived = "invite_received" // 收到入组邀请（P3.1）
 	TypeInviteDecided  = "invite_decided"  // 邀请已被接受 / 拒绝（通知发起的组长）
+	TypeJoinRequested  = "join_requested"  // 有人凭家庭码申请加入，等组长审批
+	TypeJoinDecided    = "join_decided"    // 我的入组申请已被同意 / 拒绝
 )
 
 // one 发给单个成员。
@@ -140,6 +142,21 @@ func (s *Service) InviteReceived(ctx context.Context, familyID, inviteeID, invit
 }
 
 // InviteDecided 邀请被处理 → 通知发起的组长。
+// JoinRequested 有人凭家庭码申请加入 → 通知本组（审批权在组长，但其他成员知情无害）。
+func (s *Service) JoinRequested(ctx context.Context, familyID, applicantID uint64, applicantNickname, familyName string) {
+	s.familyExcept(ctx, familyID, 0, TypeJoinRequested,
+		"有人申请加入「"+familyName+"」", applicantNickname+" 想加入，等待组长审批", "join_request", applicantID)
+}
+
+// JoinDecided 入组申请有了结果 → 通知申请人。
+func (s *Service) JoinDecided(ctx context.Context, familyID, applicantID uint64, accepted bool) {
+	msg, title := "已被拒绝", "入组申请未通过"
+	if accepted {
+		msg, title = "已通过，欢迎加入", "入组申请已通过"
+	}
+	s.one(ctx, familyID, applicantID, TypeJoinDecided, title, msg, "join_request", applicantID)
+}
+
 func (s *Service) InviteDecided(ctx context.Context, familyID, inviterID, invitationID uint64, accepted bool, inviteeNickname string) {
 	title, body := "邀请被拒绝", inviteeNickname+" 拒绝了你的入组邀请"
 	if accepted {

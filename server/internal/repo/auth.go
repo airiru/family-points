@@ -72,10 +72,9 @@ func (r *Auth) CreateMember(ctx context.Context, username, passHash, nickname st
 		if err != nil {
 			return nil, err
 		}
-		// 邀请码 7 天有效期（5.2.5）
+		// 家庭码建组即生成，无有效期（2026-11-06 起）
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO families (name, invite_code, invite_code_expires_at)
-			 VALUES (?, ?, ?)`, *familyName, code, time.Now().Add(7*24*time.Hour))
+			`INSERT INTO families (name, invite_code) VALUES (?, ?)`, *familyName, code)
 		if err != nil {
 			return nil, err
 		}

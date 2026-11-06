@@ -5,8 +5,11 @@
 CREATE TABLE IF NOT EXISTS families (
   id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name            VARCHAR(64)  NOT NULL,
+  -- 家庭码（2026-11-06）：8 位、**唯一且永不可更改**、不过期。
+  -- 建组时自动生成；原来「7 天有效期 + 可重置」的邀请码语义已废除。
   invite_code     CHAR(8)      NOT NULL UNIQUE,
-  invite_code_expires_at DATETIME(3) NULL,    -- 邀请码 7 天有效期（5.2.5）
+  -- 隐藏后按码搜索搜不到（但仍可凭码直接加入）：等价于「不对外公开」。
+  code_hidden     TINYINT(1)   NOT NULL DEFAULT 0,
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -343,8 +346,11 @@ CREATE TABLE IF NOT EXISTS coupon_votes (
 CREATE TABLE IF NOT EXISTS family_invitations (
   id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   family_id       BIGINT UNSIGNED NOT NULL,
-  inviter_id      BIGINT UNSIGNED NOT NULL,   -- 发起邀请的组长
-  invitee_id      BIGINT UNSIGNED NOT NULL,   -- 被邀请人（发起时必须未入组）
+  inviter_id      BIGINT UNSIGNED NOT NULL,   -- invite=组长 / request=申请人自己
+  invitee_id      BIGINT UNSIGNED NOT NULL,   -- 要入组的那个人（两个方向都是他）
+  -- 方向（2026-11-06）：invite = 组长邀请你；request = 你凭家庭码申请加入
+  -- 两个方向共用同一套状态机与「同组同一人只能一条 pending」的唯一键
+  direction       ENUM('invite','request') NOT NULL DEFAULT 'invite',
   status          ENUM('pending','accepted','rejected','cancelled','expired') NOT NULL DEFAULT 'pending',
   expires_at      DATETIME(3)  NOT NULL,      -- 7 天，与邀请码一致
   decided_at      DATETIME(3)  NULL,

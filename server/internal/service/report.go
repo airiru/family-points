@@ -54,7 +54,7 @@ func (s *Report) State(ctx context.Context, me *model.Member) (*State, error) {
 	briefs := make([]MemberBrief, 0, len(members))
 	for _, m := range members {
 		briefs = append(briefs, MemberBrief{
-			ID: m.ID, Nickname: m.Nickname, Role: m.Role, Avatar: m.Avatar,
+			ID: m.ID, Username: m.Username, Nickname: m.Nickname, Role: m.Role, Avatar: m.Avatar,
 			Score: m.Score, FrozenScore: m.FrozenScore, Hidden: m.Hidden,
 		})
 	}
@@ -65,7 +65,7 @@ func (s *Report) State(ctx context.Context, me *model.Member) (*State, error) {
 	return &State{
 		Family: FamilyBrief{ID: f.ID, Name: f.Name},
 		Me: MemberBrief{
-			ID: me.ID, Nickname: me.Nickname, Role: me.Role, Avatar: me.Avatar,
+			ID: me.ID, Username: me.Username, Nickname: me.Nickname, Role: me.Role, Avatar: me.Avatar,
 			Score: me.Score, FrozenScore: me.FrozenScore, Hidden: me.Hidden,
 		},
 		Members:     briefs,

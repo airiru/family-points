@@ -31,11 +31,11 @@ func (h *Family) AppInfo(c *gin.Context) {
 		return
 	}
 	httpx.OK(c, gin.H{
-		"id":                     f.ID,
-		"name":                   f.Name,
-		"invite_code":            f.InviteCode,
-		"invite_code_expires_at": f.InviteCodeExpiresAt,
-		"created_at":             f.CreatedAt,
+		"id":          f.ID,
+		"name":        f.Name,
+		"invite_code": f.InviteCode,
+		"code_hidden": f.CodeHidden,
+		"created_at":  f.CreatedAt,
 	})
 }
 
@@ -70,11 +70,11 @@ func (h *Family) AdminInfo(c *gin.Context) {
 	}
 	auditCrossFamily(c, "admin.family.view", fid)
 	httpx.OK(c, gin.H{
-		"id":                     f.ID,
-		"name":                   f.Name,
-		"invite_code":            f.InviteCode,
-		"invite_code_expires_at": f.InviteCodeExpiresAt,
-		"created_at":             f.CreatedAt,
+		"id":          f.ID,
+		"name":        f.Name,
+		"invite_code": f.InviteCode,
+		"code_hidden": f.CodeHidden,
+		"created_at":  f.CreatedAt,
 	})
 }
 
@@ -129,27 +129,74 @@ func (h *Family) AppInviteCode(c *gin.Context) {
 		httpx.Unauthorized(c, "未登录")
 		return
 	}
-	code, expires, err := h.svc.InviteCode(c.Request.Context(), m)
+	code, hidden, err := h.svc.FamilyCode(c.Request.Context(), m)
 	if err != nil {
 		fail(c, err)
 		return
 	}
-	httpx.OK(c, gin.H{"invite_code": code, "expires_at": expires})
+	httpx.OK(c, gin.H{"code": code, "hidden": hidden})
 }
 
-// AppResetInviteCode POST /api/app/family/invite-code —— 重置邀请码（旧码立即失效）。
-func (h *Family) AppResetInviteCode(c *gin.Context) {
+// AppSetCodeHidden POST /api/app/family/code/hidden —— 组长设置家庭码是否可被搜到。
+func (h *Family) AppSetCodeHidden(c *gin.Context) {
 	m, ok := middleware.CurrentMember(c)
 	if !ok {
 		httpx.Unauthorized(c, "未登录")
 		return
 	}
-	code, expires, err := h.svc.ResetInviteCode(c.Request.Context(), m)
+	var in struct {
+		Hidden *bool `json:"hidden"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil || in.Hidden == nil {
+		httpx.BadRequest(c, "请求体需包含 hidden")
+		return
+	}
+	if err := h.svc.SetCodeHidden(c.Request.Context(), m, *in.Hidden); err != nil {
+		fail(c, err)
+		return
+	}
+	recordAudit(c, "family.code_hidden", "family", m.FamilyID, nil, gin.H{"hidden": *in.Hidden})
+	httpx.OK(c, gin.H{"hidden": *in.Hidden})
+}
+
+// AppSearchFamily GET /api/app/family/search?code=XXXX —— 按家庭码查组（未入组者）。
+//
+// 隐藏的家庭码一律返回 found=false，与「码不存在」不可区分。
+func (h *Family) AppSearchFamily(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	view, err := h.svc.SearchByCode(c.Request.Context(), m, c.Query("code"))
 	if err != nil {
 		fail(c, err)
 		return
 	}
-	httpx.OK(c, gin.H{"invite_code": code, "expires_at": expires})
+	httpx.OK(c, view)
+}
+
+// AppCreateFamily POST /api/app/family/create —— 未入组者新建家庭，自己成为组长。
+func (h *Family) AppCreateFamily(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	f, err := h.svc.CreateFamily(c.Request.Context(), m, in.Name)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	recordAudit(c, "family.create", "family", &f.ID, nil, gin.H{"name": f.Name})
+	httpx.OK(c, gin.H{"family_id": f.ID, "name": f.Name, "code": f.InviteCode})
 }
 
 // AppJoin POST /api/app/family/join —— 凭邀请码加入（需前台 token，且尚未入组）。
@@ -468,5 +515,80 @@ func (h *Family) decideInvitation(c *gin.Context, accept bool) {
 		gin.H{"status": inv.Status, "family_id": inv.FamilyID})
 	// 直接返回邀请对象，不再包一层 {"invitation": ...}：
 	// 客户端 Envelope<InvitationView> 的 data 就是这一行，包一层会静默解析成全默认值。
+	httpx.OK(c, inv)
+}
+
+// AppRequestJoin POST /api/app/family/request —— 凭家庭码申请加入（需组长审批）。
+func (h *Family) AppRequestJoin(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		Code string `json:"code"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	inv, err := h.svc.RequestJoin(c.Request.Context(), m, in.Code)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, inv)
+}
+
+// AppMyJoinRequests GET /api/app/family/requests/mine —— 我发出的入组申请（未入组也能看）。
+func (h *Family) AppMyJoinRequests(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	list, err := h.svc.MyJoinRequests(c.Request.Context(), m)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"items": list})
+}
+
+// AppPendingJoinRequests GET /api/app/family/requests —— 本组待审批申请（组长）。
+func (h *Family) AppPendingJoinRequests(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	list, err := h.svc.PendingJoinRequests(c.Request.Context(), m)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"items": list})
+}
+
+// AppDecideJoinRequest POST /api/app/family/request/decide —— 组长审批入组申请。
+func (h *Family) AppDecideJoinRequest(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		InvitationID uint64 `json:"invitation_id"`
+		Accept       bool   `json:"accept"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	inv, err := h.svc.DecideJoinRequest(c.Request.Context(), m, in.InvitationID, in.Accept)
+	if err != nil {
+		fail(c, err)
+		return
+	}
 	httpx.OK(c, inv)
 }

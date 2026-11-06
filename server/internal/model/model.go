@@ -47,16 +47,12 @@ type Admin struct {
 
 // Family 对应 families 表。
 type Family struct {
-	ID                  uint64     `db:"id" json:"id"`
-	Name                string     `db:"name" json:"name"`
-	InviteCode          string     `db:"invite_code" json:"invite_code"`
-	InviteCodeExpiresAt *time.Time `db:"invite_code_expires_at" json:"invite_code_expires_at"`
-	CreatedAt           time.Time  `db:"created_at" json:"created_at"`
-}
-
-// InviteCodeUsable 判断邀请码是否仍可用（7 天有效期，5.2.5）。
-func (f *Family) InviteCodeUsable(now time.Time) bool {
-	return f.InviteCodeExpiresAt != nil && now.Before(*f.InviteCodeExpiresAt)
+	ID      uint64 `db:"id" json:"id"`
+	Name    string `db:"name" json:"name"`
+	// 家庭码：建组时生成，**唯一且永不可更改**（2026-11-06 起不再有有效期/重置）。
+	InviteCode string    `db:"invite_code" json:"invite_code"`
+	CodeHidden bool      `db:"code_hidden" json:"code_hidden"`
+	CreatedAt  time.Time `db:"created_at" json:"created_at"`
 }
 
 // ---------- 待确认邀请（P3.1） ----------
@@ -82,6 +78,8 @@ type FamilyInvitation struct {
 	FamilyID        uint64     `db:"family_id" json:"family_id"`
 	InviterID       uint64     `db:"inviter_id" json:"inviter_id"`
 	InviteeID       uint64     `db:"invitee_id" json:"invitee_id"`
+	// Direction：invite = 组长邀请你；request = 你凭家庭码申请加入。
+	Direction       string     `db:"direction" json:"direction"`
 	Status          string     `db:"status" json:"status"`
 	ExpiresAt       time.Time  `db:"expires_at" json:"expires_at"`
 	DecidedAt       *time.Time `db:"decided_at" json:"decided_at"`

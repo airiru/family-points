@@ -38,7 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -72,6 +74,9 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
     val busy by vm.busy.collectAsStateWithLifecycle()
 
     val currentFamilyName by vm.familyName.collectAsStateWithLifecycle()
+    val codeHidden by vm.codeHidden.collectAsStateWithLifecycle()
+    val pendingRequests by vm.pendingRequests.collectAsStateWithLifecycle()
+    val isLeader = me?.isLeader == true
     var familyName by remember(currentFamilyName) { mutableStateOf(currentFamilyName) }
     var inviteUsername by remember { mutableStateOf("") }
     var actionTarget by remember { mutableStateOf<com.familypoints.app.data.api.MemberBrief?>(null) }
@@ -81,6 +86,7 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
         vm.loadOverview()
         vm.loadInviteCode()
         vm.loadFamilyInvitations()
+        vm.loadPendingRequests()
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -121,29 +127,81 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
 
             item {
                 CardBox {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("邀请码", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("有效期 7 天", fontSize = 11.5.sp, color = Sub)
-                        }
-                        OutlinedButton(onClick = { vm.resetInviteCode() }, modifier = Modifier.height(36.dp)) {
-                            Text("重置", fontSize = 12.5.sp, color = Sub)
-                        }
-                    }
+                    Text("家庭码", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            code ?: "加载中…",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Primary,
+                            letterSpacing = 3.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        val clip = LocalClipboardManager.current
+                        OutlinedButton(
+                            onClick = {
+                                code?.let {
+                                    clip.setText(AnnotatedString(it))
+                                    vm.showMessage("家庭码已复制")
+                                }
+                            },
+                            modifier = Modifier.height(34.dp),
+                        ) { Text("复制", fontSize = 12.5.sp, color = Sub) }
+                    }
                     Text(
-                        code ?: "加载中…",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Primary,
-                        letterSpacing = 3.sp,
-                    )
-                    Text(
-                        "对方注册后输入此码即可加入。重置后旧码立即失效。",
+                        "8 位、唯一且永不可更改，建组时自动生成。别人用它在「所在家庭」里搜索本组并申请加入，需要你审批。",
                         fontSize = 11.5.sp,
                         color = Sub,
                         modifier = Modifier.padding(top = 8.dp),
                     )
+                    if (isLeader) {
+                        Divider(color = Line, modifier = Modifier.padding(vertical = 12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("在搜索结果中隐藏", fontWeight = FontWeight.Medium, fontSize = 13.5.sp)
+                                Text(
+                                    "隐藏后别人搜不到，但仍可凭码直接申请",
+                                    fontSize = 11.5.sp, color = Sub,
+                                )
+                            }
+                            Switch(checked = codeHidden, onCheckedChange = { vm.setCodeHidden(it) })
+                        }
+                    }
+                }
+            }
+
+            // 待审批的入组申请（组长）
+            if (isLeader && pendingRequests.isNotEmpty()) {
+                item {
+                    CardBox {
+                        Text("待审批申请（${pendingRequests.size}）", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "对方凭家庭码申请加入，同意后立即入组。",
+                            fontSize = 11.5.sp, color = Sub,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+                items(pendingRequests, key = { "req-${it.id}" }) { inv ->
+                    CardBox {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(inv.inviteeNickname, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Text("申请加入 · ${inv.statusText}", fontSize = 11.5.sp, color = Sub)
+                            }
+                            OutlinedButton(
+                                onClick = { vm.decideJoinRequest(inv.id, false) },
+                                modifier = Modifier.height(34.dp),
+                            ) { Text("拒绝", fontSize = 12.5.sp, color = Sub) }
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = { vm.decideJoinRequest(inv.id, true) },
+                                modifier = Modifier.height(34.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                            ) { Text("同意", fontSize = 12.5.sp) }
+                        }
+                    }
                 }
             }
 
