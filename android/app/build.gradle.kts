@@ -18,6 +18,8 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
         // 后端地址，优先级：-PapiBaseUrl=... > 默认 10.0.2.2（模拟器指向宿主机）
         // 真机推荐：adb reverse tcp:8080 tcp:8080 + -PapiBaseUrl=http://127.0.0.1:8080/
         val apiBaseUrl = (project.findProperty("apiBaseUrl") as String?) ?: "http://10.0.2.2:8080/"
@@ -81,4 +83,10 @@ dependencies {
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("org.mockito:mockito-inline:5.14.2")
 }

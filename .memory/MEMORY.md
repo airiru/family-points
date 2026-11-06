@@ -419,6 +419,12 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
 - 屏幕时间**真机**上报（11-05 USB 掉线后改用模拟器完成 UI 验证，至今未复验）。
 - Android 趋势折线**界面截图**：本机无 AVD / system-image，连着的真机按约定不占用；
   证据只到「编译通过 + 服务端 DTO 契约断言 + p7 锁字段/日期格式」。
+- **真机可用（11-06）**：`PKT4C20421008269`（HUAWEI OXF-AN10），`adb` 在 `/d/platform-tools/adb`。
+  真机连后端：`adb reverse tcp:8080 tcp:8080` + 构建 `-PapiBaseUrl=http://127.0.0.1:8080/`
+  （`build.gradle.kts` 注释已写），**不必改 0.0.0.0 / 局域网 IP**。
+  11-06 曾搭仪器化 Compose UI 测试（`androidTest/.../InviteUiDeviceTest.kt`，
+  用 mockito-inline 假 `ApiClient` 渲染 P3.1 新界面）想补界面级证据，**被用户中止、未编译执行**，
+  脚手架留在工作区未提交；下次可直接续做或改用真实后端端到端。
 
 ### 6.4 明确挂起 / 明确不做（不是待办）
 
