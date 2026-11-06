@@ -361,6 +361,16 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
   Android 趋势折线（**先修 `TrendPoint` 的 `label/value` → `date/earned/net` 错配**才能画出来）、
   接口清单 7 条漂移清理 + `api_audit.py` 升为**双向硬门禁**、README 整份重写；
   另确立 8.4「余额可为负」不变量（见〇之二）。
+- 11-06 续5：兑换成功通知（`redeem_success`）、登录/改密落审计
+  （`auth.login` / `auth.password`）补齐；并**收敛了一个真实重复通知 bug** ——
+  旧 `handler.notify` 与 service 层 `notify.Service` 各发一条，赠送 / 任务审核各推两条
+  （p8 查旧类型、p11 查新类型，两边都绿但用户看到重复）。旧链路连同
+  `SetNotifier` / `notifier` / handler 里的 `itoa` 已整体删除。
+  **通知只有 service 层一条写入路径**：新增通知必须在 `notify.Service` 加语义方法，
+  不要回到 handler 直写 repo。
+- 登录是**公开接口**，中间件主体未注入，审计必须用 `recordAuditAs` **显式传服务端
+  认证通过的主体**；改密是受保护接口，直接 `recordAudit` 自动取。
+  公开接口**绝不能从请求体取 operator_id**。认证审计只记成功事件，不落任何密码字段。
 - 原「三项未验证」已补齐：logout（全量吊销 refresh）、Web access 自动刷新
   （401 → 换 token → 重放，并发共享 `refreshing` promise）、券核销端到端。
   ⚠️ **改密会吊销全部 refresh**，改密成功后必须重新登录取新 token。
@@ -379,8 +389,6 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
 
 | 项 | 落点 |
 |---|---|
-| 兑换成功通知 | `service/ledger.go` 的 `Redeem` 无 `notifier` 调用；`notify.Service` 里没有兑换相关方法 |
-| 登录 / 改密落审计 | `handler/auth.go` 无 `recordAudit`；features 21.2 明写「至今未落审计」 |
 | 审计日志 180 天定时清理、日志导出 | 全仓无 ticker/cron；21.3.4 ⚠️ / 21.3.5 ⬜（**记录** CSV 导出已有，日志导出没有） |
 | **P3.1 组长按用户名直接邀请** | 5.2.3：需「待确认邀请」状态机 + 新表；后台侧 15.2.3 语义不同（只拉未入组用户、无确认环节）。**唯一要动表结构的项** |
 | Android 补算最近 7 天 / 国产 ROM 保活引导 | 12.2.5 `runNow()` 只补「昨天」；12.2.8 未做 |

@@ -83,7 +83,6 @@ func main() {
 	couponHandler := handler.NewCoupon(couponSvc)
 
 	notifRepo := repo.NewNotification(conn)
-	handler.SetNotifier(notifRepo)
 	notifHandler := handler.NewNotification(notifRepo)
 
 	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler,

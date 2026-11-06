@@ -10,23 +10,11 @@ import (
 	"familypoints/server/internal/repo"
 )
 
-// notifier 是进程级通知写入器（横切关注点）。
-var notifier *repo.Notification
-
-// SetNotifier 在启动时注入。
-func SetNotifier(n *repo.Notification) { notifier = n }
-
-// notify 写一条站内通知。**旁路**：失败只记日志，不影响已成功的业务。
-func notify(c *gin.Context, familyID, memberID uint64, typ, title, body, refType string, refID *uint64) {
-	if notifier == nil || memberID == 0 {
-		return
-	}
-	if err := notifier.Notify(c.Request.Context(), familyID, memberID, typ, title, body, refType, refID); err != nil {
-		logger().Error("通知写入失败（已忽略）", "type", typ, "member_id", memberID, "err", err)
-	}
-}
-
 // Notification 是站内通知 handler。
+//
+// 写入端统一在 internal/notify.Service（由 service 层调用）；handler 只读。
+// 早期这里还有一条直写 repo 的 notify(...) 路径，会与 service 层各发一条，
+// 导致赠送 / 任务审核重复推送，2026-11-06 已整体移除。
 type Notification struct{ repo *repo.Notification }
 
 // NewNotification 构造。

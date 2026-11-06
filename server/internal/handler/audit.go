@@ -53,6 +53,30 @@ func recordAudit(c *gin.Context, action, targetType string, targetID *uint64, be
 	auditor.Write(c.Request.Context(), e)
 }
 
+// recordAuditAs 在**公开接口**里显式指定主体写审计。
+//
+// 登录时 JWT 中间件还没跑，CurrentMember / CurrentAdmin 都取不到，
+// recordAudit 会写出一条 operator_id 为空的记录。这里由 handler 用刚认证
+// 通过的主体构造 Entry；脱敏、旁路、append-only 等约定与 recordAudit 完全一致。
+// familyID 用服务端查出来的成员归属，绝不从请求体里取。
+func recordAuditAs(c *gin.Context, action, targetType string, targetID *uint64,
+	operatorID uint64, operatorType string, familyID *uint64, after any) {
+	if auditor == nil {
+		return
+	}
+	id := operatorID
+	auditor.Write(c.Request.Context(), audit.Entry{
+		FamilyID:     familyID,
+		OperatorID:   &id,
+		OperatorType: operatorType,
+		Action:       action,
+		TargetType:   targetType,
+		TargetID:     targetID,
+		After:        after,
+		IP:           c.ClientIP(),
+	})
+}
+
 // Audit 是审计查询 handler。
 type Audit struct{ repo *repo.Audit }
 

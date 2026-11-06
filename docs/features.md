@@ -1745,22 +1745,30 @@ FROM task_votes WHERE submission_id=?;
 | 商品 / 积分流转 | `item.save` · `item.delete` · `item.redeem` · `transfer.send` |
 | 任务 | `task.create` · `task.close` · `task.submit` · `task.vote` |
 | 导出 | `records.export` |
+| 认证 | `auth.login` · `auth.password`（2026-11-06 补齐） |
 
 > 调用约定：**业务成功后才写**，失败路径不记；写入失败由 `audit.Writer` 吞掉，不影响主流程。
+>
+> **认证审计的口径（2026-11-06）**：只记**成功**事件——失败登录不改任何状态，按上面的调用约定不记。
+> `before` / `after` 只放 `username` 与 `relogin_required` 标记，**绝不写明文密码或哈希**。
+> 登录是公开接口、JWT 中间件还没注入主体，由 handler 用刚认证通过的结果经
+> `recordAuditAs` **显式传主体**，`family_id` 取服务端查到的归属（管理员为 `NULL`）；
+> 改密是受保护接口，直接走 `recordAudit` 自动取主体。
+> 管理员 `operator_type=system`，成员 `operator_type=member`。
 > `before` 只有少数写入点提供（如 `member.leave` / App 侧 `leader.transfer` 的旧值），
 > 其余多为 `after` 快照——需要完整前后对比时以 `audit_logs` 里实际存的 JSON 为准。
 >
 > **早期规划但不存在**的 action（勿再引用）：`record.delete` / `member.reset`（记录 append-only、
 > 积分清零发生在 leave/kick 流程里）、`item.revoke` / `transfer.revoke`（撤销能力已移除）、
 > `task.review`（审核走组内全员投票，见 14.4）、`device.create` / `device.revoke`
-> （设备令牌 2026-11-05 整体删除）、`auth.login` / `auth.password`
-> （**登录与改密至今未落审计**，仍属已知缺口）。
+> （设备令牌 2026-11-05 整体删除）。
+> **`auth.login` / `auth.password` 已于 2026-11-06 实现**，移入上表「认证」行，不再是缺口。
 
 ### 21.3 功能项
 
 | # | 功能 | 状态 |
 |---|---|---|
-| 21.3.1 | 全量写入审计日志 | ✅ 已接入：兑换/赠送/任务(发布·提交·投票·关闭)/成员(踢出·退出·隐藏·转让)/规则/商品/设备/改组名 |
+| 21.3.1 | 全量写入审计日志 | ✅ 已接入：兑换/赠送/任务(发布·提交·投票·关闭)/成员(踢出·退出·隐藏·转让)/规则/商品/改组名/登录·改密（设备令牌已整体删除，无此事件） |
 | 21.3.2 | Web 后台查询（按成员 / 动作 / 时间筛选） | ✅ `GET /api/admin/audit/list`，另支持 family_id 与分页 |
 | 21.3.3 | 单条记录查看 before/after 差异 | ✅ 接口直接返回 `before` / `after` JSON（已脱敏） |
 | 21.3.4 | 日志保留期与清理（**180 天**，每日分批清理） | ⚠️ 未做：需要定时任务，属部署阶段（19.13 已定 180 天） |
@@ -1773,6 +1781,9 @@ FROM task_votes WHERE submission_id=?;
    否则等于把密码哈希写进了可查询的日志表。
 3. **写入失败不能阻断主流程**：审计日志是旁路，写失败时记应用日志并继续，不要因为审计失败导致记分失败。
 4. **`family_id` 必须来自 JWT**，与其他表一致，避免日志本身成为越权入口。
+5. **公开接口（登录 / 注册）不得从请求体取主体**：中间件此时没有注入，必须用
+   `recordAuditAs` 传入**服务端认证通过**的主体，否则会写出 `operator_id` 为空的
+   日志，甚至允许伪造操作者。
 
 ---
 
@@ -1782,7 +1793,7 @@ FROM task_votes WHERE submission_id=?;
 
 | # | 功能 | 状态 |
 |---|---|---|
-| 22.1.1 | 通知生成（任务待审 / 审核结果 / 兑换成功 / 收到赠送） | ✅ 已实现：收到赠送、审核结果；待审提醒与兑换成功待补 |
+| 22.1.1 | 通知生成（任务待审 / 审核结果 / 兑换成功 / 收到赠送） | ✅ 全部已实现：`task_submitted` · `task_decided` · `coupon_pending` · `coupon_decided` · `transfer_in` · `redeem_success` · `kicked`（2026-11-06 补齐兑换成功） |
 | 22.1.2 | 未读数角标 | ✅ 由 `/api/app/state` 的 `unread_count` 提供 |
 | 22.1.3 | 通知列表与标记已读 | ✅ 列表（含 `unread=1` 过滤）、单条/全部已读 |
 | 22.1.4 | 点击跳转到对应对象 | ✅ 通知带 `ref_type` / `ref_id`，跳转由客户端实现 |
@@ -1790,6 +1801,14 @@ FROM task_votes WHERE submission_id=?;
 
 > **不做推送的取舍**：Android 端靠「打开 App 时拉取未读」即可满足家庭场景。
 > 若日后确有实时性需求，再评估厂商通道。
+>
+> **单一写入路径（2026-11-06）**：通知统一由 `internal/notify.Service` 从 **service 层**发出。
+> 早期 `handler/notification.go` 里还有一条直写 repo 的 `notify(...)`，与 service 层
+> 各发一条，导致**赠送 / 任务审核结果各推两条重复消息**（p8 查旧类型、p11 查新类型，
+> 两边都绿但用户看到重复）。旧链路连同 `SetNotifier` / `notifier` / handler 里的 `itoa`
+> 已整体删除；**新增通知必须在 `notify.Service` 加语义方法，不要回到 handler 直写 repo**。
+> `redeem_success` 发给兑换者本人，`ref_type=redemption` / `ref_id` 为兑换单 ID
+> （券与扣分同事务生成，repo 未在返回值里带 coupon ID，不为通知改 repo 返回结构）。
 
 ### 22.2 成员头像
 
@@ -1983,6 +2002,13 @@ FROM task_votes WHERE submission_id=?;
 125. 两次扣分各写一条**负分流水**（`source=screen`、`points=-1000`），不因余额为负而跳过写入（8.1 铁律）。
 126. 负余额状态下**主动支出仍被拒绝**：赠送返回 400 且余额不变；兑换 / 发布任务冻结同理由事务内余额校验把关（8.4）。
 127. 自动扣分路径（`Settle` / `rollbackReport`）**不得引入 `score >= 0` 护栏**；主动支出的三处 `FOR UPDATE` 后校验**必须保留**。
+
+**2026-11-06 通知与认证审计（22.1 / 21.2；p8 第 8 节、p11 第 2/4 节）**
+128. 兑换成功后**兑换者本人恰好收到 1 条** `redeem_success` 通知，组内其他成员不收；余额不足的失败兑换不产生通知。
+129. 通知只有 `internal/notify.Service` 一条写入路径：赠送 / 任务审核结果不再产生旧的 `transfer` / `task_review`，每个事件恰好 1 条。
+130. 成员登录成功后落 `auth.login`（`operator_type=member`，`operator_id` 与 `family_id` 均正确）；管理员登录落 `auth.login`（`operator_type=system`、`family_id` 为空）。
+131. 改密成功后落 `auth.password`；登录 / 改密的**失败路径不写审计**。
+132. 认证审计的 `before` / `after` 不含任何密码、哈希或 token 字段；审计写入失败不阻断登录与改密。
 ---
 
 ## 24. 开发起点与实施顺序（2026-11-03 新增）

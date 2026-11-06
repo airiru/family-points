@@ -48,6 +48,7 @@ echo "== 2. 赠送到账通知 =="
 curl -s -o /dev/null -X POST $B/api/app/transfer/send -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"to_member_id\":$A_ID,\"amount\":5,\"note\":\"测试\"}"
 chk "受赠方收到 transfer_in" "1" "$(notif "$A_AT" transfer_in)"
 chk "赠送方自己不收" "0" "$(notif "$L_AT" transfer_in)"
+chk "赠送不重复（旧 transfer = 0）" "0" "$(notif "$A_AT" transfer)"
 
 echo "== 3. 任务：提交 → 待投票通知；通过 → 结果通知 =="
 TID=$(curl -s -X POST $B/api/app/task/create -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"title":"倒垃圾","points":10}' | jget "['data']['id']")
@@ -62,11 +63,15 @@ SUB=$(curl -s "$B/api/app/task/detail?task_id=$TID" -H "Authorization: Bearer $L
 curl -s -o /dev/null -X POST $B/api/app/task/vote -H "Authorization: Bearer $B_AT" -H 'Content-Type: application/json' -d "{\"submission_id\":$SUB,\"vote\":\"approve\"}"
 curl -s -o /dev/null -X POST $B/api/app/task/vote -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"submission_id\":$SUB,\"vote\":\"approve\"}"
 chk "完成者收到 task_decided" "1" "$(notif "$A_AT" task_decided)"
+chk "任务结果不重复（旧 task_review = 0）" "0" "$(notif "$A_AT" task_review)"
 
 echo "== 4. 券核销：发起 → 待投票通知；通过 → 结果通知 =="
 curl -s -o /dev/null -X POST $B/api/app/item/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"name":"冰淇淋","cost":1}'
 IID=$(curl -s $B/api/app/item/list -H "Authorization: Bearer $A_AT" | jget "['data']['items'][0]['id']")
 curl -s -o /dev/null -X POST $B/api/app/item/redeem -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"item_id\":$IID}"
+chk "兑换者收到 redeem_success" "1" "$(notif "$A_AT" redeem_success)"
+chk "组长不收兑换成功通知" "0" "$(notif "$L_AT" redeem_success)"
+chk "另一成员不收兑换成功通知" "0" "$(notif "$B_AT" redeem_success)"
 CID=$(curl -s $B/api/app/coupons -H "Authorization: Bearer $A_AT" | jget "['data']['items'][0]['id']")
 curl -s -o /dev/null -X POST $B/api/app/coupon/use -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"coupon_id\":$CID}"
 chk "组长收到 coupon_pending" "1" "$(notif "$L_AT" coupon_pending)"
@@ -76,6 +81,12 @@ chk "申请人自己不收" "0" "$(notif "$A_AT" coupon_pending)"
 curl -s -o /dev/null -X POST $B/api/app/coupon/vote -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"coupon_id\":$CID,\"vote\":\"approve\"}"
 curl -s -o /dev/null -X POST $B/api/app/coupon/vote -H "Authorization: Bearer $B_AT" -H 'Content-Type: application/json' -d "{\"coupon_id\":$CID,\"vote\":\"approve\"}"
 chk "申请人收到 coupon_decided" "1" "$(notif "$A_AT" coupon_decided)"
+
+echo "== 4b. 失败兑换不产生通知 =="
+curl -s -o /dev/null -X POST $B/api/app/item/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d '{"name":"超贵","cost":99999}'
+EXPENSIVE=$(curl -s $B/api/app/item/list -H "Authorization: Bearer $A_AT" | python -c "import sys,json;d=json.load(sys.stdin);print([x['id'] for x in d['data']['items'] if x['cost']==99999][0])")
+chk "余额不足兑换 → 400" "400" "$(code -X POST $B/api/app/item/redeem -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"item_id\":$EXPENSIVE}")"
+chk "失败兑换后 redeem_success 仍为 1" "1" "$(notif "$A_AT" redeem_success)"
 
 echo "== 5. 通知已读 =="
 NID=$(curl -s "$B/api/app/notification/list?limit=1" -H "Authorization: Bearer $A_AT" | jget "['data']['items'][0]['id']")

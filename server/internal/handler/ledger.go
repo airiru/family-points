@@ -139,8 +139,6 @@ func (h *Ledger) AppSendTransfer(c *gin.Context) {
 	recordAudit(c, "transfer.send", "transfer", &tid, nil, gin.H{
 		"from": t.FromMemberID, "to": t.ToMemberID, "amount": t.Amount,
 	})
-	notify(c, *m.FamilyID, t.ToMemberID, "transfer",
-		"收到一笔赠送", m.Name+" 赠送了你 "+itoa(t.Amount)+" 分", "transfer", &tid)
 	httpx.OK(c, gin.H{
 		"transfer_id": t.ID,
 		"to_member_id": t.ToMemberID,

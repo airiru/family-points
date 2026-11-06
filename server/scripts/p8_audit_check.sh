@@ -53,11 +53,13 @@ chk "成员查审计 → 401" "401" "$(code "$B/api/admin/audit/list" -H "Author
 chk "无审计删除接口 → 404" "404" "$(code -X DELETE "$B/api/admin/audit/1" -H "Authorization: Bearer $A_AT")"
 chk "无审计修改接口 → 404" "404" "$(code -X PUT "$B/api/admin/audit/1" -H "Authorization: Bearer $A_AT")"
 
-echo "== 6. 站内通知 =="
+echo "== 6. 站内通知（单一写入路径，无重复）=="
 N1=$(curl -s "$B/api/app/notification/list" -H "Authorization: Bearer $M_AT")
-chk "受赠方收到赠送通知" "True" "$(echo "$N1" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['type']=='transfer' for r in d['data']['items']))")"
-chk "赠送方没有收到（只发给受赠方）" "False" "$(curl -s "$B/api/app/notification/list" -H "Authorization: Bearer $L_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['type']=='transfer' for r in d['data']['items']))")"
-NID=$(echo "$N1" | python -c "import sys,json;d=json.load(sys.stdin);print([r['id'] for r in d['data']['items'] if r['type']=='transfer'][0])")
+chk "受赠方收到 transfer_in" "True" "$(echo "$N1" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['type']=='transfer_in' for r in d['data']['items']))")"
+chk "赠送通知恰好 1 条" "1" "$(echo "$N1" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['type']=='transfer_in'))")"
+chk "旧 transfer 类型不再产生" "0" "$(echo "$N1" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['type']=='transfer'))")"
+chk "赠送方没有收到（只发给受赠方）" "False" "$(curl -s "$B/api/app/notification/list" -H "Authorization: Bearer $L_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['type']=='transfer_in' for r in d['data']['items']))")"
+NID=$(echo "$N1" | python -c "import sys,json;d=json.load(sys.stdin);print([r['id'] for r in d['data']['items'] if r['type']=='transfer_in'][0])")
 chk "标记单条已读 → 200" "200" "$(code -X POST $B/api/app/notification/read -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"id\":$NID}")"
 chk "已读后 unread=1 不含它" "False" "$(curl -s "$B/api/app/notification/list?unread=1" -H "Authorization: Bearer $M_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['id']==$NID for r in d['data']['items']))")"
 chk "标记别人的通知 → 404" "404" "$(code -X POST $B/api/app/notification/read -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"id\":$NID}")"
@@ -70,7 +72,30 @@ curl -s -o /dev/null -X POST $B/api/app/task/claim -H "Authorization: Bearer $M_
 S=$(curl -s -X POST $B/api/app/task/submit -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"task_id\":$TID,\"note\":\"洗完了\"}")
 SID=$(echo "$S" | jget "['data']['id']")
 curl -s -o /dev/null -X POST $B/api/app/task/vote -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"submission_id\":$SID,\"vote\":\"approve\"}"
-chk "审核结果通知到完成者" "True" "$(curl -s "$B/api/app/notification/list" -H "Authorization: Bearer $M_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['type']=='task_review' for r in d['data']['items']))")"
+N2=$(curl -s "$B/api/app/notification/list" -H "Authorization: Bearer $M_AT")
+chk "审核结果通知到完成者（task_decided）" "True" "$(echo "$N2" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['type']=='task_decided' for r in d['data']['items']))")"
+chk "审核结果通知恰好 1 条" "1" "$(echo "$N2" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['type']=='task_decided'))")"
+chk "旧 task_review 类型不再产生" "0" "$(echo "$N2" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['type']=='task_review'))")"
+
+echo "== 8. 登录 / 改密审计（auth.login / auth.password） =="
+X=$(reg "x8$RUN" "审计号" true)
+X_ID=$(echo "$X" | jget "['data']['member']['id']")
+X_FID=$(echo "$X" | jget "['data']['member']['family_id']")
+LOGIN_BODY="{\"username\":\"x8$RUN\",\"password\":\"Kid#2026pass\"}"
+curl -s -o /dev/null -X POST $B/api/app/login -H 'Content-Type: application/json' -d "$LOGIN_BODY"
+X_AT=$(curl -s -X POST $B/api/app/login -H 'Content-Type: application/json' -d "$LOGIN_BODY" | jget "['data']['token']['access_token']")
+AQ="$B/api/admin/audit/list?family_id=$X_FID&operator_id=$X_ID&limit=50"
+AX=$(curl -s "$AQ" -H "Authorization: Bearer $A_AT")
+chk "成员登录落 auth.login（2 次成功登录）" "2" "$(echo "$AX" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['action']=='auth.login'))")"
+chk "登录审计 operator_type=member" "True" "$(echo "$AX" | python -c "import sys,json;d=json.load(sys.stdin);print(all(r['operator_type']=='member' for r in d['data']['items']))")"
+chk "登录审计 family_id 与本组一致" "True" "$(echo "$AX" | python -c "import sys,json;d=json.load(sys.stdin);print(all(r['family_id']==$X_FID for r in d['data']['items']))")"
+chk "登录失败 → 401" "401" "$(code -X POST $B/api/app/login -H 'Content-Type: application/json' -d "{\"username\":\"x8$RUN\",\"password\":\"wrong\"}")"
+chk "登录失败不写审计" "2" "$(curl -s "$AQ" -H "Authorization: Bearer $A_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['action']=='auth.login'))")"
+chk "改密 → 200" "200" "$(code -X POST $B/api/app/password -H "Authorization: Bearer $X_AT" -H 'Content-Type: application/json' -d '{"old_password":"Kid#2026pass","new_password":"New#2026pass"}')"
+AX2=$(curl -s "$AQ" -H "Authorization: Bearer $A_AT")
+chk "改密落 auth.password" "1" "$(echo "$AX2" | python -c "import sys,json;d=json.load(sys.stdin);print(sum(1 for r in d['data']['items'] if r['action']=='auth.password'))")"
+chk "认证审计 before/after 无密码或 token 字段" "False" "$(echo "$AX2" | python -c "import sys,json;d=json.load(sys.stdin);print(any(any(k in (r.get('before') or '')+(r.get('after') or '') for k in ['password','pass_hash','token']) for r in d['data']['items']))")"
+chk "管理员登录落 auth.login（system）" "True" "$(curl -s "$B/api/admin/audit/list?action=auth.login&limit=200" -H "Authorization: Bearer $A_AT" | python -c "import sys,json;d=json.load(sys.stdin);print(any(r['operator_type']=='system' for r in d['data']['items']))")"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"

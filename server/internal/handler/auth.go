@@ -56,6 +56,10 @@ func (h *Auth) LoginAdmin(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	// 登录是公开接口，中间件主体还没注入，须显式传；失败路径不记审计。
+	aid := admin.ID
+	recordAuditAs(c, "auth.login", "admin", &aid, aid, "system", nil,
+		gin.H{"username": admin.Username})
 	httpx.OK(c, gin.H{
 		"admin": gin.H{
 			"id":       admin.ID,
@@ -80,6 +84,10 @@ func (h *Auth) LoginMember(c *gin.Context) {
 		fail(c, err)
 		return
 	}
+	// 同上：显式用刚认证通过的主体，family_id 取服务端查到的归属（可为 nil）。
+	mid := member.ID
+	recordAuditAs(c, "auth.login", "member", &mid, mid, "member", member.FamilyID,
+		gin.H{"username": member.Username})
 	httpx.OK(c, gin.H{
 		"member": gin.H{
 			"id":        member.ID,
@@ -154,6 +162,15 @@ func (h *Auth) changePassword(c *gin.Context, do func(oldPwd, newPwd string) err
 	if err := do(in.OldPassword, in.NewPassword); err != nil {
 		fail(c, err)
 		return
+	}
+	// 改密是受保护接口，中间件已注入主体，直接复用 recordAudit。
+	// 不往 before/after 里放任何密码字段：after 只记结果标记。
+	if m, ok := middleware.CurrentMember(c); ok {
+		id := m.ID
+		recordAudit(c, "auth.password", "member", &id, nil, gin.H{"relogin_required": true})
+	} else if a, ok := middleware.CurrentAdmin(c); ok {
+		id := a.ID
+		recordAudit(c, "auth.password", "admin", &id, nil, gin.H{"relogin_required": true})
 	}
 	// 改密后旧 refresh 全部失效，客户端必须重新登录
 	httpx.OK(c, gin.H{"relogin_required": true})

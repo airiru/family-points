@@ -31,6 +31,7 @@ const (
 	TypeCouponDecided = "coupon_decided" // 你的券核销通过/驳回
 	TypeTransferIn    = "transfer_in"    // 收到积分
 	TypeKicked        = "kicked"         // 被移出家庭组
+	TypeRedeemSuccess = "redeem_success" // 兑换成功，商品券已生成
 )
 
 // one 发给单个成员。
@@ -110,6 +111,20 @@ func (s *Service) TransferIn(ctx context.Context, familyID, toID uint64, amount 
 // Kicked 被移出家庭组。
 func (s *Service) Kicked(ctx context.Context, familyID, memberID uint64, familyName string) {
 	s.one(ctx, familyID, memberID, TypeKicked, "你已被移出「"+familyName+"」", "积分已清零，且不能再加入该家庭组", "family", familyID)
+}
+
+// RedeemSuccess 兑换成功 → 通知兑换者本人。
+//
+// 券与扣分在同一个事务里生成（repo.Ledger.Redeem 第 6 步），所以走到这里时
+// 券必然已经存在；ref_id 用 redemption ID（repo 未在返回值里带 coupon ID，
+// 不为一条通知去改 repo 的返回结构）。
+func (s *Service) RedeemSuccess(ctx context.Context, familyID, memberID uint64, rd *model.Redemption) {
+	if rd == nil {
+		return
+	}
+	s.one(ctx, familyID, memberID, TypeRedeemSuccess,
+		"兑换成功", "「"+rd.ItemName+"」已生成商品券，扣 "+itoa(rd.Cost)+" 分",
+		"redemption", rd.ID)
 }
 
 func itoa(n int) string {

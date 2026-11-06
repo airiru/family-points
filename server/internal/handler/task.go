@@ -191,15 +191,6 @@ func (h *Task) AppVoteTask(c *gin.Context) {
 	recordAudit(c, "task.vote", "submission", &in.SubmissionID, nil, gin.H{
 		"vote": in.Vote, "status": res.Status, "approve": res.Approve, "reject": res.Reject,
 	})
-	if res.Status == "approved" || res.Status == "rejected" {
-		title := "任务审核通过"
-		if res.Status == "rejected" {
-			title = "任务被驳回"
-		}
-		notify(c, *m.FamilyID, res.CompleterID, "task_review", title,
-			"任务 #"+itoa(int(res.TaskID))+" 的提交已"+map[string]string{"approved": "通过", "rejected": "被驳回"}[res.Status],
-			"task", &res.TaskID)
-	}
 	httpx.OK(c, gin.H{
 		"status":      res.Status,
 		"approve":     res.Approve,

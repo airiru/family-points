@@ -105,6 +105,8 @@ func (s *Ledger) Redeem(ctx context.Context, me *model.Member, itemID uint64) (*
 		}
 		return nil, err
 	}
+	// 兑换成功通知本人（旁路，失败不影响兑换；只写成功路径）
+	s.notifier.RedeemSuccess(ctx, *me.FamilyID, me.ID, rd)
 	return rd, nil
 }
 
