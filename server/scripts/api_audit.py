@@ -29,7 +29,8 @@ GROUPS = [
 def doc_paths():
     text = io.open(DOC, encoding="utf-8").read()
     out = []
-    for num, cell in re.findall(r"\| (15\.[1-4]\.\d+) \|(.+?)\|", text):
+    # 编号允许字母后缀（如 15.1.3a），否则「logout」这类补登记会被误报成缺文档
+    for num, cell in re.findall(r"\| (15\.[1-4]\.\d+[a-z]?) \|(.+?)\|", text):
         for p in re.findall(r"`(/api[^`]*)`", cell):
             if (num, p) not in out:
                 out.append((num, p))

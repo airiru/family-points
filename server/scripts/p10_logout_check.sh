@@ -38,15 +38,15 @@ echo "== 2. 前台：未登录调 logout 必须 401 =="
 chk "无 token logout → 401" "401" "$(code -X POST $B/api/app/logout)"
 
 echo "== 3. 后台：登出 → 旧 refresh 重放必须被拒 =="
-# 需要 access + refresh 一对，所以这里自己试密码（lib_admin 只返回 access）
-A_AT=""; A_RT=""
-for p in ${ADMIN_PASSWORD:-} admins1234 admins123 admins; do
+# 需要 access + refresh 一对：先用 lib_admin 登录（它会自动处理首次强制改密），
+# 再用它导出的 ADMIN_PWD_USED 登录一次拿 refresh。
+A_AT=$(admin_login "$B")
+A_RT=""
+if [ -n "${A_AT:-}" ]; then
   ADM=$(curl -s -X POST $B/api/admin/login -H 'Content-Type: application/json' \
-    -d "{\"username\":\"admins\",\"password\":\"$p\"}")
-  A_AT=$(echo "$ADM" | jget "['data']['token']['access_token']")
+    -d "{\"username\":\"admins\",\"password\":\"${ADMIN_PWD_USED:-admins}\"}")
   A_RT=$(echo "$ADM" | jget "['data']['token']['refresh_token']")
-  [ -n "${A_AT:-}" ] && break
-done
+fi
 [ -n "${A_AT:-}" ] && echo "  ✅ 后台登录成功" && pass=$((pass+1)) || { echo "  ❌ 后台登录失败"; fail=$((fail+1)); }
 
 chk "后台登出接口 200" "200" "$(code -X POST $B/api/admin/logout -H "Authorization: Bearer $A_AT")"
