@@ -97,32 +97,33 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Avatar(me?.avatar, size = 52)
                         Spacer(Modifier.width(12.dp))
+                        // 左：身份（我是谁）—— 昵称可改，用户名是登录凭证、永不可改。
                         Column(Modifier.weight(1f)) {
                             Text(
                                 me?.nickname.orEmpty().ifBlank { "我" },
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 17.sp,
                             )
-                            // 用户名（username）与昵称是两回事：前者登录用、永不可改，
-                            // 后者可改。这里都显示，避免用户分不清「我叫什么」和「我用什么登录」。
                             Text(
                                 "用户名 ${me?.username.orEmpty()}",
                                 fontSize = 12.sp,
                                 color = Sub,
                             )
-                            Text(
-                                "${if (me?.isLeader == true) "组长" else "成员"} · $familyName",
-                                fontSize = 11.5.sp,
-                                color = Sub,
-                            )
                         }
+                        // 右：归属（我在哪个家、什么角色）。积分不在这里显示，
+                        // 统一放到下面的「积分管理」，避免同一个数字在屏幕上出现两次。
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                "${me?.score ?: 0}",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 19.sp,
+                                familyName.ifBlank { "未加入家庭" },
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
                             )
-                            Text("可用积分", fontSize = 11.sp, color = Sub)
+                            Spacer(Modifier.height(2.dp))
+                            Pill(
+                                if (me?.isLeader == true) "组长" else "成员",
+                                if (me?.isLeader == true) Primary else Sub,
+                                if (me?.isLeader == true) PrimarySoft else MaterialTheme.colorScheme.surfaceVariant,
+                            )
                         }
                         Spacer(Modifier.width(6.dp))
                         Text("›", fontSize = 18.sp, color = Sub)
@@ -147,6 +148,8 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                         value = "${me?.score ?: 0}",
                     )
                     Divider(color = Line)
+                    MenuItem("📋", "积分流水", "每一条加分与扣分") { nav.navigate(Routes.RECORDS) }
+                    Divider(color = Line)
                     MenuItem("🎁", "赠送积分", "把积分转给其他成员") { nav.navigate(Routes.GIFT) }
                 }
             }
@@ -158,8 +161,6 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                         if (unread > 0) "有 $unread 条未读" else "投票提醒与结果",
                         badge = unread,
                     ) { nav.navigate(Routes.NOTIFY) }
-                    Divider(color = Line)
-                    MenuItem("📋", "积分记录", "全部流水") { nav.navigate(Routes.RECORDS) }
                 }
             }
 
