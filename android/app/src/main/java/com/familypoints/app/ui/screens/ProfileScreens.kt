@@ -103,9 +103,16 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 17.sp,
                             )
+                            // 账号（username）与昵称是两回事：前者登录用、永不可改，
+                            // 后者可改。这里都显示，避免用户分不清「我叫什么」和「我用什么登录」。
+                            Text(
+                                "账号 ${me?.username.orEmpty()}",
+                                fontSize = 12.sp,
+                                color = Sub,
+                            )
                             Text(
                                 "${if (me?.isLeader == true) "组长" else "成员"} · $familyName",
-                                fontSize = 12.sp,
+                                fontSize = 11.5.sp,
                                 color = Sub,
                             )
                         }

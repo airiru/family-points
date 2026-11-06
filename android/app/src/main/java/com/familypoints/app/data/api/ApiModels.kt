@@ -34,6 +34,8 @@ data class MemberBrief(
 @Serializable
 data class MeView(
     val id: Long,
+    /** 登录账号，注册后**永不可改**；与可改的昵称是两回事。 */
+    val username: String = "",
     val nickname: String = "",
     val role: String = "member",
     val score: Int = 0,

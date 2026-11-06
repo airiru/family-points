@@ -76,6 +76,30 @@ fun ProfileEditScreen(vm: AppViewModel, nav: NavHostController) {
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // 账号放最上面：它是登录凭证，**不可修改**，先讲清楚再让人去改昵称，
+            // 免得用户把「改名称」误当成「改账号」。
+            CardBox {
+                Text("账号", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        me?.username.orEmpty().ifBlank { "—" },
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("不可修改", fontSize = 11.5.sp, color = Sub)
+                }
+                Text(
+                    "账号用于登录，注册后不能更改；下面可以改的是昵称和头像。",
+                    fontSize = 11.5.sp, color = Sub,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+
             CardBox {
                 Text("头像", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Spacer(Modifier.height(10.dp))
