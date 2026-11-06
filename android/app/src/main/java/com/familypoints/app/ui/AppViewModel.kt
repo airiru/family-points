@@ -8,6 +8,7 @@ import com.familypoints.app.data.api.CouponIdReq
 import com.familypoints.app.data.api.CouponView
 import com.familypoints.app.data.api.CouponVoteReq
 import com.familypoints.app.data.api.CreateTaskReq
+import com.familypoints.app.data.api.FamilyRenameReq
 import com.familypoints.app.data.api.FamilyScreenView
 import com.familypoints.app.data.api.HiddenReq
 import com.familypoints.app.data.api.ItemIdReq
@@ -618,6 +619,21 @@ class AppViewModel @Inject constructor(
                 )
             )
         }.onFailure { Log.w(TAG, "上传今日快照失败", it) }
+    }
+
+    // ---------------- 家庭组（2026-11-06） ----------------
+
+    /** 改家庭组名（仅组长）。成功后同步本地的 familyName，无需重新拉接口。 */
+    fun renameFamily(name: String, onDone: () -> Unit = {}) = launchBusy {
+        val trimmed = name.trim()
+        val resp = api.renameFamily(FamilyRenameReq(trimmed))
+        if (!resp.ok) {
+            showMessage(resp.error ?: "保存失败")
+            return@launchBusy
+        }
+        _familyName.value = trimmed
+        showMessage("家庭名称已保存")
+        onDone()
     }
 
     // ---------------- 个人资料 ----------------

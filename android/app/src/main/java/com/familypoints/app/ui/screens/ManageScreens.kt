@@ -71,6 +71,8 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
     val familyInvitations by vm.familyInvitations.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
 
+    val currentFamilyName by vm.familyName.collectAsStateWithLifecycle()
+    var familyName by remember(currentFamilyName) { mutableStateOf(currentFamilyName) }
     var inviteUsername by remember { mutableStateOf("") }
     var actionTarget by remember { mutableStateOf<com.familypoints.app.data.api.MemberBrief?>(null) }
     var confirmKick by remember { mutableStateOf<com.familypoints.app.data.api.MemberBrief?>(null) }
@@ -82,7 +84,7 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader(title = "成员管理", onBack = { nav.popBackStack() })
+        ScreenHeader(title = "家庭管理", onBack = { nav.popBackStack() })
 
         LazyColumn(
             modifier = Modifier
@@ -90,6 +92,33 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
+            item {
+                CardBox {
+                    Text("家庭名称", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(
+                        "会显示在积分榜、通知和成员页上。",
+                        fontSize = 11.5.sp, color = Sub,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = familyName,
+                        onValueChange = { familyName = it },
+                        label = { Text("组名") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = { vm.renameFamily(familyName) },
+                        // 只挡「没改」和「空」，长度等规则交给服务端判定
+                        enabled = !busy && familyName.isNotBlank() && familyName.trim() != currentFamilyName,
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                    ) { Text("保存名称", fontWeight = FontWeight.SemiBold, fontSize = 13.sp) }
+                }
+            }
+
             item {
                 CardBox {
                     Row(verticalAlignment = Alignment.CenterVertically) {

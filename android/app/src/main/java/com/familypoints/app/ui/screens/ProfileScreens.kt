@@ -154,7 +154,7 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                     CardBox {
                         Text("组长工具", fontSize = 12.sp, color = Sub, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(6.dp))
-                        MenuItem("👥", "成员管理", "邀请、踢出、设组长") { nav.navigate(Routes.MANAGE_MEMBERS) }
+                        MenuItem("👥", "家庭管理", "改组名、邀请、踢出、设组长") { nav.navigate(Routes.MANAGE_MEMBERS) }
                         Divider(color = Line)
                         MenuItem("🌙", "睡觉规则", "时间点与连续奖励") { nav.navigate(Routes.SLEEP_RULE) }
                         Divider(color = Line)

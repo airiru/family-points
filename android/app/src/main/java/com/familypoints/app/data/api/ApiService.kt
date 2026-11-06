@@ -66,7 +66,7 @@ interface ApiService {
     suspend fun members(): Envelope<MemberList>
 
     @POST("api/app/family/rename")
-    suspend fun renameFamily(@Body body: RenameReq): Envelope<Unit>
+    suspend fun renameFamily(@Body body: FamilyRenameReq): Envelope<Unit>
 
     @GET("api/app/family/invite-code")
     suspend fun inviteCode(): Envelope<InviteCodeView>

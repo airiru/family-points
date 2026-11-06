@@ -438,6 +438,17 @@ data class MemberIdReq(@SerialName("member_id") val memberId: Long, val confirm:
 @Serializable
 data class RenameReq(val nickname: String)
 
+/**
+ * 家庭组改名。
+ *
+ * ⚠️ 与 [RenameReq] 不是一个字段：后端 `/api/app/family/rename` 收 `name`，
+ * `/api/app/member/rename` 收 `nickname`。之前这里复用了 RenameReq，
+ * 提交的是 `{"nickname":...}` → 后端当成空名字，必然 400。
+ * 因为一直没有入口调用，所以从没暴露过。
+ */
+@Serializable
+data class FamilyRenameReq(val name: String)
+
 // ---------- 待确认邀请（P3.1） ----------
 
 @Serializable
