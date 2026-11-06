@@ -103,10 +103,10 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 17.sp,
                             )
-                            // 账号（username）与昵称是两回事：前者登录用、永不可改，
+                            // 用户名（username）与昵称是两回事：前者登录用、永不可改，
                             // 后者可改。这里都显示，避免用户分不清「我叫什么」和「我用什么登录」。
                             Text(
-                                "账号 ${me?.username.orEmpty()}",
+                                "用户名 ${me?.username.orEmpty()}",
                                 fontSize = 12.sp,
                                 color = Sub,
                             )
@@ -144,8 +144,6 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                         if (unread > 0) "有 $unread 条未读" else "投票提醒与结果",
                         badge = unread,
                     ) { nav.navigate(Routes.NOTIFY) }
-                    Divider(color = Line)
-                    MenuItem("📱", "屏幕时间", "今日使用与上报状态") { nav.navigate(Routes.SCREEN_TIME) }
                     Divider(color = Line)
                     MenuItem("📋", "积分记录", "全部流水") { nav.navigate(Routes.RECORDS) }
                 }
