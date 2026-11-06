@@ -211,6 +211,25 @@ type DeviceDayReport struct {
 	NightMin    *int   `db:"night_min" json:"night_min"`
 }
 
+// HourlyRow 是「某成员某设备某天某小时」的使用分钟数。
+//
+// 2026-11-06 起上传。**只用于展示明细，永远不参与判定或计分**——
+// 计分口径仍是 screen_reports 的「成员×日」一行。
+type HourlyRow struct {
+	MemberID    uint64 `db:"member_id" json:"-"`
+	DeviceKey   string `db:"device_key" json:"device_key"`
+	DeviceModel string `db:"device_model" json:"device_model"`
+	Hour        int    `db:"hour" json:"hour"`
+	Minutes     int    `db:"minutes" json:"minutes"`
+}
+
+// DailyTotal 是某成员某天的汇总（跨设备相加）。
+type DailyTotal struct {
+	ReportDate string `db:"report_date" json:"date"`
+	TotalMin   int    `db:"total_min" json:"total_min"`
+	NightMin   *int   `db:"night_min" json:"night_min"`
+}
+
 // DeviceReport 是后台「设备原始上报」列表的一行（按天 × 设备，只读展示）。
 // 与 DeviceDayReport 的区别：它带日期与写入时间，供后台跨日期翻查，不参与任何结算。
 type DeviceReport struct {

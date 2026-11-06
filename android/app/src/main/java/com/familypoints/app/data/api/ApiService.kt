@@ -3,6 +3,7 @@ package com.familypoints.app.data.api
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
@@ -210,6 +211,17 @@ interface ApiService {
 
     @GET("api/app/screen/family")
     suspend fun screenFamily(@Query("date") date: String? = null): Envelope<FamilyScreenView>
+
+    /** 今天（或指定日）的实时快照：只落明细，不结算、不发分。 */
+    @POST("api/app/screen/snapshot")
+    suspend fun screenSnapshot(@Body body: ScreenReportReq): Envelope<Unit>
+
+    /** 某成员某天的完整明细：总时长、24 小时桶、各设备、近 7 天。memberId=0 表示自己。 */
+    @GET("api/app/screen/member/{memberId}")
+    suspend fun screenMember(
+        @Path("memberId") memberId: Long,
+        @Query("date") date: String? = null,
+    ): Envelope<MemberDetail>
 
     // ---------- 个人资料 ----------
     @POST("api/app/me/profile")

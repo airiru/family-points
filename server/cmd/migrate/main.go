@@ -227,7 +227,7 @@ var expectedTables = []string{
 	"families", "family_bans", "admins", "members", "rules", "items",
 	"records", "transfers", "tasks", "task_submissions", "task_votes",
 	"audit_logs", "notifications", "screen_rules", "screen_reports",
-	"screen_device_reports", "member_devices",
+	"screen_device_reports", "screen_hourly_reports", "member_devices",
 	"refresh_tokens", "redemptions", "coupons", "coupon_votes",
 	"family_invitations",
 }

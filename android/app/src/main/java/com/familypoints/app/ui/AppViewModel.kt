@@ -19,6 +19,7 @@ import com.familypoints.app.data.api.ItemView
 import com.familypoints.app.data.api.JoinReq
 import com.familypoints.app.data.api.LoginReq
 import com.familypoints.app.data.api.MeView
+import com.familypoints.app.data.api.MemberDetail
 import com.familypoints.app.data.api.MemberBrief
 import com.familypoints.app.data.api.MemberIdReq
 import com.familypoints.app.data.api.NotificationReadReq
@@ -28,6 +29,7 @@ import com.familypoints.app.data.api.ProfileReq
 import com.familypoints.app.data.api.RankingRow
 import com.familypoints.app.data.api.RecordView
 import com.familypoints.app.data.api.RedeemReq
+import com.familypoints.app.data.api.ScreenReportReq
 import com.familypoints.app.data.api.RegisterReq
 import com.familypoints.app.data.api.RenameMemberReq
 import com.familypoints.app.data.api.RuleSaveReq
@@ -562,6 +564,60 @@ class AppViewModel @Inject constructor(
         runCatching { api.screenFamily(date).data }
             .onSuccess { _familyScreen.value = it }
             .onFailure { Log.w(TAG, "读取家庭屏幕详情失败", it) }
+    }
+
+    // ---------------- 屏幕时间明细（2026-11-06） ----------------
+
+    /** 自己的明细（屏幕 tab 用）。与「别人的」分开存，避免来回切页互相覆盖。 */
+    private val _screenDetail = MutableStateFlow<MemberDetail?>(null)
+    val screenDetail: StateFlow<MemberDetail?> = _screenDetail.asStateFlow()
+
+    /** 某个家庭成员的明细（成员详情页用）。 */
+    private val _memberDetail = MutableStateFlow<MemberDetail?>(null)
+    val memberDetail: StateFlow<MemberDetail?> = _memberDetail.asStateFlow()
+
+    /**
+     * 读取某成员某天的明细（总时长 / 24 小时桶 / 各设备 / 近 7 天）。
+     * 服务端已算好全部维度，前端只画，不做任何补零或重算。
+     *
+     * memberId = 0 表示自己，写入 [screenDetail]；其余写入 [memberDetail]。
+     */
+    fun loadScreenDetail(memberId: Long, date: String? = null) = launchBusy(showBusy = false) {
+        if (memberId == 0L) _screenDetail.value = null
+        else _memberDetail.value = null
+        runCatching { api.screenMember(memberId, date).data }
+            .onSuccess { d ->
+                if (memberId == 0L) _screenDetail.value = d else _memberDetail.value = d
+            }
+            .onFailure { Log.w(TAG, "读取成员屏幕明细失败 member=$memberId", it) }
+    }
+
+    /**
+     * 上传「今天」的实时快照（只落明细，不结算、不发分）。
+     *
+     * 与 Worker 的区别：Worker 上报「昨天」并结算；快照只为了让家人现在就能看到
+     * 今天的数据。失败静默——这是旁路，不能影响页面。
+     */
+    suspend fun uploadTodaySnapshot(
+        deviceKey: String,
+        deviceModel: String,
+        hours: IntArray,
+        nightMin: Int,
+        date: String,
+    ) {
+        if (hours.size != 24) return
+        runCatching {
+            api.screenSnapshot(
+                ScreenReportReq(
+                    deviceKey = deviceKey,
+                    deviceModel = deviceModel,
+                    reportDate = date,
+                    totalMin = hours.sum(),
+                    nightMin = nightMin,
+                    hourly = hours.toList(),
+                )
+            )
+        }.onFailure { Log.w(TAG, "上传今日快照失败", it) }
     }
 
     // ---------------- 个人资料 ----------------

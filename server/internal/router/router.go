@@ -172,6 +172,9 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		// 上报改用成员登录态，不再需要设备令牌（2026-11-05）
 		inFamily.POST("/screen/report", screenHandler.AppReport)
 		inFamily.GET("/screen/family", screenHandler.AppFamilyDay)
+		// 今日实时快照（只落明细、不结算）与成员明细（含逐小时 / 各设备 / 近 7 天）
+		inFamily.POST("/screen/snapshot", screenHandler.AppSnapshot)
+		inFamily.GET("/screen/member/:member_id", screenHandler.AppMemberDetail)
 		inFamily.GET("/screen/devices", screenHandler.AppDevices)
 
 		// 任务：发布（冻结）→ 接取 → 提交 → 全员投票

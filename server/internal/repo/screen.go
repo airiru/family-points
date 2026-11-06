@@ -226,6 +226,92 @@ func (r *Screen) DeviceReportsOfDay(ctx context.Context, familyID uint64, date t
 	return list, err
 }
 
+// ---------- 小时明细（2026-11-06，仅展示） ----------
+
+// ReplaceHourly 用新的一天 24 个桶整体覆盖某设备某日的明细。
+//
+// 为什么先删后插而不是逐小时 upsert：后报覆盖语义要求「上一次有、这一次没有」的
+// 小时桶必须消失（比如用户删了数据重报），逐小时 upsert 会把旧桶留下。
+// 放在同一个事务里，避免删除成功、插入失败导致明细整体丢失。
+func (r *Screen) ReplaceHourly(ctx context.Context, familyID, memberID uint64,
+	deviceKey, deviceModel string, date time.Time, minutes []int) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	d := date.Format("2006-01-02")
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM screen_hourly_reports WHERE member_id = ? AND device_key = ? AND report_date = ?`,
+		memberID, deviceKey, d); err != nil {
+		return err
+	}
+	for h := 0; h < len(minutes) && h < 24; h++ {
+		if minutes[h] <= 0 {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO screen_hourly_reports
+			   (family_id, member_id, device_key, device_model, report_date, hour, minutes, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, NOW(3))`,
+			familyID, memberID, deviceKey, deviceModel, d, h, minutes[h]); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// HourlyOfMemberDate 取某成员某天全部设备的逐小时明细。
+func (r *Screen) HourlyOfMemberDate(ctx context.Context, memberID uint64, date time.Time) ([]model.HourlyRow, error) {
+	list := []model.HourlyRow{}
+	err := r.db.SelectContext(ctx, &list,
+		`SELECT member_id, device_key, device_model, hour, minutes
+		   FROM screen_hourly_reports
+		  WHERE member_id = ? AND report_date = ?
+		  ORDER BY device_key, hour`, memberID, date.Format("2006-01-02"))
+	return list, err
+}
+
+// DailyTotalsOfMember 取某成员 [from, to] 区间内按天的合计（跨设备相加）。
+//
+// 直接读 screen_device_reports 而不是 screen_reports：后者只有「已结算」的天，
+// 当天还没结算时会缺行，界面就会看不到今天。
+func (r *Screen) DailyTotalsOfMember(ctx context.Context, memberID uint64, from, to time.Time) ([]model.DailyTotal, error) {
+	list := []model.DailyTotal{}
+	err := r.db.SelectContext(ctx, &list,
+		`SELECT DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date,
+		        COALESCE(SUM(total_min), 0) AS total_min,
+		        SUM(night_min) AS night_min
+		   FROM screen_device_reports
+		  WHERE member_id = ? AND report_date BETWEEN ? AND ?
+		  GROUP BY report_date
+		  ORDER BY report_date`,
+		memberID, from.Format("2006-01-02"), to.Format("2006-01-02"))
+	return list, err
+}
+
+// DeviceDailyRow 是「某设备某天」的合计（成员详情里按设备画近 7 天用）。
+type DeviceDailyRow struct {
+	DeviceKey string `db:"device_key"`
+	Date      string `db:"report_date"`
+	TotalMin  int    `db:"total_min"`
+}
+
+// DeviceDailyTotals 取某成员 [from, to] 区间内「设备 × 天」的合计。
+func (r *Screen) DeviceDailyTotals(ctx context.Context, memberID uint64, from, to time.Time) ([]DeviceDailyRow, error) {
+	list := []DeviceDailyRow{}
+	err := r.db.SelectContext(ctx, &list,
+		`SELECT device_key, DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date,
+		        COALESCE(SUM(total_min), 0) AS total_min
+		   FROM screen_device_reports
+		  WHERE member_id = ? AND report_date BETWEEN ? AND ?
+		  GROUP BY device_key, report_date
+		  ORDER BY device_key, report_date`,
+		memberID, from.Format("2006-01-02"), to.Format("2006-01-02"))
+	return list, err
+}
+
 // DeviceReports 列出后台视图的设备原始上报（只读）。
 // memberID=0 表示全组；date 为零值表示不限日期。全部条件都带 family_id，避免跨组读取。
 func (r *Screen) DeviceReports(ctx context.Context, familyID, memberID uint64, date time.Time, limit int) ([]model.DeviceReport, error) {

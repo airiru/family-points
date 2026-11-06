@@ -41,6 +41,7 @@ import com.familypoints.app.ui.screens.JoinFamilyScreen
 import com.familypoints.app.ui.screens.LoginScreen
 import com.familypoints.app.ui.screens.ManageMembersScreen
 import com.familypoints.app.ui.screens.MemberDetailScreen
+import com.familypoints.app.ui.screens.MemberScreenDetailScreen
 import com.familypoints.app.ui.screens.NotificationsScreen
 import com.familypoints.app.ui.screens.ProfileEditScreen
 import com.familypoints.app.ui.screens.ProfileScreen
@@ -72,6 +73,7 @@ object Routes {
     const val TASK_DETAIL = "taskDetail/{id}"
     const val VOTE = "vote"
     const val SCREEN_TIME = "screenTime"
+    const val SCREEN_MEMBER = "screenMember/{memberId}"
     const val PROFILE_EDIT = "profileEdit"
     const val MANAGE_MEMBERS = "manageMembers"
     const val SLEEP_RULE = "sleepRule"
@@ -169,6 +171,12 @@ private fun MainNav(vm: AppViewModel) {
             }
             composable(Routes.VOTE) { VoteScreen(vm, nav) }
             composable(Routes.SCREEN_TIME) { ScreenTimeScreen(vm, nav) }
+            composable(
+                Routes.SCREEN_MEMBER,
+                arguments = listOf(navArgument("memberId") { type = NavType.LongType }),
+            ) { entry ->
+                MemberScreenDetailScreen(vm, nav, entry.arguments?.getLong("memberId") ?: 0L)
+            }
             composable(Routes.PROFILE_EDIT) { ProfileEditScreen(vm, nav) }
             composable(Routes.MANAGE_MEMBERS) { ManageMembersScreen(vm, nav) }
             composable(Routes.SLEEP_RULE) { SleepRuleScreen(vm, nav) }

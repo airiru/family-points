@@ -48,38 +48,60 @@ class ScreenReportWorker @AssistedInject constructor(
         val nightEnd = rule?.nightEndHour
         val nightMax = rule?.nightMaxMin
 
-        val reportDate = reader.dateString(1) // 昨天
-        val dayStart = reader.startOfDay(1)
-        val dayEnd = reader.startOfDay(0)
+        // 一次读两天（昨天 + 今天）的小时桶：
+        // - 昨天：完整数据，用于结算；
+        // - 今天：用于跨零点夜间时段（22 → 7 的 0–7 点落在今天）。
+        // 总时长直接取桶之和，保证「总时长」与「逐小时」永远对得上。
+        val buckets = reader.readBuckets(2)
+        if (buckets.size < 2) return Result.success()
+        val yesterday = buckets[0]
+        val today = buckets[1]
 
-        val total = reader.read(dayStart, dayEnd, nightStart, nightEnd, nightMax)
+        val reportDate = yesterday.date
+        val hourly = yesterday.hourlyMinutes
+        val totalMin = hourly.sum()
 
-        // 夜间段：若跨零点（如 22 → 7），区间延伸到今天 7 点
+        // 夜间段：同一天内直接取；跨零点（如 22 → 7）要把今天 0 点到 nightEnd 也算上
         val nightMinutes = if (nightStart != null && nightEnd != null) {
             if (nightStart < nightEnd) {
-                // 同一天内，total 里已经算过
-                total.nightMinutes
+                yesterday.nightMinutes(nightStart, nightEnd)
             } else {
-                // 跨零点：昨天 nightStart ~ 今天 nightEnd
-                val crossEnd = reader.startOfDay(0) + nightEnd * 3_600_000L
-                val cross = reader.read(dayStart, crossEnd, nightStart, nightEnd, nightMax)
-                cross.nightMinutes
+                yesterday.nightMinutes(nightStart, 24) + today.nightMinutes(0, nightEnd)
             }
         } else {
             0
         }
 
-        return runCatching {
-            val resp = apiClient.service.screenReport(
+        // 1) 上报「昨天」并结算
+        val ok = runCatching {
+            apiClient.service.screenReport(
                 ScreenReportReq(
                     deviceKey = DeviceInfo.key(applicationContext),
                     deviceModel = DeviceInfo.model(),
                     reportDate = reportDate,
-                    totalMin = total.totalMinutes,
+                    totalMin = totalMin,
                     nightMin = nightMinutes,
+                    hourly = hourly.toList(),
+                )
+            ).ok
+        }.getOrElse { false }
+        if (!ok) return Result.retry()
+
+        // 2) 顺带把「今天」的快照也传一次：家人现在就能看到今天的数据。
+        //    快照不结算、不发分，失败也不影响上面那次上报的结果。
+        runCatching {
+            apiClient.service.screenSnapshot(
+                ScreenReportReq(
+                    deviceKey = DeviceInfo.key(applicationContext),
+                    deviceModel = DeviceInfo.model(),
+                    reportDate = today.date,
+                    totalMin = today.totalMinutes,
+                    nightMin = today.nightMinutes(0, 24),
+                    hourly = today.hourlyMinutes.toList(),
                 )
             )
-            if (resp.ok) Result.success() else Result.retry()
-        }.getOrElse { Result.retry() }
+        }
+
+        return Result.success()
     }
 }

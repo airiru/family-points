@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS coupon_votes;
 DROP TABLE IF EXISTS coupons;
 DROP TABLE IF EXISTS redemptions;
 DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS screen_hourly_reports;
 DROP TABLE IF EXISTS screen_device_reports;
 DROP TABLE IF EXISTS member_devices;
 DROP TABLE IF EXISTS screen_reports;

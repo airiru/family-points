@@ -194,6 +194,10 @@ type ReportInput struct {
 	ReportDate  string `json:"report_date"` // 可选，缺省为「归属日」（见下）
 	TotalMin    int    `json:"total_min"`
 	NightMin    *int   `json:"night_min"`
+	// Hourly 是 24 个小时桶（索引 = 小时，单位分钟），2026-11-06 起上传。
+	// **只用于展示明细**；但若恰好给了 24 个桶，total_min 以桶之和为准，
+	// 避免「总时长」与「逐小时加起来」两个数字对不上（同一份数据算两遍的误差）。
+	Hourly []int `json:"hourly"`
 }
 
 // Report 处理一次设备上报并返回结算结果。
@@ -212,6 +216,14 @@ func (s *Screen) Report(ctx context.Context, me *model.Member, in ReportInput) (
 	}
 	if len(in.DeviceKey) > 64 || len(in.DeviceModel) > 64 {
 		return nil, fmt.Errorf("%w：device_key / device_model 过长", ErrInvalidInput)
+	}
+	if len(in.Hourly) > 0 && len(in.Hourly) != 24 {
+		return nil, fmt.Errorf("%w：hourly 必须是 24 个桶（索引 = 小时）", ErrInvalidInput)
+	}
+	for _, v := range in.Hourly {
+		if v < 0 {
+			return nil, fmt.Errorf("%w：小时分钟数不能为负", ErrInvalidInput)
+		}
 	}
 	rule, err := s.screen.ScreenRuleByMember(ctx, *me.FamilyID, me.ID)
 	if err != nil {
@@ -241,9 +253,24 @@ func (s *Screen) Report(ctx context.Context, me *model.Member, in ReportInput) (
 	if err := s.screen.UpsertDevice(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel); err != nil {
 		return nil, err
 	}
+	// 24 个桶齐全时以桶之和为 total：同一份数据不该算出两个总时长。
+	totalMin := in.TotalMin
+	if len(in.Hourly) == 24 {
+		sum := 0
+		for _, v := range in.Hourly {
+			sum += v
+		}
+		totalMin = sum
+	}
 	if err := s.screen.UpsertDeviceReport(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel,
-		date, in.TotalMin, in.NightMin); err != nil {
+		date, totalMin, in.NightMin); err != nil {
 		return nil, err
+	}
+	if len(in.Hourly) > 0 {
+		if err := s.screen.ReplaceHourly(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel,
+			date, in.Hourly); err != nil {
+			return nil, err
+		}
 	}
 
 	// 2) 汇总该成员当天**所有设备**，再结算（多设备相加，2026-11-05 拍板）
@@ -359,9 +386,19 @@ func (s *Screen) FamilyDay(ctx context.Context, me *model.Member, rawDate string
 		if item.Devices == nil {
 			item.Devices = []model.DeviceDayReport{}
 		}
+		// 总时长/夜间以**设备明细求和**为准，而不是结算行：
+		// 当天还没到 21:00、或刚上报尚未结算时，结算行可能不存在或滞后，
+		// 直接用结算行会让「今天」永远显示 0。判定与积分仍只认结算行。
+		for _, d := range item.Devices {
+			item.TotalMin += d.TotalMin
+			if d.NightMin != nil {
+				if item.NightMin == nil {
+					item.NightMin = new(int)
+				}
+				*item.NightMin += *d.NightMin
+			}
+		}
 		if r, ok := byMember[m.ID]; ok {
-			item.TotalMin = r.TotalMin
-			item.NightMin = r.NightMin
 			item.NightOK = r.NightOK
 			item.Points = r.Points
 		}
@@ -376,4 +413,236 @@ func (s *Screen) DevicesOfMember(ctx context.Context, me *model.Member) ([]model
 		return nil, ErrNotInFamily
 	}
 	return s.screen.DevicesOfMember(ctx, me.ID)
+}
+
+// ---------- 今日实时快照（2026-11-06） ----------
+
+// Snapshot 落「今天」的实时明细：设备、当日合计、逐小时桶。**不结算、不发分**。
+//
+// 为什么要单开一条路径：Worker 上报的是「昨天」（数据完整、可结算），
+// 而家人想看的「今天」必须实时。若复用 Report，会在一天内反复重算当天积分，
+// 分数早中晚各变一次，流水会很脏。所以快照只写明细，判定与积分仍只认结算行。
+func (s *Screen) Snapshot(ctx context.Context, me *model.Member, in ReportInput) error {
+	if !me.InFamily() {
+		return ErrNotInFamily
+	}
+	if in.DeviceKey == "" {
+		return fmt.Errorf("%w：缺少 device_key（设备标识）", ErrInvalidInput)
+	}
+	if len(in.DeviceKey) > 64 || len(in.DeviceModel) > 64 {
+		return fmt.Errorf("%w：device_key / device_model 过长", ErrInvalidInput)
+	}
+	if len(in.Hourly) != 24 {
+		return fmt.Errorf("%w：hourly 必须是 24 个桶（索引 = 小时）", ErrInvalidInput)
+	}
+	sum := 0
+	for _, v := range in.Hourly {
+		if v < 0 {
+			return fmt.Errorf("%w：小时分钟数不能为负", ErrInvalidInput)
+		}
+		sum += v
+	}
+	var night *int
+	if in.NightMin != nil {
+		if *in.NightMin < 0 {
+			return fmt.Errorf("%w：分钟数不能为负", ErrInvalidInput)
+		}
+		night = in.NightMin
+	}
+
+	date := time.Now()
+	if in.ReportDate != "" {
+		d, err := time.ParseInLocation("2006-01-02", in.ReportDate, time.Local)
+		if err != nil {
+			return fmt.Errorf("%w：report_date 需为 YYYY-MM-DD", ErrInvalidInput)
+		}
+		date = d
+	}
+	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+
+	if err := s.screen.UpsertDevice(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel); err != nil {
+		return err
+	}
+	if err := s.screen.UpsertDeviceReport(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel,
+		date, sum, night); err != nil {
+		return err
+	}
+	return s.screen.ReplaceHourly(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel, date, in.Hourly)
+}
+
+// ---------- 成员屏幕时间详情（2026-11-06） ----------
+
+// DayPoint 是某成员某天的合计。
+type DayPoint struct {
+	Date     string `json:"date"`
+	TotalMin int    `json:"total_min"`
+	NightMin *int   `json:"night_min"`
+}
+
+// MemberDeviceDetail 是一台设备在查询日的明细。
+//
+// Hourly 与 Days 都由服务端算好，前端只画，不做任何补零或重算——
+// 与「前端不参与业务判定」的约定一致。
+type MemberDeviceDetail struct {
+	DeviceKey   string `json:"device_key"`
+	DeviceModel string `json:"device_model"`
+	TotalMin    int    `json:"total_min"`
+	NightMin    *int   `json:"night_min"`
+	Hourly      []int  `json:"hourly"` // 24，索引 = 小时
+	Days        []int  `json:"days"`   // 与 MemberDetailView.Days 同序的每日分钟
+}
+
+// MemberDetailView 是「某个成员某天」的完整屏幕时间视图。
+type MemberDetailView struct {
+	MemberID uint64 `json:"member_id"`
+	Nickname string `json:"nickname"`
+	Role     string `json:"role"`
+	Avatar   string `json:"avatar"`
+	IsSelf   bool   `json:"is_self"`
+	Date     string `json:"date"`
+
+	TotalMin int   `json:"total_min"`
+	NightMin *int  `json:"night_min"`
+	NightOK  *bool `json:"night_ok"`
+	Points   int   `json:"points"`
+	Settled  bool  `json:"settled"` // 当天是否已有结算行
+
+	Hourly  []int                `json:"hourly"` // 24，全部设备相加
+	Devices []MemberDeviceDetail `json:"devices"`
+	Days    []DayPoint           `json:"days"` // 近 7 天，含查询日
+}
+
+// MemberDetail 返回某成员某天的屏幕时间详情。
+//
+// memberID = 0 表示自己。组内成员互相可见（需求：可以查看家庭成员的详细时间）。
+// 不存在的成员返回 ErrNotFound；跨组成员返回 ErrNotFound（不泄露存在性）。
+func (s *Screen) MemberDetail(ctx context.Context, me *model.Member, memberID uint64, rawDate string) (*MemberDetailView, error) {
+	if !me.InFamily() {
+		return nil, ErrNotInFamily
+	}
+	if memberID == 0 {
+		memberID = me.ID
+	}
+	m, err := s.family.MemberInFamily(ctx, *me.FamilyID, memberID)
+	if err != nil {
+		return nil, err
+	}
+
+	date := time.Now()
+	if rawDate != "" {
+		d, perr := time.ParseInLocation("2006-01-02", rawDate, time.Local)
+		if perr != nil {
+			return nil, fmt.Errorf("%w：date 需为 YYYY-MM-DD", ErrInvalidInput)
+		}
+		date = d
+	}
+	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+	from := date.AddDate(0, 0, -6)
+
+	devReports, err := s.screen.DeviceReportsOfDay(ctx, *me.FamilyID, date)
+	if err != nil {
+		return nil, err
+	}
+	hourlyRows, err := s.screen.HourlyOfMemberDate(ctx, memberID, date)
+	if err != nil {
+		return nil, err
+	}
+	dailyTotals, err := s.screen.DailyTotalsOfMember(ctx, memberID, from, date)
+	if err != nil {
+		return nil, err
+	}
+	deviceDaily, err := s.screen.DeviceDailyTotals(ctx, memberID, from, date)
+	if err != nil {
+		return nil, err
+	}
+
+	// 近 7 天：先铺满 7 天（没数据的天补 0），否则界面会「缺几根柱子」看起来像丢数据。
+	avatar := ""
+	if m.Avatar != nil {
+		avatar = *m.Avatar
+	}
+	view := &MemberDetailView{
+		MemberID: m.ID, Nickname: m.Nickname, Role: m.Role, Avatar: avatar,
+		IsSelf: m.ID == me.ID,
+		Date:   date.Format("2006-01-02"),
+		Hourly: make([]int, 24),
+	}
+	totalByDate := map[string]model.DailyTotal{}
+	for _, t := range dailyTotals {
+		totalByDate[t.ReportDate] = t
+	}
+	dayIdx := map[string]int{}
+	for i := 0; i < 7; i++ {
+		d := from.AddDate(0, 0, i).Format("2006-01-02")
+		dayIdx[d] = i
+		p := DayPoint{Date: d}
+		if t, ok := totalByDate[d]; ok {
+			p.TotalMin = t.TotalMin
+			p.NightMin = t.NightMin
+		}
+		view.Days = append(view.Days, p)
+	}
+
+	// 按设备归集小时明细
+	hourByDevice := map[string][]int{}
+	modelByDevice := map[string]string{}
+	for _, r := range hourlyRows {
+		if hourByDevice[r.DeviceKey] == nil {
+			hourByDevice[r.DeviceKey] = make([]int, 24)
+		}
+		if r.Hour >= 0 && r.Hour < 24 {
+			hourByDevice[r.DeviceKey][r.Hour] += r.Minutes
+		}
+		modelByDevice[r.DeviceKey] = r.DeviceModel
+	}
+	devDays := map[string][]int{}
+	for _, r := range deviceDaily {
+		if devDays[r.DeviceKey] == nil {
+			devDays[r.DeviceKey] = make([]int, 7)
+		}
+		if i, ok := dayIdx[r.Date]; ok {
+			devDays[r.DeviceKey][i] = r.TotalMin
+		}
+	}
+
+	view.Devices = []MemberDeviceDetail{}
+	for _, d := range devReports {
+		if d.MemberID != memberID {
+			continue
+		}
+		hours := hourByDevice[d.DeviceKey]
+		if hours == nil {
+			hours = make([]int, 24)
+		}
+		days := devDays[d.DeviceKey]
+		if days == nil {
+			days = make([]int, 7)
+		}
+		view.Devices = append(view.Devices, MemberDeviceDetail{
+			DeviceKey: d.DeviceKey, DeviceModel: d.DeviceModel,
+			TotalMin: d.TotalMin, NightMin: d.NightMin,
+			Hourly: hours, Days: days,
+		})
+		for h := 0; h < 24; h++ {
+			view.Hourly[h] += hours[h]
+		}
+		view.TotalMin += d.TotalMin
+		if d.NightMin != nil {
+			if view.NightMin == nil {
+				view.NightMin = new(int)
+			}
+			*view.NightMin += *d.NightMin
+		}
+	}
+
+	// 判定与积分只认结算行；当天未结算就留空，界面显示「待结算」而不是猜。
+	if rep, err := s.screen.ReportByDate(ctx, *me.FamilyID, memberID, date); err == nil {
+		view.NightOK = rep.NightOK
+		view.Points = rep.Points
+		view.Settled = true
+	} else if !errors.Is(err, repo.ErrNotFound) {
+		return nil, err
+	}
+
+	return view, nil
 }

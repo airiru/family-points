@@ -130,6 +130,31 @@ chk "两条负分流水都落库" "2" "$(echo "$NEG_REC" | python -c "import sys
 chk "负余额时赠送 → 400" "400" "$(code -X POST $B/api/app/transfer/send -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"to_member_id\":$L_ID,\"amount\":1}")"
 chk "拒绝后余额不变" "$BAL2" "$(score "$M_AT")"
 
+echo "== 11. 逐小时明细 + 成员详情（2026-11-06）=="
+# 快照：只落明细，不结算、不发分
+BAL_SNAP=$(score "$M_AT")
+HOURS='[0,0,0,0,0,0,0,0,0,10,20,0,0,0,0,0,0,0,0,30,40,0,0,0]'
+chk "今日快照 → 200" "200" "$(code -X POST $B/api/app/screen/snapshot -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"devA\",\"device_model\":\"手机\",\"report_date\":\"2026-11-03\",\"total_min\":100,\"night_min\":0,\"hourly\":$HOURS}")"
+chk "快照不改余额（不结算）" "$BAL_SNAP" "$(score "$M_AT")"
+chk "快照桶数不是 24 → 400" "400" "$(code -X POST $B/api/app/screen/snapshot -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d '{\"device_key\":\"devA\",\"report_date\":\"2026-11-03\",\"hourly\":[1,2]}')"
+chk "上报带非 24 桶 → 400" "400" "$(code -X POST $B/api/app/screen/report -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d '{\"device_key\":\"devA\",\"report_date\":\"2026-11-03\",\"total_min\":5,\"hourly\":[1,2]}')"
+
+DET=$(curl -s "$B/api/app/screen/member/$M_ID?date=2026-11-03" -H "Authorization: Bearer $M_AT")
+chk "成员详情 200" "True" "$(echo "$DET" | python -c "import sys,json;print(json.load(sys.stdin)['ok'])")"
+chk "详情 total = 桶之和 100" "100" "$(echo "$DET" | python -c "import sys,json;d=json.load(sys.stdin)['data'];print(d['total_min'])")"
+chk "详情 hourly 24 桶" "24" "$(echo "$DET" | python -c "import sys,json;print(len(json.load(sys.stdin)['data']['hourly']))")"
+chk "详情 hourly 与上传一致" "True" "$(echo "$DET" | python -c "import sys,json;print(json.load(sys.stdin)['data']['hourly']==$HOURS)")"
+chk "详情近 7 天固定 7 条" "7" "$(echo "$DET" | python -c "import sys,json;print(len(json.load(sys.stdin)['data']['days']))")"
+chk "详情含设备小时明细" "True" "$(echo "$DET" | python -c "import sys,json;d=json.load(sys.stdin)['data'];print(any(len(x['hourly'])==24 for x in d['devices']))")"
+chk "详情 is_self = true" "True" "$(echo "$DET" | python -c "import sys,json;print(json.load(sys.stdin)['data']['is_self'])")"
+
+# 组长看别人
+OTHER=$(curl -s "$B/api/app/screen/member/$M_ID?date=2026-11-03" -H "Authorization: Bearer $L_AT")
+chk "组长可看成员详情" "True" "$(echo "$OTHER" | python -c "import sys,json;print(json.load(sys.stdin)['ok'])")"
+chk "组长看到的是他人（is_self=false）" "False" "$(echo "$OTHER" | python -c "import sys,json;print(json.load(sys.stdin)['data']['is_self'])")"
+chk "不存在的成员 → 404" "404" "$(code "$B/api/app/screen/member/999999" -H "Authorization: Bearer $L_AT")"
+chk "非法 member_id → 400" "400" "$(code "$B/api/app/screen/member/abc" -H "Authorization: Bearer $L_AT")"
+
 echo
 echo "通过 $pass 项，失败 $fail 项"
 [ "$fail" -eq 0 ]

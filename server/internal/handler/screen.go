@@ -188,3 +188,53 @@ func (h *Screen) AppDevices(c *gin.Context) {
 	}
 	httpx.OK(c, gin.H{"devices": list})
 }
+
+// AppSnapshot POST /api/app/screen/snapshot
+//
+// 「今天」的实时快照：只落设备、当日合计与逐小时桶，**不结算、不发分**。
+// 判定与积分仍由 Worker 在次日上报「昨天」时统一结算，避免一天内反复改分。
+func (h *Screen) AppSnapshot(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in service.ReportInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if err := h.svc.Snapshot(c.Request.Context(), m, in); err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"saved": true})
+}
+
+// AppMemberDetail GET /api/app/screen/member/:member_id?date=YYYY-MM-DD
+//
+// 某成员某天的完整明细：总时长、逐小时（24 桶）、各设备、近 7 天。
+// member_id = 0 表示自己；组内成员互相可见。
+func (h *Screen) AppMemberDetail(c *gin.Context) {
+	m, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var memberID uint64
+	if raw := c.Param("member_id"); raw != "" {
+		v, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			httpx.BadRequest(c, "member_id 必须是数字")
+			return
+		}
+		memberID = v
+	}
+	date := c.DefaultQuery("date", "")
+	view, err := h.svc.MemberDetail(c.Request.Context(), m, memberID, date)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, view)
+}

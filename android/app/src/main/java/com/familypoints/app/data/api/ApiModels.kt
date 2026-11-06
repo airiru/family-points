@@ -341,6 +341,10 @@ data class ScreenReportReq(
     // 服务端收到的是「没带 night_min」→ 当成未判定，夜间永远不加分。
     // 改成 Int? 后，传 0 与默认值 null 不同，才会真正编码进去。
     @SerialName("night_min") val nightMin: Int? = null,
+    // 24 个小时桶（索引 = 小时，单位分钟）。2026-11-06 起上传，只用于**展示明细**，
+    // 不参与判定或计分；但服务端在 24 个桶齐全时以桶之和为 total_min，
+    // 保证「总时长」与「逐小时加起来」永远一致。
+    val hourly: List<Int> = emptyList(),
 )
 
 @Serializable
@@ -375,6 +379,46 @@ data class FamilyMemberDay(
 data class DeviceDay(
     @SerialName("device_key") val deviceKey: String = "",
     @SerialName("device_model") val deviceModel: String = "",
+    @SerialName("total_min") val totalMin: Int = 0,
+    @SerialName("night_min") val nightMin: Int? = null,
+)
+
+/** 某成员某天的屏幕时间详情（2026-11-06）。 */
+@Serializable
+data class MemberDetail(
+    @SerialName("member_id") val memberId: Long = 0,
+    val nickname: String = "",
+    val role: String = "",
+    val avatar: String = "",
+    @SerialName("is_self") val isSelf: Boolean = false,
+    val date: String = "",
+    @SerialName("total_min") val totalMin: Int = 0,
+    @SerialName("night_min") val nightMin: Int? = null,
+    @SerialName("night_ok") val nightOk: Boolean? = null,
+    val points: Int = 0,
+    /** 当天是否已有结算行；false 表示还没结算，判定与积分一律显示「待结算」。 */
+    val settled: Boolean = false,
+    /** 24 桶，索引 = 小时，全部设备相加。 */
+    val hourly: List<Int> = emptyList(),
+    val devices: List<MemberDeviceDetail> = emptyList(),
+    /** 近 7 天，含查询日，最旧在前。 */
+    val days: List<DayPoint> = emptyList(),
+)
+
+@Serializable
+data class MemberDeviceDetail(
+    @SerialName("device_key") val deviceKey: String = "",
+    @SerialName("device_model") val deviceModel: String = "",
+    @SerialName("total_min") val totalMin: Int = 0,
+    @SerialName("night_min") val nightMin: Int? = null,
+    val hourly: List<Int> = emptyList(),
+    /** 与 MemberDetail.days 同序的每日分钟数。 */
+    val days: List<Int> = emptyList(),
+)
+
+@Serializable
+data class DayPoint(
+    val date: String = "",
     @SerialName("total_min") val totalMin: Int = 0,
     @SerialName("night_min") val nightMin: Int? = null,
 )

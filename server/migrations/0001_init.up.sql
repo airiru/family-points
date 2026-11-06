@@ -240,6 +240,23 @@ CREATE TABLE IF NOT EXISTS screen_device_reports (
   KEY idx_family_date (family_id, report_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 按「设备 × 小时」的原始上报（2026-11-06）：只用于**展示明细**，不参与任何计分。
+-- 计分口径仍是 screen_reports 的「成员×日」一行，小时数据永远不是判定依据。
+-- 后报覆盖：同一 (member, device, date) 每次上报先删后插，避免残留下班小时桶。
+CREATE TABLE IF NOT EXISTS screen_hourly_reports (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id    BIGINT UNSIGNED NOT NULL,
+  member_id    BIGINT UNSIGNED NOT NULL,
+  device_key   VARCHAR(64)  NOT NULL,
+  device_model VARCHAR(64)  NOT NULL,
+  report_date  DATE         NOT NULL,
+  hour         TINYINT UNSIGNED NOT NULL,   -- 0..23
+  minutes      INT          NOT NULL,
+  updated_at   DATETIME(3)  NULL,
+  UNIQUE KEY uk_member_device_date_hour (member_id, device_key, report_date, hour),
+  KEY idx_family_date (family_id, report_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 设备令牌
 -- 成员设备（2026-11-05）：不再有令牌，设备只用来「区分」和「展示」。
 -- 上报走成员登录态，客户端自报 device_key（Android ID 之类）+ 型号。
