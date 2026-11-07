@@ -24,6 +24,7 @@ const groups = [
   {
     name: '系统',
     items: [
+      { path: '/users', title: '用户账号', icon: '🧑‍🤝‍🧑' },
       { path: '/accounts', title: '管理员账号', icon: '👤' },
       { path: '/site-config', title: '站点设置', icon: '🌐' },
     ],

@@ -28,6 +28,7 @@ const routes = [
   { path: '/stats', redirect: '/workspace/stats' },
   { path: '/audit', component: () => import('./pages/Audit.vue'), meta: { title: '审计日志', group: '数据查询' } },
   { path: '/feedback', component: () => import('./pages/Feedback.vue'), meta: { title: '用户反馈', group: '数据查询' } },
+  { path: '/users', component: () => import('./pages/AdminUsers.vue'), meta: { title: '用户账号', group: '系统' } },
   { path: '/accounts', component: () => import('./pages/Accounts.vue'), meta: { title: '管理员账号', group: '系统' } },
   { path: '/site-config', component: () => import('./pages/SiteConfig.vue'), meta: { title: '站点设置', group: '系统' } },
   { path: '/:pathMatch(.*)*', redirect: '/' },

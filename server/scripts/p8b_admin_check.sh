@@ -97,8 +97,8 @@ echo "== 8. 解散家庭组（5.5.2，2026-11-07）=="
 # 用一个全新的组来解散，避免污染前面断言的组
 DL=$(reg "dl$RUN" "解散组长" true); DL_AT=$(echo "$DL" | jget "['data']['token']['access_token']"); DL_ID=$(echo "$DL" | jget "['data']['member']['id']")
 DFID=$(curl -s $B/api/app/family -H "Authorization: Bearer $DL_AT" | jget "['data']['id']")
-DM=$(reg "dm$RUN" "解散成员" false); DM_AT=$(echo "$DM" | jget "['data']['token']['access_token']")
-curl -s -o /dev/null -X POST $B/api/admin/family/$DFID/invite -H "$AH" -H 'Content-Type: application/json' -d "{"username":"dm$RUN"}"
+DM=$(reg "dm$RUN" "解散成员" false); DM_AT=$(echo "$DM" | jget "['data']['token']['access_token']"); DM_ID=$(echo "$DM" | jget "['data']['member']['id']")
+curl -s -o /dev/null -X POST $B/api/admin/family/$DFID/invite -H "$AH" -H 'Content-Type: application/json' -d "{\"username\":\"dm$RUN\"}"
 curl -s -o /dev/null -X POST $B/api/app/device/unbind/request -H "Authorization: Bearer $DM_AT" -H 'Content-Type: application/json' -d '{"device_key":"dlx"}'  # 未绑定设备 → 404，仅确认校验存在
 BEFORE_SCORE=$(curl -s $B/api/app/me -H "Authorization: Bearer $DM_AT" | jget "['data']['score']")
 chk "确认组名不对 → 400" "400" "$(code -X POST $B/api/admin/family/$DFID/dissolve -H "$AH" -H 'Content-Type: application/json' -d '{"confirm_name":"错的组名"}')"
@@ -122,6 +122,19 @@ chk "后台列表含它（带用户名快照）" "True" "$(curl -s "$B/api/admin
 chk "标记已处理 → 200" "200" "$(code -X POST $B/api/admin/feedback/$FB_ID/handle -H "$AH")"
 chk "重复标记 → 404" "404" "$(code -X POST $B/api/admin/feedback/$FB_ID/handle -H "$AH")"
 chk "已处理列表含它" "True" "$(curl -s "$B/api/admin/feedbacks?handled=1" -H "$AH" | python -c "import sys,json;print(any(f['id']==$FB_ID for f in json.load(sys.stdin)['data']['items']))")"
+
+echo "== 10. 用户账号管理（15.2.44–46，2026-11-07）=="
+chk "全局列表 200" "200" "$(code "$B/api/admin/members?limit=200" -H "$AH")"
+chk "列表含 dm 且带家庭名" "True" "$(curl -s "$B/api/admin/members?keyword=dm$RUN" -H "$AH" | python -c "import sys,json;print(all('family_name' in f for f in json.load(sys.stdin)['data']['items']))")"
+chk "停用 → 200" "200" "$(code -X POST $B/api/admin/member/$DM_ID/disable -H "$AH" -H 'Content-Type: application/json' -d '{"disabled":true}')"
+chk "停用后登录 → 403" "403" "$(code -X POST $B/api/app/login -H 'Content-Type: application/json' -d "{\"username\":\"dm$RUN\",\"password\":\"Kid#2026pass\"}")"
+chk "停用后原 token 调接口 → 401" "401" "$(code $B/api/app/me -H "Authorization: Bearer $DM_AT")"
+chk "启用 → 200" "200" "$(code -X POST $B/api/admin/member/$DM_ID/disable -H "$AH" -H 'Content-Type: application/json' -d '{"disabled":false}')"
+chk "启用后能登录" "200" "$(code -X POST $B/api/app/login -H 'Content-Type: application/json' -d "{\"username\":\"dm$RUN\",\"password\":\"Kid#2026pass\"}")"
+chk "重置密码 → 200" "200" "$(code -X POST $B/api/admin/member/$DM_ID/reset-password -H "$AH" -H 'Content-Type: application/json' -d '{"password":"NewPass#123"}')"
+chk "旧密码登录 → 401" "401" "$(code -X POST $B/api/app/login -H 'Content-Type: application/json' -d "{\"username\":\"dm$RUN\",\"password\":\"Kid#2026pass\"}")"
+chk "新密码登录 → 200" "200" "$(code -X POST $B/api/app/login -H 'Content-Type: application/json' -d "{\"username\":\"dm$RUN\",\"password\":\"NewPass#123\"}")"
+chk "重置密码过短 → 400" "400" "$(code -X POST $B/api/admin/member/$DM_ID/reset-password -H "$AH" -H 'Content-Type: application/json' -d '{"password":"123"}')"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"

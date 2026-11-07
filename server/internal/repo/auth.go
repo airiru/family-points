@@ -2,6 +2,7 @@
 package repo
 
 import (
+	"strings"
 	"context"
 	"database/sql"
 	"errors"
@@ -29,7 +30,7 @@ func (r *Auth) MemberByUsername(ctx context.Context, username string) (*model.Me
 	var m model.Member
 	err := r.db.GetContext(ctx, &m,
 		`SELECT id, family_id, nickname, score, frozen_score, hidden, avatar,
-		        username, pass_hash, role, created_at
+		        username, pass_hash, role, disabled, created_at
 		   FROM members WHERE username = ?`, username)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -45,7 +46,7 @@ func (r *Auth) MemberByID(ctx context.Context, id uint64) (*model.Member, error)
 	var m model.Member
 	err := r.db.GetContext(ctx, &m,
 		`SELECT id, family_id, nickname, score, frozen_score, hidden, avatar,
-		        username, pass_hash, role, created_at
+		        username, pass_hash, role, disabled, created_at
 		   FROM members WHERE id = ?`, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -94,6 +95,51 @@ func (r *Auth) CancelAccount(ctx context.Context, memberID uint64) error {
 		return ErrMemberInFamilyCancel
 	}
 	return tx.Commit()
+}
+
+// MemberRow 全局账号列表的一行（后台用户账号管理，2026-11-07）。
+type MemberRow struct {
+	ID          uint64    `db:"id" json:"id"`
+	Username    string    `db:"username" json:"username"`
+	Nickname    string    `db:"nickname" json:"nickname"`
+	FamilyID    *uint64   `db:"family_id" json:"family_id"`
+	FamilyName  *string   `db:"family_name" json:"family_name"`
+	Role        string    `db:"role" json:"role"`
+	Score       int       `db:"score" json:"score"`
+	FrozenScore int       `db:"frozen_score" json:"frozen_score"`
+	Disabled    bool      `db:"disabled" json:"disabled"`
+	CreatedAt   time.Time `db:"created_at" json:"created_at"`
+}
+
+// ListMembers 全局成员账号列表（keyword 匹配 username/nickname，新的在前）。
+func (r *Auth) ListMembers(ctx context.Context, keyword string, limit int) ([]MemberRow, error) {
+	list := []MemberRow{}
+	q := `SELECT m.id, m.username, m.nickname, m.family_id, f.name AS family_name,
+		         m.role, m.score, m.frozen_score, m.disabled, m.created_at
+		    FROM members m LEFT JOIN families f ON f.id = m.family_id`
+	args := []any{}
+	if kw := strings.TrimSpace(keyword); kw != "" {
+		q += ` WHERE m.username LIKE ? OR m.nickname LIKE ?`
+		args = append(args, "%"+kw+"%", "%"+kw+"%")
+	}
+	q += ` ORDER BY m.id DESC LIMIT ?`
+	args = append(args, limit)
+	err := r.db.SelectContext(ctx, &list, q, args...)
+	return list, err
+}
+
+// SetMemberDisabled 停用 / 启用。
+func (r *Auth) SetMemberDisabled(ctx context.Context, id uint64, disabled bool) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE members SET disabled = ? WHERE id = ?`, disabled, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // ErrMemberInFamilyCancel 注销时发现成员仍在家庭组（并发窗口）。

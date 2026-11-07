@@ -93,6 +93,9 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.POST("/feedback/:id/handle", feedbackHandler.Handle)
 		admin.GET("/site-config", adminHandler.GetSiteConfig)
 		admin.POST("/site-config", adminHandler.SetSiteConfig)
+		admin.GET("/members", adminHandler.ListMembers)                        // 全局用户账号列表
+		admin.POST("/member/:id/disable", adminHandler.SetMemberDisabled)      // 停用/启用
+		admin.POST("/member/:id/reset-password", adminHandler.ResetMemberPassword) // 重置密码
 		admin.POST("/family/:family_id/rule/save", adminHandler.SaveRule)
 		admin.POST("/family/:family_id/item/save", adminHandler.SaveItem)
 		admin.GET("/export/records", adminHandler.ExportRecords)

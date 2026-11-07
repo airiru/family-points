@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS members (
   username         VARCHAR(20)  NOT NULL UNIQUE,       -- 登录凭证，注册后**永不可改**
   pass_hash        VARCHAR(60)  NOT NULL,
   role             ENUM('leader','member') NOT NULL DEFAULT 'member',
+  disabled         TINYINT(1)   NOT NULL DEFAULT 0,   -- 停用后无法登录与调用接口（后台用户账号管理，2026-11-07）
   leader_family_id BIGINT UNSIGNED GENERATED ALWAYS AS (IF(role='leader', family_id, NULL)) STORED,
   created_at       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   KEY idx_family (family_id),

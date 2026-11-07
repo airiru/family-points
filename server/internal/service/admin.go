@@ -148,6 +148,40 @@ func (a *Admin) Dissolve(ctx context.Context, familyID uint64, confirmName strin
 // ErrSiteConfigInvalid 站点配置值非法（如 ICP 超长）。
 var ErrSiteConfigInvalid = fmt.Errorf("%w：备案号最多 64 字", ErrInvalidInput)
 
+// ListMemberAccounts 全局成员账号列表（后台用户账号管理）。
+func (a *Admin) ListMemberAccounts(ctx context.Context, keyword string, limit int) ([]repo.MemberRow, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	return a.auth.ListMembers(ctx, keyword, limit)
+}
+
+// SetMemberAccountDisabled 停用 / 启用成员账号。停用立即吊销全部 refresh。
+func (a *Admin) SetMemberAccountDisabled(ctx context.Context, id uint64, disabled bool) error {
+	if err := a.auth.SetMemberDisabled(ctx, id, disabled); err != nil {
+		return err
+	}
+	if disabled {
+		return a.auth.RevokeAllForSubject(ctx, "member", id)
+	}
+	return nil
+}
+
+// ResetMemberPassword 后台重置成员密码（8 位以上；重置后吊销全部 refresh）。
+func (a *Admin) ResetMemberPassword(ctx context.Context, id uint64, password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("%w：密码至少 8 位", ErrInvalidInput)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	if err := a.auth.UpdateMemberPassword(ctx, id, string(hash)); err != nil {
+		return err
+	}
+	return a.auth.RevokeAllForSubject(ctx, "member", id)
+}
+
 // GetSiteConfig 读站点配置（后台「站点设置」页）。
 func (a *Admin) GetSiteConfig(ctx context.Context) (map[string]string, error) {
 	icp, err := a.siteConfigs.Get(ctx, "icp")

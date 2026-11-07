@@ -403,6 +403,61 @@ func (h *Admin) Dissolve(c *gin.Context) {
 	httpx.OK(c, gin.H{"dissolved": true, "name": name})
 }
 
+// ListMembers GET /api/admin/members?keyword=&limit= —— 全局成员账号列表（用户账号管理）。
+func (h *Admin) ListMembers(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	list, err := h.svc.ListMemberAccounts(c.Request.Context(), c.Query("keyword"), limit)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"items": list})
+}
+
+// SetMemberDisabled POST /api/admin/member/:id/disable —— 停用 / 启用成员账号。
+func (h *Admin) SetMemberDisabled(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		httpx.BadRequest(c, "无效的成员 id")
+		return
+	}
+	var in struct {
+		Disabled bool `json:"disabled"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if err := h.svc.SetMemberAccountDisabled(c.Request.Context(), id, in.Disabled); err != nil {
+		fail(c, err)
+		return
+	}
+	recordAudit(c, "member.disable", "member", &id, nil, gin.H{"disabled": in.Disabled})
+	httpx.OK(c, gin.H{"disabled": in.Disabled})
+}
+
+// ResetMemberPassword POST /api/admin/member/:id/reset-password —— 重置成员密码。
+func (h *Admin) ResetMemberPassword(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		httpx.BadRequest(c, "无效的成员 id")
+		return
+	}
+	var in struct {
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil || in.Password == "" {
+		httpx.BadRequest(c, "请求体需包含 password")
+		return
+	}
+	if err := h.svc.ResetMemberPassword(c.Request.Context(), id, in.Password); err != nil {
+		fail(c, err)
+		return
+	}
+	recordAudit(c, "member.reset_password", "member", &id, nil, nil)
+	httpx.OK(c, gin.H{"reset": true})
+}
+
 // GetSiteConfig GET /api/admin/site-config —— 站点配置（后台「站点设置」页）。
 func (h *Admin) GetSiteConfig(c *gin.Context) {
 	m, err := h.svc.GetSiteConfig(c.Request.Context())

@@ -78,6 +78,11 @@ func (m *Auth) RequireMember() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		if member.Disabled {
+			httpx.Unauthorized(c, "账号已被停用")
+			c.Abort()
+			return
+		}
 		c.Set(CtxMember, member)
 		c.Next()
 	}

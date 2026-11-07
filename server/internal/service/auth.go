@@ -20,6 +20,7 @@ import (
 // 业务错误：handler 按这些值映射 HTTP 状态码，不要在 handler 里判断错误文案。
 var (
 	ErrInvalidCredentials = errors.New("用户名或密码不正确")
+	ErrMemberDisabled     = errors.New("账号已被停用")
 	ErrUsernameTaken      = errors.New("用户名已被占用")
 	ErrInvalidInput       = errors.New("参数不合法")
 	ErrTokenInvalid       = errors.New("登录状态已失效，请重新登录")
@@ -126,6 +127,9 @@ func (s *Auth) LoginMember(ctx context.Context, username, password string) (*mod
 	}
 	if bcrypt.CompareHashAndPassword([]byte(m.PassHash), []byte(password)) != nil {
 		return nil, nil, ErrInvalidCredentials
+	}
+	if m.Disabled {
+		return nil, nil, ErrMemberDisabled
 	}
 	pair, err := s.issue(ctx, model.SubjectMember, m.ID, false)
 	if err != nil {

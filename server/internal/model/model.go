@@ -27,6 +27,7 @@ type Member struct {
 	Username    string    `db:"username" json:"username"`
 	PassHash    string    `db:"pass_hash" json:"-"`
 	Role        string    `db:"role" json:"role"`
+	Disabled    bool      `db:"disabled" json:"disabled"`
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
 }
 
