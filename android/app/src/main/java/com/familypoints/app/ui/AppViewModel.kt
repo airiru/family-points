@@ -65,6 +65,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -154,6 +157,7 @@ class AppViewModel @Inject constructor(
 
     init {
         restoreSession()
+        startUnreadPolling()
     }
 
     // ---------------- 会话 ----------------
@@ -766,15 +770,32 @@ class AppViewModel @Inject constructor(
         onDone()
     }
 
-    private fun launchBusy(showBusy: Boolean = true, block: suspend () -> Unit) {
-        viewModelScope.launch {
-            if (showBusy) _busy.value = true
-            try {
-                block()
-            } catch (e: Exception) {
-                _message.value = e.message ?: "网络错误"
-            } finally {
-                if (showBusy) _busy.value = false
+    // 返回 Job：下拉刷新需要 join 等待完成（2026-11-07）
+    private fun launchBusy(showBusy: Boolean = true, block: suspend () -> Unit) = viewModelScope.launch {
+        if (showBusy) _busy.value = true
+        try {
+            block()
+        } catch (e: Exception) {
+            _message.value = e.message ?: "网络错误"
+        } finally {
+            if (showBusy) _busy.value = false
+        }
+    }
+
+    // ---------- 通知未读轮询（2026-11-07：全 App 唯一的后台定时请求） ----------
+
+    private var unreadPollJob: Job? = null
+
+    /** 每分钟查一次未读数；只在已入组的登录态下真正发请求。 */
+    fun startUnreadPolling() {
+        if (unreadPollJob?.isActive == true) return
+        unreadPollJob = viewModelScope.launch {
+            while (isActive) {
+                delay(60_000)
+                if (session.value !is Session.Ready) continue
+                runCatching { api.state() }.onSuccess { st ->
+                    st.data?.let { _unread.value = it.unreadCount }
+                }
             }
         }
     }

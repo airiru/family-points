@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.familypoints.app.ui.screens
 
 import androidx.compose.foundation.background
@@ -17,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +32,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,6 +85,9 @@ fun TaskListScreen(vm: AppViewModel, nav: NavHostController) {
     var filter by remember { mutableStateOf(0) }
     var showCreate by remember { mutableStateOf(false) }
 
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         vm.loadTasks()
         vm.loadOverview()
@@ -114,6 +122,18 @@ fun TaskListScreen(vm: AppViewModel, nav: NavHostController) {
             ),
         ) { filter = it }
 
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                scope.launch {
+                    refreshing = true
+                    vm.loadTasks().join()
+                    vm.loadOverview().join()
+                    refreshing = false
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -135,6 +155,7 @@ fun TaskListScreen(vm: AppViewModel, nav: NavHostController) {
             }
             item { Spacer(Modifier.height(12.dp)) }
         }
+        } // PullToRefreshBox
     }
 
     if (showCreate) {

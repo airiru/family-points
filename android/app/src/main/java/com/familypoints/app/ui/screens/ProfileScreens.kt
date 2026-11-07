@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.familypoints.app.ui.screens
 
 import android.content.Intent
@@ -21,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Divider
@@ -93,12 +96,25 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
     val familyName by vm.familyName.collectAsStateWithLifecycle()
     val unread by vm.unread.collectAsStateWithLifecycle()
     var confirmLogout by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.loadOverview() }
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "我的")
 
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                scope.launch {
+                    refreshing = true
+                    vm.loadOverview().join()
+                    refreshing = false
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -221,6 +237,7 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
             }
             item { Spacer(Modifier.height(12.dp)) }
         }
+        } // PullToRefreshBox
     }
 
     if (confirmLogout) {
@@ -414,7 +431,7 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
         loading = false
     }
 
-    // 手动上报 = 先本机采一帧「今天」快照上传，再读服务端明细。只有点按钮才走这里。
+    // 下拉刷新 = 先本机采一帧「今天」快照上传，再读服务端明细（2026-11-07：按钮已改为下拉手势）。
     suspend fun manualReport() {
         loading = true
         if (reader.hasPermission()) {
@@ -511,6 +528,11 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "屏幕时间", onBack = if (asTab) null else ({ nav.popBackStack() }))
 
+        PullToRefreshBox(
+            isRefreshing = loading,
+            onRefresh = { scope.launch { manualReport(); vm.showMessage("已上报") } },
+            modifier = Modifier.fillMaxSize(),
+        ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -688,18 +710,10 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
                     }
                 }
 
-                item {
-                    Button(
-                        onClick = { scope.launch { manualReport(); vm.showMessage("已上报") } },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimarySoft, contentColor = Primary),
-                    ) { Text(if (loading) "上报中…" else "手动上报") }
-                }
             }
             item { Spacer(Modifier.height(12.dp)) }
         }
+        } // PullToRefreshBox
     }
 }
 

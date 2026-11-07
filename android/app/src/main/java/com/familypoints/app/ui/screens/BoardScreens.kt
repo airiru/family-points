@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.familypoints.app.ui.screens
 
 import androidx.compose.foundation.Canvas
@@ -13,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,6 +83,9 @@ fun BoardScreen(vm: AppViewModel, nav: NavHostController) {
     var type by remember { mutableStateOf("points") }
     var period by remember { mutableStateOf("week") }
 
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
+
     LaunchedEffect(type, period) {
         vm.loadOverview()
         vm.loadRanking(type, period)
@@ -110,6 +118,19 @@ fun BoardScreen(vm: AppViewModel, nav: NavHostController) {
             options = listOf("本周" to (period == "week"), "本月" to (period == "month")),
         ) { index -> period = if (index == 0) "week" else "month" }
 
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                scope.launch {
+                    refreshing = true
+                    vm.loadOverview().join()
+                    vm.loadRanking(type, period).join()
+                    vm.loadTrend(period).join()
+                    refreshing = false
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -151,6 +172,7 @@ fun BoardScreen(vm: AppViewModel, nav: NavHostController) {
             }
             item { Spacer(Modifier.height(10.dp)) }
         }
+        } // PullToRefreshBox
     }
 }
 
