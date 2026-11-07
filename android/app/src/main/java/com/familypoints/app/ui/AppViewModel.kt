@@ -44,6 +44,7 @@ import com.familypoints.app.data.api.RankingRow
 import com.familypoints.app.data.api.RecordView
 import com.familypoints.app.data.api.RedeemReq
 import com.familypoints.app.data.api.ScreenReportReq
+import com.familypoints.app.data.api.RegisterOptions
 import com.familypoints.app.data.api.RegisterReq
 import com.familypoints.app.data.api.RenameMemberReq
 import com.familypoints.app.data.api.RuleSaveReq
@@ -214,17 +215,35 @@ class AppViewModel @Inject constructor(
         handleAuth(resp.data?.member, resp.data?.token?.accessToken, resp.data?.token?.refreshToken, resp.error)
     }
 
-    fun register(username: String, password: String, nickname: String, createFamily: Boolean, familyName: String) =
-        launchBusy {
-            val resp = api.register(
-                RegisterReq(
-                    username = username.trim(),
-                    password = password,
-                    nickname = nickname.trim().ifBlank { username.trim() },
-                    createFamily = createFamily,
-                    familyName = familyName.trim(),
-                )
+    private val _registerOptions = MutableStateFlow(RegisterOptions())
+    val registerOptions: StateFlow<RegisterOptions> = _registerOptions.asStateFlow()
+
+    fun loadRegisterOptions() = launchBusy(showBusy = false) {
+        runCatching { api.registerOptions() }.onSuccess { resp ->
+            resp.data?.let { _registerOptions.value = it }
+        }
+    }
+
+    fun register(
+        mode: String,
+        identifier: String,
+        password: String,
+        nickname: String,
+        createFamily: Boolean,
+        familyName: String,
+    ) = launchBusy {
+        val resp = api.register(
+            RegisterReq(
+                mode = mode,
+                phone = if (mode == "phone") identifier.trim() else null,
+                email = if (mode == "email") identifier.trim() else null,
+                username = if (mode == "username") identifier.trim() else "",
+                password = password,
+                nickname = nickname.trim().ifBlank { identifier.trim() },
+                createFamily = createFamily,
+                familyName = familyName.trim(),
             )
+        )
             handleAuth(resp.data?.member, resp.data?.token?.accessToken, resp.data?.token?.refreshToken, resp.error)
         }
 

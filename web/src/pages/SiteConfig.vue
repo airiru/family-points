@@ -4,17 +4,24 @@ import { api } from '../api'
 import { toast, toastErr } from '../toast'
 
 const icp = ref('')
+const regPhone = ref(false)
+const regEmail = ref(false)
 
 onMounted(async () => {
   try {
     const d = await api('/admin/site-config')
     icp.value = d.icp || ''
+    regPhone.value = d.reg_phone === '1'
+    regEmail.value = d.reg_email === '1'
   } catch (e) { toastErr(e) }
 })
 
 async function save() {
   try {
-    await api('/admin/site-config', { method: 'POST', body: { icp: icp.value.trim() } })
+    await api('/admin/site-config', {
+      method: 'POST',
+      body: { icp: icp.value.trim(), reg_phone: regPhone.value, reg_email: regEmail.value },
+    })
     toast('已保存')
   } catch (e) { toastErr(e) }
 }
@@ -32,6 +39,19 @@ async function save() {
         </div>
       </div>
       <div class="hint">保存后 App 端下次进入「我的」页或下拉刷新即可看到。</div>
+
+      <div class="field">
+        <label>注册方式</label>
+        <div class="row" style="gap:18px">
+          <label style="display:flex;align-items:center;gap:6px">
+            <input type="checkbox" v-model="regPhone" /> 手机号注册
+          </label>
+          <label style="display:flex;align-items:center;gap:6px">
+            <input type="checkbox" v-model="regEmail" /> 邮箱注册
+          </label>
+        </div>
+        <div class="hint">开发阶段不校验短信/邮件验证码；生产前需接入服务商。</div>
+      </div>
     </div>
   </div>
 </template>

@@ -31,6 +31,8 @@ type Member struct {
 	PassHash    string    `db:"pass_hash" json:"-"`
 	Role        string    `db:"role" json:"role"`
 	Disabled    bool      `db:"disabled" json:"disabled"`
+	Phone       *string   `db:"phone" json:"phone"`
+	Email       *string   `db:"email" json:"email"`
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
 }
 

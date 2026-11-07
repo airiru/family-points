@@ -471,17 +471,19 @@ func (h *Admin) GetSiteConfig(c *gin.Context) {
 // SetSiteConfig POST /api/admin/site-config —— 写站点配置（body: {"icp": "..."}）。
 func (h *Admin) SetSiteConfig(c *gin.Context) {
 	var in struct {
-		ICP string `json:"icp"`
+		ICP      string `json:"icp"`
+		RegPhone bool   `json:"reg_phone"`
+		RegEmail bool   `json:"reg_email"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		httpx.BadRequest(c, "请求体格式不正确")
 		return
 	}
-	if err := h.svc.SetSiteConfig(c.Request.Context(), in.ICP); err != nil {
+	if err := h.svc.SetSiteConfig(c.Request.Context(), in.ICP, in.RegPhone, in.RegEmail); err != nil {
 		fail(c, err)
 		return
 	}
-	recordAudit(c, "site.config", "system", nil, nil, gin.H{"icp": in.ICP})
+	recordAudit(c, "site.config", "system", nil, nil, gin.H{"icp": in.ICP, "reg_phone": in.RegPhone, "reg_email": in.RegEmail})
 	httpx.OK(c, gin.H{"saved": true})
 }
 

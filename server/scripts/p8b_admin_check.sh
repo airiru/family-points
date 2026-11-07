@@ -136,6 +136,26 @@ chk "旧密码登录 → 401" "401" "$(code -X POST $B/api/app/login -H 'Content
 chk "新密码登录 → 200" "200" "$(code -X POST $B/api/app/login -H 'Content-Type: application/json' -d "{\"username\":\"dm$RUN\",\"password\":\"NewPass#123\"}")"
 chk "重置密码过短 → 400" "400" "$(code -X POST $B/api/admin/member/$DM_ID/reset-password -H "$AH" -H 'Content-Type: application/json' -d '{"password":"123"}')"
 
+echo "== 11. 手机号/邮箱注册与开关（15.1.1/1a，2026-11-07）=="
+# 默认开关关闭：直接注册 → 400
+chk "开关关闭时手机号注册 → 400" "400" "$(code -X POST $B/api/register -H 'Content-Type: application/json' -d "{\"mode\":\"phone\",\"phone\":\"138$([ $(echo $RUN | tail -c 9) ] && echo $RUN | tail -c 8)001\",\"password\":\"Kid#2026pass\",\"nickname\":\"手机用户\"}")"
+# 打开开关
+curl -s -o /dev/null -X POST $B/api/admin/site-config -H "$AH" -H 'Content-Type: application/json' -d '{"icp":"","reg_phone":true,"reg_email":true}'
+OPT=$(curl -s $B/api/register/options)
+chk "options 公开可读" "200" "$(code $B/api/register/options)"
+chk "options.phone=true" "True" "$(echo "$OPT" | python -c "import sys,json;print(json.load(sys.stdin)['data']['phone'])")"
+PH="138$(printf '%08d' $((RUN % 100000000)))"
+chk "手机号注册 → 200" "200" "$(code -X POST $B/api/register -H 'Content-Type: application/json' -d "{\"mode\":\"phone\",\"phone\":\"$PH\",\"password\":\"Kid#2026pass\",\"nickname\":\"手机用户\"}")"
+chk "重复手机号 → 409" "409" "$(code -X POST $B/api/register -H 'Content-Type: application/json' -d "{\"mode\":\"phone\",\"phone\":\"$PH\",\"password\":\"Kid#2026pass\",\"nickname\":\"重复\"}")"
+chk "手机号登录 → 200" "200" "$(code -X POST $B/api/app/login -H 'Content-Type: application/json' -d "{\"username\":\"$PH\",\"password\":\"Kid#2026pass\"}")"
+EM="t$RUN@example.com"
+chk "邮箱注册 → 200" "200" "$(code -X POST $B/api/register -H 'Content-Type: application/json' -d "{\"mode\":\"email\",\"email\":\"$EM\",\"password\":\"Kid#2026pass\",\"nickname\":\"邮箱用户\"}")"
+chk "邮箱登录 → 200" "200" "$(code -X POST $B/api/app/login -H 'Content-Type: application/json' -d "{\"username\":\"$EM\",\"password\":\"Kid#2026pass\"}")"
+chk "坏手机号 → 400" "400" "$(code -X POST $B/api/register -H 'Content-Type: application/json' -d "{\"mode\":\"phone\",\"phone\":\"12345\",\"password\":\"Kid#2026pass\"}")"
+# 关闭开关再注册 → 400
+curl -s -o /dev/null -X POST $B/api/admin/site-config -H "$AH" -H 'Content-Type: application/json' -d '{"icp":"","reg_phone":false,"reg_email":false}'
+chk "关闭后手机号注册 → 400" "400" "$(code -X POST $B/api/register -H 'Content-Type: application/json' -d "{\"mode\":\"phone\",\"phone\":\"139$(echo $RUN | tail -c 8)99\",\"password\":\"Kid#2026pass\"}")"
+
 echo
 echo "通过 $pass 项，失败 $fail 项"
 [ "$fail" -eq 0 ]

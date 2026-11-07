@@ -555,7 +555,8 @@ CREATE TABLE refresh_tokens (
 | 5.1.4 | 用户名规则 | ✅ 3–20 位，仅字母 / 数字 / 下划线 |
 | 5.1.5 | 密码规则 | ✅ 至少 8 位、最多 72 字节（bcrypt 上限），**不要求复杂度** |
 | 5.1.6 | **username 与 nickname 分离（P3.1）** | ✅ `username` 登录凭证、全局唯一、**注册后永不可改**；`nickname` 显示名、可改、1–32 字。`members` / `admins` 两张账号表都有，新建时不填昵称则回填为 `username`。所有改资料接口显式拒绝请求体里带 `username` |
-| 5.1.7 | **注销账号** | ✅ **2026-11-07**：个人设置页内，需密码确认；仅限未入组成员（先退出）；账号删除、设备绑定释放、历史流水保留（见 15.3.59） |
+| 5.1.7 | **手机号 / 邮箱注册** | ✅ **2026-11-07**：注册页三种方式切换（用户名/手机号/邮箱）；phone、email 全局唯一并可作为登录凭证；手机号/邮箱注册时 username 自动生成（u+随机串）；**后台「站点设置」开关控制是否开放**（默认关闭）。开发阶段不校验短信/邮件验证码（生产化 checklist：接入服务商），生产前必须补 |
+| 5.1.8 | **注销账号** | ✅ **2026-11-07**：设置页内，需密码确认；仅限未入组成员（先退出）；账号删除、设备绑定释放、历史流水保留（见 15.3.59） |
 
 > **口径（2026-11-06 用户明确）**：原来 `members.name` 就是「昵称」、本来就可改，
 > 只是字段命名混着「名称 / 昵称」两套叫法；`username` 本来也**没有任何 UPDATE 路径**。
@@ -1402,9 +1403,10 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 
 | # | 接口 | 方法 | 说明 |
 |---|---|---|---|
-| 15.1.1 | `/api/register` | POST | 注册账号（`username` / `password` / `nickname`，昵称可省略，缺省回填为用户名）；可传 `createFamily` 顺带创建家庭组（**只成为组长，不产生后台身份**） |
+| 15.1.1 | `/api/register` | POST | 注册账号（`password` / `nickname` 必填，昵称可省略回填；可传 `createFamily` 顺带创建家庭组，**只成为组长，不产生后台身份**）。**三种方式**（2026-11-07，受 15.2.43 开关控制）：`mode=username`（默认）/ `mode=phone`（11 位手机号，username 自动生成）/ `mode=email`（邮箱）。phone/email 全局唯一、可作登录凭证。开发阶段**不校验短信/邮件验证码**（生产化 checklist） |
+| 15.1.1a | `/api/register/options` | GET | **注册方式开关**（公开，无需登录；注册页按此显隐三种模式）：`{username:true, phone:bool, email:bool}`，开关在后台「站点设置」（15.2.43） |
 | 15.1.2 | `/api/admin/login` | POST | 后台登录 |
-| 15.1.3 | `/api/app/login` | POST | 前台登录 |
+| 15.1.3 | `/api/app/login` | POST | 前台登录（`username` 字段可填 **用户名 / 手机号 / 邮箱** 任一，2026-11-07） |
 | 15.1.3a | `/api/app/logout` | POST | 前台登出（吊销该成员全部 refresh；需 access，不要求已入组） |
 | 15.1.4 | `/api/admin/refresh` | POST | 后台 token 刷新 |
 | 15.1.5 | `/api/app/refresh` | POST | 前台 token 刷新 |
@@ -1436,7 +1438,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.2.44 | `/api/admin/members` | GET | **全局用户账号列表**（用户账号管理）：`keyword` 匹配用户名/昵称，`limit` ≤200；含家庭组名 / 角色 / 积分 / 停用状态 |
 | 15.2.45 | `/api/admin/member/:id/disable` | POST | **停用 / 启用成员账号**（`disabled`）。停用立即吊销全部 refresh；登录与所有接口（中间件查库）都拒绝，提示「账号已被停用」；**App 端 refresh 失败即本地登出回登录页**（2026-11-07 补） |
 | 15.2.46 | `/api/admin/member/:id/reset-password` | POST | **重置成员密码**（`password` ≥8 位），重置后吊销全部 refresh。**不代建账号**（19.24 定：账号只能本人注册） |
-| 15.2.43 | `/api/admin/site-config` | GET/POST | **站点配置**（后台「系统→站点设置」页）：当前仅 `icp`（ICP 备案号，≤64 字）；POST 写入并审计 `site.config` |
+| 15.2.43 | `/api/admin/site-config` | GET/POST | **站点配置**（后台「系统→站点设置」页）：`icp`（备案号 ≤64 字）+ `reg_phone` / `reg_email`（**手机号/邮箱注册开关**，默认关闭）；POST 写入并审计 `site.config` |
 | 15.3.61 | `/api/app/site-config` | GET | 站点配置（登录即可读，无需入组）；`/api/app/state` 的返回体也带 `icp`（15.3.2） |
 | 15.2.40 | `/api/admin/family/:family_id/dissolve` | POST | **解散家庭组**（5.5.2，高危）：`confirm_name` 必须与当前组名逐字一致，否则 400。事务内级联——成员积分清零 + `family_id` 置 NULL + 组长身份收回；删除 families / 睡觉规则 / 屏幕规则 / 商品 / 禁入名单；未完结任务关闭、pending 邀请与解绑申请作废；**流水 / 上报 / 审计 / 通知保留**（family_id 悬空属预期）。解散前给全组发通知（注意：成员解散后未入组前读不到组内通知，见 15.3.46 已知限制） |
 | 15.2.6 | `/api/admin/family/:family_id/rule/save` | POST | 睡觉规则与连续奖励档位（与组长同权） |

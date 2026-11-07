@@ -47,10 +47,14 @@ CREATE TABLE IF NOT EXISTS members (
   pass_hash        VARCHAR(60)  NOT NULL,
   role             ENUM('leader','member') NOT NULL DEFAULT 'member',
   disabled         TINYINT(1)   NOT NULL DEFAULT 0,   -- 停用后无法登录与调用接口（后台用户账号管理，2026-11-07）
+  phone            VARCHAR(20)  NULL,                 -- 手机号（开关开放后可注册/登录；唯一）
+  email            VARCHAR(128) NULL,                 -- 邮箱（开关开放后可注册/登录；唯一）
   leader_family_id BIGINT UNSIGNED GENERATED ALWAYS AS (IF(role='leader', family_id, NULL)) STORED,
   created_at       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   KEY idx_family (family_id),
-  UNIQUE KEY uk_leader_per_family (leader_family_id)
+  UNIQUE KEY uk_leader_per_family (leader_family_id),
+  UNIQUE KEY uk_phone (phone),
+  UNIQUE KEY uk_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 计分规则（系统里只有一种：睡觉规则）

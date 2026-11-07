@@ -73,6 +73,7 @@ func (h *Auth) LoginAdmin(c *gin.Context) {
 // LoginMember POST /api/app/login
 func (h *Auth) LoginMember(c *gin.Context) {
 	var in struct {
+		// Account：用户名 / 手机号 / 邮箱任一（2026-11-07）；兼容旧字段 username
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
@@ -291,4 +292,13 @@ func (h *Auth) CancelMember(c *gin.Context) {
 	// 审计：主体马上会被删除，记一条留痕（family_id 为 NULL 属预期）
 	recordAudit(c, "account.cancel", "member", &member.ID, nil, gin.H{"username": member.Username})
 	httpx.OK(c, gin.H{"cancelled": true})
+}
+
+// RegisterOptions GET /api/register/options —— 注册方式开关（公开，注册页按此显隐模式）。
+func (h *Auth) RegisterOptions(c *gin.Context) {
+	httpx.OK(c, gin.H{
+		"username": true,
+		"phone":    h.svc.RegPhoneEnabled(c.Request.Context()),
+		"email":    h.svc.RegEmailEnabled(c.Request.Context()),
+	})
 }

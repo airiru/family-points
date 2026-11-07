@@ -52,6 +52,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		api.POST("/admin/login", authHandler.LoginAdmin)
 		api.POST("/admin/refresh", authHandler.RefreshAdmin)
 		api.POST("/app/login", authHandler.LoginMember)
+		api.GET("/register/options", authHandler.RegisterOptions) // 注册方式开关（公开）
 		api.POST("/app/refresh", authHandler.RefreshMember)
 
 		// 前台登出：只要 access 有效就能调，不要求已入组

@@ -184,20 +184,37 @@ func (a *Admin) ResetMemberPassword(ctx context.Context, id uint64, password str
 
 // GetSiteConfig 读站点配置（后台「站点设置」页）。
 func (a *Admin) GetSiteConfig(ctx context.Context) (map[string]string, error) {
-	icp, err := a.siteConfigs.Get(ctx, "icp")
-	if err != nil {
-		return nil, err
+	out := map[string]string{}
+	for _, k := range []string{"icp", "reg_phone", "reg_email"} {
+		v, err := a.siteConfigs.Get(ctx, k)
+		if err != nil {
+			return nil, err
+		}
+		out[k] = v
 	}
-	return map[string]string{"icp": icp}, nil
+	return out, nil
 }
 
-// SetSiteConfig 写站点配置。
-func (a *Admin) SetSiteConfig(ctx context.Context, icp string) error {
+// SetSiteConfig 写站点配置（icp + 注册方式开关）。
+func (a *Admin) SetSiteConfig(ctx context.Context, icp string, regPhone, regEmail bool) error {
 	icp = strings.TrimSpace(icp)
 	if len([]rune(icp)) > 64 {
 		return ErrSiteConfigInvalid
 	}
-	return a.siteConfigs.Set(ctx, "icp", icp)
+	if err := a.siteConfigs.Set(ctx, "icp", icp); err != nil {
+		return err
+	}
+	if err := a.siteConfigs.Set(ctx, "reg_phone", boolFlag(regPhone)); err != nil {
+		return err
+	}
+	return a.siteConfigs.Set(ctx, "reg_email", boolFlag(regEmail))
+}
+
+func boolFlag(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
 }
 
 // Bans 本组封禁名单（后台只读；解除只有「组长邀请入组时自动清除」一条路径）。

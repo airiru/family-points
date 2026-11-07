@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"math/rand"
+
 	"golang.org/x/crypto/bcrypt"
 
 	"familypoints/server/internal/auth"
@@ -22,6 +24,8 @@ var (
 	ErrInvalidCredentials = errors.New("用户名或密码不正确")
 	ErrMemberDisabled     = errors.New("账号已被停用")
 	ErrUsernameTaken      = errors.New("用户名已被占用")
+	ErrPhoneTaken         = errors.New("该手机号已被注册")
+	ErrEmailTaken         = errors.New("该邮箱已被注册")
 	ErrInvalidInput       = errors.New("参数不合法")
 	ErrTokenInvalid       = errors.New("登录状态已失效，请重新登录")
 	ErrAdminDisabled      = errors.New("该管理员账号已停用")
@@ -44,29 +48,91 @@ type TokenPair struct {
 
 // Auth 是认证服务。
 type Auth struct {
-	repo  *repo.Auth
-	token *auth.Manager
+	repo        *repo.Auth
+	siteConfigs *repo.SiteConfig
+	token       *auth.Manager
 }
 
 // NewAuth 构造。
-func NewAuth(r *repo.Auth, tm *auth.Manager) *Auth {
-	return &Auth{repo: r, token: tm}
+func NewAuth(r *repo.Auth, sc *repo.SiteConfig, tm *auth.Manager) *Auth {
+	return &Auth{repo: r, siteConfigs: sc, token: tm}
 }
 
 // RegisterInput 是注册入参。CreateFamily 为 true 时顺带建组并成为组长。
 type RegisterInput struct {
+	// Mode：username（默认）/ phone / email（2026-11-07；后两者受后台开关控制）
+	Mode         string `json:"mode"`
 	Username     string `json:"username"`
+	Phone        string `json:"phone"`
+	Email        string `json:"email"`
 	Password     string `json:"password"`
 	Nickname     string `json:"nickname"`
 	CreateFamily bool   `json:"create_family"`
 	FamilyName   string `json:"family_name"`
 }
 
+// 手机号 / 邮箱格式（开发阶段只做格式校验；短信/邮件验证码属生产化 checklist）
+var (
+	phonePattern = regexp.MustCompile(`^1[3-9]\d{9}$`)
+	emailPattern = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+)
+
+// regSwitch 读注册方式开关（site_configs；未配置视为关闭）。
+
+// RegPhoneEnabled 手机号注册是否开放。
+func (s *Auth) RegPhoneEnabled(ctx context.Context) bool { return s.regSwitch(ctx, "reg_phone") }
+
+// RegEmailEnabled 邮箱注册是否开放。
+func (s *Auth) RegEmailEnabled(ctx context.Context) bool { return s.regSwitch(ctx, "reg_email") }
+func (s *Auth) regSwitch(ctx context.Context, name string) bool {
+	v, _ := s.siteConfigs.Get(ctx, name)
+	return v == "1"
+}
+
 // Register 注册前台账号。**绝不会产生管理员**（管理员只能由初始化/后台创建）。
 func (s *Auth) Register(ctx context.Context, in RegisterInput) (*model.Member, *TokenPair, error) {
+	in.Mode = strings.TrimSpace(strings.ToLower(in.Mode))
+	if in.Mode == "" {
+		in.Mode = "username"
+	}
 	in.Username = strings.TrimSpace(in.Username)
+	in.Phone = strings.TrimSpace(in.Phone)
+	in.Email = strings.TrimSpace(in.Email)
 	in.Nickname = strings.TrimSpace(in.Nickname)
 	in.FamilyName = strings.TrimSpace(in.FamilyName)
+
+	switch in.Mode {
+	case "username":
+		// 用户名注册：始终开放
+	case "phone":
+		if !s.regSwitch(ctx, "reg_phone") {
+			return nil, nil, fmt.Errorf("%w：手机号注册未开放", ErrInvalidInput)
+		}
+		if !phonePattern.MatchString(in.Phone) {
+			return nil, nil, fmt.Errorf("%w：手机号格式不正确", ErrInvalidInput)
+		}
+		if p, _ := s.repo.MemberByIdentifier(ctx, in.Phone); p != nil {
+			return nil, nil, ErrPhoneTaken
+		}
+		if in.Username == "" {
+			in.Username = "u" + strings.ToLower(randString(10))
+		}
+	case "email":
+		if !s.regSwitch(ctx, "reg_email") {
+			return nil, nil, fmt.Errorf("%w：邮箱注册未开放", ErrInvalidInput)
+		}
+		if !emailPattern.MatchString(in.Email) {
+			return nil, nil, fmt.Errorf("%w：邮箱格式不正确", ErrInvalidInput)
+		}
+		if p, _ := s.repo.MemberByIdentifier(ctx, in.Email); p != nil {
+			return nil, nil, ErrEmailTaken
+		}
+		if in.Username == "" {
+			in.Username = "u" + strings.ToLower(randString(10))
+		}
+	default:
+		return nil, nil, fmt.Errorf("%w：不支持的注册方式", ErrInvalidInput)
+	}
 
 	if !usernamePattern.MatchString(in.Username) {
 		return nil, nil, fmt.Errorf("%w：用户名需 3–20 位，仅限字母、数字、下划线", ErrInvalidInput)
@@ -104,7 +170,7 @@ func (s *Auth) Register(ctx context.Context, in RegisterInput) (*model.Member, *
 		familyName = &name
 	}
 
-	member, err := s.repo.CreateMember(ctx, in.Username, string(hash), in.Nickname, familyName)
+	member, err := s.repo.CreateMember(ctx, in.Username, string(hash), in.Nickname, familyName, phoneOrNil(in), emailOrNil(in))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -118,7 +184,8 @@ func (s *Auth) Register(ctx context.Context, in RegisterInput) (*model.Member, *
 
 // LoginMember 前台登录。
 func (s *Auth) LoginMember(ctx context.Context, username, password string) (*model.Member, *TokenPair, error) {
-	m, err := s.repo.MemberByUsername(ctx, strings.TrimSpace(username))
+	// 2026-11-07：identifier 可以是 用户名 / 手机号 / 邮箱
+	m, err := s.repo.MemberByIdentifier(ctx, strings.TrimSpace(username))
 	if err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			return nil, nil, ErrInvalidCredentials
@@ -366,4 +433,28 @@ func (s *Auth) CancelMember(ctx context.Context, me *model.Member, password stri
 		return ErrInvalidCredentials
 	}
 	return s.repo.CancelAccount(ctx, me.ID)
+}
+
+// randString 生成 n 位小写字母数字随机串（手机/邮箱注册时自动生成用户名用）。
+func randString(n int) string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
+	}
+	return string(b)
+}
+
+func phoneOrNil(in RegisterInput) *string {
+	if in.Phone == "" {
+		return nil
+	}
+	return &in.Phone
+}
+
+func emailOrNil(in RegisterInput) *string {
+	if in.Email == "" {
+		return nil
+	}
+	return &in.Email
 }

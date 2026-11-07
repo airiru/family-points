@@ -77,7 +77,7 @@ fun LoginScreen(vm: AppViewModel, onGoRegister: () -> Unit) {
             OutlinedTextField(
                 value = username,
                 onValueChange = { username = it },
-                label = { Text("用户名") },
+                label = { Text("用户名 / 手机号 / 邮箱") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -95,7 +95,7 @@ fun LoginScreen(vm: AppViewModel, onGoRegister: () -> Unit) {
             Button(
                 onClick = { vm.login(username, password) },
                 enabled = !busy && username.isNotBlank() && password.isNotBlank(),
-                modifier = Modifier
+     modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Primary),
@@ -122,12 +122,22 @@ fun LoginScreen(vm: AppViewModel, onGoRegister: () -> Unit) {
 
 @Composable
 fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
-    var username by remember { mutableStateOf("") }
+    var mode by remember { mutableStateOf("username") } // username | phone | email
+    var identifier by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
     var familyName by remember { mutableStateOf("") }
     var createFamily by remember { mutableStateOf(true) }
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val options by vm.registerOptions.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) { vm.loadRegisterOptions() }
+
+    val identLabel = when (mode) {
+        "phone" -> "手机号（11 位）"
+        "email" -> "邮箱"
+        else -> "用户名（全局唯一）"
+    }
 
     Column(
         modifier = Modifier
@@ -143,10 +153,17 @@ fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
         Spacer(Modifier.height(20.dp))
 
         CardBox {
+            // 注册方式切换（按后台开关显隐；用户名注册始终开放）
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                SegChip("用户名", mode == "username") { mode = "username" }
+                if (options.phone) SegChip("手机号", mode == "phone") { mode = "phone" }
+                if (options.email) SegChip("邮箱", mode == "email") { mode = "email" }
+            }
+            Spacer(Modifier.height(10.dp))
             OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
-                label = { Text("用户名（全局唯一）") },
+                value = identifier,
+                onValueChange = { identifier = it },
+                label = { Text(identLabel) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -197,8 +214,8 @@ fun RegisterScreen(vm: AppViewModel, onBack: () -> Unit) {
 
             Spacer(Modifier.height(18.dp))
             Button(
-                onClick = { vm.register(username, password, nickname, createFamily, familyName) },
-                enabled = !busy && username.isNotBlank() && password.length >= 4,
+                onClick = { vm.register(mode, identifier, password, nickname, createFamily, familyName) },
+                enabled = !busy && identifier.isNotBlank() && password.isNotBlank(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),

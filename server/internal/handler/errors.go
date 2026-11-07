@@ -23,7 +23,9 @@ func fail(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrAdminDisabled),
 		errors.Is(err, service.ErrMemberDisabled):
 		httpx.Forbidden(c, err.Error())
-	case errors.Is(err, service.ErrUsernameTaken):
+	case errors.Is(err, service.ErrUsernameTaken),
+		errors.Is(err, service.ErrPhoneTaken),
+		errors.Is(err, service.ErrEmailTaken):
 		httpx.Conflict(c, err.Error())
 	case errors.Is(err, service.ErrInvalidInput):
 		httpx.BadRequest(c, err.Error())

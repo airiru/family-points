@@ -41,6 +41,22 @@ func (r *Auth) MemberByUsername(ctx context.Context, username string) (*model.Me
 	return &m, nil
 }
 
+// MemberByIdentifier 登录查找：username / phone / email 任一命中。
+func (r *Auth) MemberByIdentifier(ctx context.Context, ident string) (*model.Member, error) {
+	var m model.Member
+	err := r.db.GetContext(ctx, &m,
+		`SELECT id, family_id, nickname, score, frozen_score, hidden, avatar,
+		        username, pass_hash, role, disabled, phone, email, created_at
+		   FROM members WHERE username = ? OR phone = ? OR email = ?`, ident, ident, ident)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
 // MemberByID 按 id 取成员（鉴权中间件每次请求都要读，角色以库为准）。
 func (r *Auth) MemberByID(ctx context.Context, id uint64) (*model.Member, error) {
 	var m model.Member
@@ -148,7 +164,7 @@ var ErrMemberInFamilyCancel = errors.New("请先退出家庭组再注销账号")
 // CreateMember 创建成员；familyName 非空时同事务创建家庭组并把该成员设为组长。
 //
 // 为什么同事务：只建成账号没建成组、或建成组却没设组长，都会留下不可用的中间态。
-func (r *Auth) CreateMember(ctx context.Context, username, passHash, nickname string, familyName *string) (*model.Member, error) {
+func (r *Auth) CreateMember(ctx context.Context, username, passHash, nickname string, familyName *string, phone, email *string) (*model.Member, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -181,8 +197,8 @@ func (r *Auth) CreateMember(ctx context.Context, username, passHash, nickname st
 	}
 
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO members (family_id, nickname, username, pass_hash, role)
-		 VALUES (?, ?, ?, ?, ?)`, familyID, nickname, username, passHash, role)
+		`INSERT INTO members (family_id, nickname, username, pass_hash, role, phone, email)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`, familyID, nickname, username, passHash, role, phone, email)
 	if err != nil {
 		return nil, err
 	}

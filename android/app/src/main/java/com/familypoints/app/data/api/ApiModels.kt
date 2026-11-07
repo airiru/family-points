@@ -257,6 +257,10 @@ data class ScreenReportView(
 
 @Serializable
 data class RegisterReq(
+    // mode：username（默认）/ phone / email（2026-11-07）
+    val mode: String = "username",
+    @SerialName("phone") val phone: String? = null,
+    @SerialName("email") val email: String? = null,
     val username: String,
     val password: String,
     val nickname: String,
@@ -656,3 +660,10 @@ data class FeedbackReq(val content: String)
 
 @Serializable
 data class FeedbackResult(val submitted: Boolean = false)
+
+@Serializable
+data class RegisterOptions(
+    val username: Boolean = true,
+    val phone: Boolean = false,
+    val email: Boolean = false,
+)

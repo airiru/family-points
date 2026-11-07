@@ -14,6 +14,10 @@ import retrofit2.http.Query
 interface ApiService {
 
     // ---------- 公开 ----------
+    /** 注册方式开关（公开）。 */
+    @GET("api/register/options")
+    suspend fun registerOptions(): Envelope<RegisterOptions>
+
     @POST("api/register")
     suspend fun register(@Body body: RegisterReq): Envelope<AuthResult>
 

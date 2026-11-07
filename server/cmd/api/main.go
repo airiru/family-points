@@ -47,7 +47,8 @@ func main() {
 	}
 
 	authRepo := repo.NewAuth(conn)
-	authSvc := service.NewAuth(authRepo, tokenMgr)
+	siteConfigRepo := repo.NewSiteConfig(conn)
+	authSvc := service.NewAuth(authRepo, siteConfigRepo, tokenMgr)
 	authHandler := handler.NewAuth(authSvc)
 	authMW := middleware.NewAuth(tokenMgr, authSvc)
 
@@ -71,7 +72,6 @@ func main() {
 	taskSvc := service.NewTask(taskRepo, notifier)
 	taskHandler := handler.NewTask(taskSvc)
 
-	siteConfigRepo := repo.NewSiteConfig(conn)
 	reportSvc := service.NewReport(repo.NewReport(conn), familyRepo, siteConfigRepo)
 	reportHandler := handler.NewReport(reportSvc)
 
