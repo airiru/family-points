@@ -49,7 +49,7 @@ function enter(f) {
           <td class="num">{{ f.id }}</td>
           <td><b>{{ f.name }}</b> <span v-if="f.id === store.familyId" class="tag ok">当前</span></td>
           <td>{{ f.member_count }} 人</td>
-          <td><code>{{ f.invite_code }}</code></td>
+          <td><code>{{ f.invite_code }}</code> <span v-if="f.code_hidden" class="tag warn">已隐藏</span></td>
           <td class="muted">{{ fmtTime(f.created_at) }}</td>
           <td style="text-align:right"><button class="btn ghost sm" @click="enter(f)">进入</button></td>
         </tr>

@@ -78,7 +78,7 @@ func main() {
 	handler.SetAuditor(audit.New(auditRepo))
 	auditHandler := handler.NewAudit(auditRepo)
 
-	adminSvc := service.NewAdmin(familyRepo, authRepo, screenRepo, repo.NewLedger(conn), repo.NewReport(conn), taskRepo)
+	adminSvc := service.NewAdmin(familyRepo, invitationRepo, authRepo, screenRepo, repo.NewLedger(conn), repo.NewReport(conn), taskRepo)
 	adminHandler := handler.NewAdmin(adminSvc)
 
 	couponSvc := service.NewCoupon(repo.NewCoupon(conn), notifier)

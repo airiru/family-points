@@ -380,6 +380,34 @@ func (h *Admin) ScreenDeviceReports(c *gin.Context) {
 	httpx.OK(c, gin.H{"reports": reports, "devices": devices})
 }
 
+// Bans GET /api/admin/family/:family_id/bans —— 本组封禁名单（只读）。
+func (h *Admin) Bans(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	list, err := h.svc.Bans(c.Request.Context(), fid)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"bans": list})
+}
+
+// JoinAttempts GET /api/admin/family/:family_id/invitations —— 本组全部邀请与申请（只读）。
+func (h *Admin) JoinAttempts(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	list, err := h.svc.JoinAttempts(c.Request.Context(), fid, qInt(c, "limit", 50))
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"attempts": list})
+}
+
 // Ranking GET /api/admin/family/:family_id/stats/ranking?mode=points|score&range=week|month
 func (h *Admin) Ranking(c *gin.Context) {
 	fid, ok := pathFamilyID(c)

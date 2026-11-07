@@ -169,6 +169,35 @@ func (r *Invitation) MyRequests(ctx context.Context, inviteeID uint64, now time.
 	return list, err
 }
 
+// AdminAttemptRow 后台的加入尝试行（邀请 + 凭码申请都算，只读）。
+type AdminAttemptRow struct {
+	ID              uint64     `db:"id" json:"id"`
+	Direction       string     `db:"direction" json:"direction"`
+	Status          string     `db:"status" json:"status"`
+	InviterNickname string     `db:"inviter_nickname" json:"inviter_nickname"`
+	InviteeNickname string     `db:"invitee_nickname" json:"invitee_nickname"`
+	InviteeUsername string     `db:"invitee_username" json:"invitee_username"`
+	ExpiresAt       time.Time  `db:"expires_at" json:"expires_at"`
+	DecidedAt       *time.Time `db:"decided_at" json:"decided_at"`
+	CreatedAt       time.Time  `db:"created_at" json:"created_at"`
+}
+
+// ForAdmin 列出某组全部邀请与申请（后台运营视角，含已处理与已过期，只读）。
+func (r *Invitation) ForAdmin(ctx context.Context, familyID uint64, limit int) ([]AdminAttemptRow, error) {
+	list := []AdminAttemptRow{}
+	err := r.db.SelectContext(ctx, &list, `
+		SELECT i.id, i.direction, i.status,
+		       m1.nickname AS inviter_nickname,
+		       m2.nickname AS invitee_nickname, m2.username AS invitee_username,
+		       i.expires_at, i.decided_at, i.created_at
+		  FROM family_invitations i
+		  JOIN members m1 ON m1.id = i.inviter_id
+		  JOIN members m2 ON m2.id = i.invitee_id
+		 WHERE i.family_id = ?
+		 ORDER BY i.id DESC LIMIT ?`, familyID, limit)
+	return list, err
+}
+
 // Decide 原子处理邀请：状态流转 +（接受时）入组 + 取消其它 pending。
 //
 // 调用方（service）已校验归属 / 状态 / 过期 / 未入组 / 未禁入；这里再用

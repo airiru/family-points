@@ -45,6 +45,24 @@ chk "隐藏后成员列表不含他" "False" "$(curl -s $B/api/app/family/member
 chk "后台改组名 → 200" "200" "$(code -X POST $B/api/admin/family/$FID/rename -H "$AH" -H 'Content-Type: application/json' -d '{"name":"后台改的名"}')"
 chk "组名已改" "后台改的名" "$(curl -s $B/api/app/family -H "Authorization: Bearer $OUT_AT" | jget "['data']['name']")"
 
+echo "== 3b. 封禁名单与加入尝试（15.2.38/39，只读）=="
+# 踢掉原组长 L（现在他是普通成员）制造一条 ban；两条 app 侧路径各造一条邀请/申请
+curl -s -o /dev/null -X POST $B/api/admin/family/$FID/member/kick -H "$AH" -H 'Content-Type: application/json' -d "{\"member_id\":$L_ID}"
+E9=$(reg "e9$RUN" "受邀者" false)
+curl -s -o /dev/null -X POST $B/api/app/member/invite -H "Authorization: Bearer $OUT_AT" -H 'Content-Type: application/json' -d "{\"username\":\"e9$RUN\"}"
+R9=$(reg "r9$RUN" "申请人" false); R9_AT=$(echo "$R9" | jget "['data']['token']['access_token']")
+CODE9=$(curl -s $B/api/app/family/code -H "Authorization: Bearer $OUT_AT" | jget "['data']['code']")
+curl -s -o /dev/null -X POST $B/api/app/family/request -H "Authorization: Bearer $R9_AT" -H 'Content-Type: application/json' -d "{\"code\":\"$CODE9\"}"
+bans_json() { curl -s $B/api/admin/family/$FID/bans -H "$AH"; }
+att_json() { curl -s "$B/api/admin/family/$FID/invitations?limit=200" -H "$AH"; }
+chk "封禁名单 200" "200" "$(code $B/api/admin/family/$FID/bans -H "$AH")"
+chk "名单含被踢者（reason=kicked）" "True" "$(bans_json | python -c "import sys,json;print(any(b['member_id']==$L_ID and b['reason']=='kicked' for b in json.load(sys.stdin)['data']['bans']))")"
+chk "名单带 username" "l9$RUN" "$(bans_json | python -c "import sys,json;d=json.load(sys.stdin);print([b['username'] for b in d['data']['bans'] if b['member_id']==$L_ID][0])")"
+chk "加入尝试 200" "200" "$(code "$B/api/admin/family/$FID/invitations" -H "$AH")"
+chk "含组长的邀请（direction=invite）" "True" "$(att_json | python -c "import sys,json;print(any(a['direction']=='invite' and a['invitee_username']=='e9$RUN' for a in json.load(sys.stdin)['data']['attempts']))")"
+chk "含凭码申请（direction=request, pending）" "True" "$(att_json | python -c "import sys,json;print(any(a['direction']=='request' and a['status']=='pending' and a['invitee_username']=='r9$RUN' for a in json.load(sys.stdin)['data']['attempts']))")"
+chk "列表带处理时间字段" "True" "$(att_json | python -c "import sys,json;print(all('decided_at' in a for a in json.load(sys.stdin)['data']['attempts']))")"
+
 echo "== 4. 后台配置（与组长同权）=="
 chk "后台存规则 → 200" "200" "$(code -X POST $B/api/admin/family/$FID/rule/save -H "$AH" -H 'Content-Type: application/json' -d '{"name":"按时睡觉","points":4,"streaks":[{"every":2,"bonus":3,"mode":"repeat"}]}')"
 chk "规则对成员生效" "4" "$(curl -s $B/api/app/rule -H "Authorization: Bearer $OUT_AT" | jget "['data']['rules'][0]['points']")"

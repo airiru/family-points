@@ -96,6 +96,8 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.GET("/family/:family_id/transfers", adminHandler.Transfers)
 		admin.GET("/family/:family_id/screen-reports", adminHandler.ScreenReports)
 		admin.GET("/family/:family_id/screen-device-reports", adminHandler.ScreenDeviceReports)
+		admin.GET("/family/:family_id/bans", adminHandler.Bans)
+		admin.GET("/family/:family_id/invitations", adminHandler.JoinAttempts)
 		admin.GET("/family/:family_id/stats/ranking", adminHandler.Ranking)
 		admin.GET("/family/:family_id/stats/trend", adminHandler.Trend)
 

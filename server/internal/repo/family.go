@@ -61,6 +61,7 @@ type FamilyRow struct {
 	ID          uint64    `db:"id" json:"id"`
 	Name        string    `db:"name" json:"name"`
 	InviteCode  string    `db:"invite_code" json:"invite_code"`
+	CodeHidden  bool      `db:"code_hidden" json:"code_hidden"`
 	MemberCount int       `db:"member_count" json:"member_count"`
 	CreatedAt   time.Time `db:"created_at" json:"created_at"`
 }
@@ -69,9 +70,28 @@ type FamilyRow struct {
 func (r *Family) AllWithCounts(ctx context.Context) ([]FamilyRow, error) {
 	list := []FamilyRow{}
 	err := r.db.SelectContext(ctx, &list,
-		`SELECT f.id, f.name, f.invite_code, f.created_at,
+		`SELECT f.id, f.name, f.invite_code, f.code_hidden, f.created_at,
 		        (SELECT COUNT(*) FROM members m WHERE m.family_id = f.id) AS member_count
 		   FROM families f ORDER BY f.id DESC`)
+	return list, err
+}
+
+// BanRow 封禁名单行（后台只读视图）。
+type BanRow struct {
+	MemberID  uint64    `db:"member_id" json:"member_id"`
+	Username  string    `db:"username" json:"username"`
+	Nickname  string    `db:"nickname" json:"nickname"`
+	Reason    string    `db:"reason" json:"reason"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+// Bans 列出某组的禁入名单（后台只读；解除只有「组长邀请入组时自动清除」一条路径）。
+func (r *Family) Bans(ctx context.Context, familyID uint64) ([]BanRow, error) {
+	list := []BanRow{}
+	err := r.db.SelectContext(ctx, &list, `
+		SELECT b.member_id, m.username, m.nickname, b.reason, b.created_at
+		  FROM family_bans b JOIN members m ON m.id = b.member_id
+		 WHERE b.family_id = ? ORDER BY b.created_at DESC`, familyID)
 	return list, err
 }
 

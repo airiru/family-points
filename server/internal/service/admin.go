@@ -26,17 +26,18 @@ import (
 
 // Admin 是后台服务。
 type Admin struct {
-	families *repo.Family
-	auth     *repo.Auth
-	screen   *repo.Screen
-	ledger   *repo.Ledger
-	report   *repo.Report
-	task     *repo.Task
+	families    *repo.Family
+	invitations *repo.Invitation
+	auth        *repo.Auth
+	screen      *repo.Screen
+	ledger      *repo.Ledger
+	report      *repo.Report
+	task        *repo.Task
 }
 
 // NewAdmin 构造。
-func NewAdmin(f *repo.Family, a *repo.Auth, s *repo.Screen, l *repo.Ledger, r *repo.Report, t *repo.Task) *Admin {
-	return &Admin{families: f, auth: a, screen: s, ledger: l, report: r, task: t}
+func NewAdmin(f *repo.Family, inv *repo.Invitation, a *repo.Auth, s *repo.Screen, l *repo.Ledger, r *repo.Report, t *repo.Task) *Admin {
+	return &Admin{families: f, invitations: inv, auth: a, screen: s, ledger: l, report: r, task: t}
 }
 
 // ---------- 只读视图（2026-11-04 补：后台 12 个页面需要能读到现值）----------
@@ -112,6 +113,25 @@ func (a *Admin) Records(ctx context.Context, f repo.RecordFilter) ([]model.Recor
 		f.Limit = 50
 	}
 	return a.report.Records(ctx, f)
+}
+
+// Bans 本组封禁名单（后台只读；解除只有「组长邀请入组时自动清除」一条路径）。
+func (a *Admin) Bans(ctx context.Context, familyID uint64) ([]repo.BanRow, error) {
+	if _, err := a.families.ByID(ctx, familyID); err != nil {
+		return nil, err
+	}
+	return a.families.Bans(ctx, familyID)
+}
+
+// JoinAttempts 本组全部邀请与申请（后台运营视角，含已处理与已过期，只读）。
+func (a *Admin) JoinAttempts(ctx context.Context, familyID uint64, limit int) ([]repo.AdminAttemptRow, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if _, err := a.families.ByID(ctx, familyID); err != nil {
+		return nil, err
+	}
+	return a.invitations.ForAdmin(ctx, familyID, limit)
 }
 
 // Ranking 积分榜（mode=points）或得分榜（mode=score）。range 只对得分榜生效。
