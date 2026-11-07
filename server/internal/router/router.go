@@ -59,6 +59,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		appAuth.POST("/logout", authHandler.LogoutMember)
 		appAuth.POST("/me/cancel", authHandler.CancelMember) // 注销账号（2026-11-07）
 		appAuth.POST("/feedback", feedbackHandler.Submit) // 用户反馈（2026-11-07，无需入组）
+		appAuth.GET("/site-config", reportHandler.AppSiteConfig) // 站点配置（备案号等；已入组成员走 /state 也能拿到）
 	}
 
 	// 后台：只认 admin token
@@ -90,6 +91,8 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.POST("/family/:family_id/dissolve", adminHandler.Dissolve)
 		admin.GET("/feedbacks", feedbackHandler.List)
 		admin.POST("/feedback/:id/handle", feedbackHandler.Handle)
+		admin.GET("/site-config", adminHandler.GetSiteConfig)
+		admin.POST("/site-config", adminHandler.SetSiteConfig)
 		admin.POST("/family/:family_id/rule/save", adminHandler.SaveRule)
 		admin.POST("/family/:family_id/item/save", adminHandler.SaveItem)
 		admin.GET("/export/records", adminHandler.ExportRecords)

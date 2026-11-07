@@ -12,13 +12,14 @@ import (
 
 // Report 是查询服务。
 type Report struct {
-	report   *repo.Report
-	families *repo.Family
+	report      *repo.Report
+	families    *repo.Family
+	siteConfigs *repo.SiteConfig
 }
 
 // NewReport 构造。
-func NewReport(r *repo.Report, f *repo.Family) *Report {
-	return &Report{report: r, families: f}
+func NewReport(r *repo.Report, f *repo.Family, sc *repo.SiteConfig) *Report {
+	return &Report{report: r, families: f, siteConfigs: sc}
 }
 
 // State 是前台首页的概览数据。
@@ -33,12 +34,19 @@ type State struct {
 	// TransferMax 是单笔可赠送上限（= 当前可用积分）。
 	// 由后端给出，前端不自己拿 score 当上限判断。
 	TransferMax int `json:"transfer_max"`
+	// ICP 备案号（后台「站点设置」录入，2026-11-07）；未配置为空串，App 不显示。
+	ICP string `json:"icp"`
 }
 
 // FamilyBrief 是概览里的家庭组信息。
 type FamilyBrief struct {
 	ID   uint64 `json:"id"`
 	Name string `json:"name"`
+}
+
+// SiteICP 站点 ICP 备案号（未配置为空串）。
+func (s *Report) SiteICP(ctx context.Context) (string, error) {
+	return s.siteConfigs.Get(ctx, "icp")
 }
 
 // State 组装概览。
@@ -62,6 +70,8 @@ func (s *Report) State(ctx context.Context, me *model.Member) (*State, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 站点级配置：ICP 备案号（未配置为空串；读取失败不阻断概览）
+	icp, _ := s.siteConfigs.Get(ctx, "icp")
 	return &State{
 		Family: FamilyBrief{ID: f.ID, Name: f.Name},
 		Me: MemberBrief{
@@ -71,6 +81,7 @@ func (s *Report) State(ctx context.Context, me *model.Member) (*State, error) {
 		Members:     briefs,
 		UnreadCount: unread,
 		TransferMax: me.Score,
+		ICP:         icp,
 	}, nil
 }
 

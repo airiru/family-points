@@ -71,14 +71,15 @@ func main() {
 	taskSvc := service.NewTask(taskRepo, notifier)
 	taskHandler := handler.NewTask(taskSvc)
 
-	reportSvc := service.NewReport(repo.NewReport(conn), familyRepo)
+	siteConfigRepo := repo.NewSiteConfig(conn)
+	reportSvc := service.NewReport(repo.NewReport(conn), familyRepo, siteConfigRepo)
 	reportHandler := handler.NewReport(reportSvc)
 
 	auditRepo := repo.NewAudit(conn)
 	handler.SetAuditor(audit.New(auditRepo))
 	auditHandler := handler.NewAudit(auditRepo)
 
-	adminSvc := service.NewAdmin(familyRepo, invitationRepo, authRepo, screenRepo, repo.NewLedger(conn), repo.NewReport(conn), taskRepo, notifier)
+	adminSvc := service.NewAdmin(familyRepo, invitationRepo, authRepo, screenRepo, repo.NewLedger(conn), repo.NewReport(conn), taskRepo, siteConfigRepo, notifier)
 	adminHandler := handler.NewAdmin(adminSvc)
 
 	couponSvc := service.NewCoupon(repo.NewCoupon(conn), notifier)

@@ -17,6 +17,16 @@ type Report struct{ svc *service.Report }
 func NewReport(svc *service.Report) *Report { return &Report{svc: svc} }
 
 // AppState GET /api/app/state —— 首页概览（**不含全量记录**）。
+// AppSiteConfig GET /api/app/site-config —— 站点级配置（如 ICP 备案号），登录即可读。
+func (h *Report) AppSiteConfig(c *gin.Context) {
+	icp, err := h.svc.SiteICP(c.Request.Context())
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, gin.H{"icp": icp})
+}
+
 func (h *Report) AppState(c *gin.Context) {
 	m, ok := middleware.CurrentMember(c)
 	if !ok {

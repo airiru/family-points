@@ -278,6 +278,13 @@ CREATE TABLE IF NOT EXISTS member_devices (
   KEY idx_family (family_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 站点级配置（2026-11-07）：键值对，后台录入（如 ICP 备案号），App 从 /api/app/state 读取。
+CREATE TABLE IF NOT EXISTS site_configs (
+  name       VARCHAR(32)  PRIMARY KEY,
+  value      VARCHAR(255) NOT NULL DEFAULT '',
+  updated_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 用户反馈（2026-11-07）：设置页提交，后台查看与标记处理。
 CREATE TABLE IF NOT EXISTS feedbacks (
   id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

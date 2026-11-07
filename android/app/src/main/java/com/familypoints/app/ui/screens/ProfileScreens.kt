@@ -3,6 +3,7 @@
 package com.familypoints.app.ui.screens
 
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -231,6 +232,29 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                 }
             }
 
+            // ICP 备案号（后台「站点设置」录入；空则不显示），点击跳工信部备案查询
+            item {
+                val ctx = LocalContext.current
+                val icp by vm.icp.collectAsStateWithLifecycle()
+                if (icp.isNotBlank()) {
+                    Text(
+                        icp,
+                        fontSize = 11.sp, color = Sub,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .clickable {
+                                runCatching {
+                                    ctx.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://beian.miit.gov.cn"))
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                }
+                            },
+                    )
+                }
+            }
             item { Spacer(Modifier.height(12.dp)) }
         }
         } // PullToRefreshBox

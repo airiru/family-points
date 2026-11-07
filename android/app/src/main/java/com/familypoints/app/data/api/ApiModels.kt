@@ -64,6 +64,8 @@ data class StateView(
     @SerialName("unread_count") val unreadCount: Int = 0,
     // 单笔可赠送上限（= 可用积分），由后端给出，前端不自己拿 score 当上限
     @SerialName("transfer_max") val transferMax: Int = 0,
+    // ICP 备案号（后台「站点设置」录入；空串 = 不显示）
+    val icp: String = "",
 )
 
 @Serializable

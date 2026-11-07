@@ -302,8 +302,12 @@ class AppViewModel @Inject constructor(
             .onSuccess { _screenReports.value = it }
     }
 
+    private val _icp = MutableStateFlow("")
+    val icp: StateFlow<String> = _icp.asStateFlow()
+
     fun loadOverview() = launchBusy(showBusy = false) {
         val st = api.state().data ?: return@launchBusy
+        _icp.value = st.icp
         _familyName.value = st.family.name
         _members.value = st.members.filter { !it.hidden }
         _unread.value = st.unreadCount

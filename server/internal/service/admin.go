@@ -34,12 +34,13 @@ type Admin struct {
 	ledger      *repo.Ledger
 	report      *repo.Report
 	task        *repo.Task
+	siteConfigs *repo.SiteConfig
 	notifier    *notify.Service // 旁路，允许为 nil
 }
 
 // NewAdmin 构造。
-func NewAdmin(f *repo.Family, inv *repo.Invitation, a *repo.Auth, s *repo.Screen, l *repo.Ledger, r *repo.Report, t *repo.Task, n *notify.Service) *Admin {
-	return &Admin{families: f, invitations: inv, auth: a, screen: s, ledger: l, report: r, task: t, notifier: n}
+func NewAdmin(f *repo.Family, inv *repo.Invitation, a *repo.Auth, s *repo.Screen, l *repo.Ledger, r *repo.Report, t *repo.Task, sc *repo.SiteConfig, n *notify.Service) *Admin {
+	return &Admin{families: f, invitations: inv, auth: a, screen: s, ledger: l, report: r, task: t, siteConfigs: sc, notifier: n}
 }
 
 // ---------- 只读视图（2026-11-04 补：后台 12 个页面需要能读到现值）----------
@@ -142,6 +143,27 @@ func (a *Admin) Dissolve(ctx context.Context, familyID uint64, confirmName strin
 		return "", err
 	}
 	return f.Name, nil
+}
+
+// ErrSiteConfigInvalid 站点配置值非法（如 ICP 超长）。
+var ErrSiteConfigInvalid = fmt.Errorf("%w：备案号最多 64 字", ErrInvalidInput)
+
+// GetSiteConfig 读站点配置（后台「站点设置」页）。
+func (a *Admin) GetSiteConfig(ctx context.Context) (map[string]string, error) {
+	icp, err := a.siteConfigs.Get(ctx, "icp")
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{"icp": icp}, nil
+}
+
+// SetSiteConfig 写站点配置。
+func (a *Admin) SetSiteConfig(ctx context.Context, icp string) error {
+	icp = strings.TrimSpace(icp)
+	if len([]rune(icp)) > 64 {
+		return ErrSiteConfigInvalid
+	}
+	return a.siteConfigs.Set(ctx, "icp", icp)
 }
 
 // Bans 本组封禁名单（后台只读；解除只有「组长邀请入组时自动清除」一条路径）。

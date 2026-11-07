@@ -403,6 +403,33 @@ func (h *Admin) Dissolve(c *gin.Context) {
 	httpx.OK(c, gin.H{"dissolved": true, "name": name})
 }
 
+// GetSiteConfig GET /api/admin/site-config —— 站点配置（后台「站点设置」页）。
+func (h *Admin) GetSiteConfig(c *gin.Context) {
+	m, err := h.svc.GetSiteConfig(c.Request.Context())
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	httpx.OK(c, m)
+}
+
+// SetSiteConfig POST /api/admin/site-config —— 写站点配置（body: {"icp": "..."}）。
+func (h *Admin) SetSiteConfig(c *gin.Context) {
+	var in struct {
+		ICP string `json:"icp"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if err := h.svc.SetSiteConfig(c.Request.Context(), in.ICP); err != nil {
+		fail(c, err)
+		return
+	}
+	recordAudit(c, "site.config", "system", nil, nil, gin.H{"icp": in.ICP})
+	httpx.OK(c, gin.H{"saved": true})
+}
+
 // Bans GET /api/admin/family/:family_id/bans —— 本组封禁名单（只读）。
 func (h *Admin) Bans(c *gin.Context) {
 	fid, ok := pathFamilyID(c)
