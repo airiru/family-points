@@ -14,6 +14,7 @@ const exists = ref(false)
 
 function parseStreaks(s) {
   if (!s) return []
+  if (Array.isArray(s)) return s // 2026-11-07 起后端直接返回数组
   try {
     const a = JSON.parse(s)
     return Array.isArray(a) ? a : []

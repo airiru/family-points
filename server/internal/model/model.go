@@ -1,7 +1,10 @@
 // Package model 存放与数据库表一一对应的结构体。
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // 角色常量：前台只有组长与成员两种，后台是独立的 admins 表。
 const (
@@ -154,9 +157,32 @@ type Rule struct {
 	FamilyID  uint64    `db:"family_id" json:"family_id"`
 	Name      string    `db:"name" json:"name"`
 	Points    int       `db:"points" json:"points"`
-	Streaks   *string   `db:"streaks" json:"streaks,omitempty"`
+	Streaks   *string   `db:"streaks" json:"-"`          // DB 里是 JSON 字符串，对外输出解析后的数组（MarshalJSON）
 	MemberIDs *string   `db:"member_ids" json:"member_ids,omitempty"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}
+
+// MarshalJSON 把 streaks 的 JSON 字符串解析成数组再输出。
+// 之前直接输出字符串，App 端 `streaks: List<StreakTier>` 解析失败静默回退空列表，
+// 导致「连续奖励档位」看起来是空的（2026-11-07 用户反馈）。
+func (r Rule) MarshalJSON() ([]byte, error) {
+	tiers := []StreakTier{}
+	if r.Streaks != nil && *r.Streaks != "" {
+		if err := json.Unmarshal([]byte(*r.Streaks), &tiers); err != nil {
+			tiers = []StreakTier{}
+		}
+	}
+	return json.Marshal(struct {
+		ID        uint64       `json:"id"`
+		FamilyID  uint64       `json:"family_id"`
+		Name      string       `json:"name"`
+		Points    int          `json:"points"`
+		Streaks   []StreakTier `json:"streaks"`
+		CreatedAt time.Time    `json:"created_at"`
+	}{
+		ID: r.ID, FamilyID: r.FamilyID, Name: r.Name, Points: r.Points,
+		Streaks: tiers, CreatedAt: r.CreatedAt,
+	})
 }
 
 // StreakTier 是一个连续奖励档位（rules.streaks 数组的元素）。

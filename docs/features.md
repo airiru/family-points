@@ -1524,7 +1524,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.3.33 | `/api/app/member/remove` | POST | 踢出成员（积分清零 + 写入 `family_bans`；**需 `confirm=true`**） |
 | 15.3.52 | `/api/app/family/code` | GET | **查看本组家庭码** + 隐藏状态（**全员可读**，不限于组长） |
 | 15.3.34 | `/api/app/family/code/hidden` | POST | 组长设置家庭码是否可被搜到（`hidden`）。**隐藏 = 搜不到 + 凭码申请也拒绝**（15.3.53 / 15.3.55 都等价于码不存在） |
-| 15.3.35 | `/api/app/rule` · `/api/app/rule/save` | GET/POST | 睡觉规则与连续奖励档位（保存限**组长**） |
+| 15.3.35 | `/api/app/rule` · `/api/app/rule/save` | GET/POST | 睡觉规则与连续奖励档位（保存限**组长**）。**streaks 输出为数组**（2026-11-07 修复：此前是 JSON 字符串，App 解析失败静默回退空档位；Web 两种形态兼容） |
 | 15.3.36 | `/api/app/item/save` · `/api/app/item/delete` | POST | 商品增改 / 删除（**组长**） |
 | 15.3.37 | `/api/app/member/hidden` | POST | 隐藏 / 显示成员 |
 | 15.3.38 | `/api/app/family/transfer-leader` | POST | **组长转让**（同事务降旧升新） |
