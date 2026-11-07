@@ -690,6 +690,17 @@ class AppViewModel @Inject constructor(
 
     // ---------------- 睡觉规则（组长） ----------------
 
+    /** 保存睡觉规则（组长）：达标分 + 连续奖励档位。 */
+    fun saveRule(ruleId: Long?, name: String, points: Int, tiers: List<StreakTier>) = launchBusy {
+        val resp = api.saveRule(RuleSaveReq(id = ruleId, name = name, points = points, streaks = tiers))
+        if (resp.ok) {
+            _message.value = "规则已保存"
+            loadRules()
+        } else {
+            _message.value = resp.error ?: "保存失败"
+        }
+    }
+
     fun saveScreenRule(rule: ScreenRuleSaveReq) = launchBusy {
         val resp = api.saveScreenRule(rule)
         _message.value = if (resp.ok) "规则已保存" else (resp.error ?: "保存失败")

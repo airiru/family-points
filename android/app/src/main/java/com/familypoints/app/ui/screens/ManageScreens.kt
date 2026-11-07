@@ -471,41 +471,92 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
             }
 
             item {
+                val rule0 = rules.firstOrNull()
+                var points by remember(rule0) { mutableStateOf((rule0?.points ?: 2).toString()) }
+                var tiers by remember(rule0) { mutableStateOf(rule0?.streaks.orEmpty()) }
+
+                fun updateTier(i: Int, t: StreakTier) {
+                    tiers = tiers.toMutableList().also { it[i] = t }
+                }
+
                 CardBox {
                     Text("连续奖励档位", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Text(
-                        "由屏幕时间自动判定，不需要手动打卡。",
+                        "由屏幕时间自动判定，不需要手动打卡。最多 5 档，多档独立计算、同时命中都发。",
                         fontSize = 11.5.sp,
                         color = Sub,
                         modifier = Modifier.padding(top = 4.dp),
                     )
                     Spacer(Modifier.height(10.dp))
-                    val tiers = rules.firstOrNull()?.streaks.orEmpty()
+                    OutlinedTextField(
+                        value = points,
+                        onValueChange = { points = it.filter { c -> c.isDigit() } },
+                        label = { Text("达标奖励（分）") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(12.dp))
+
                     if (tiers.isEmpty()) {
-                        Text("尚未配置档位", fontSize = 12.sp, color = Sub)
-                    } else {
-                        tiers.forEachIndexed { i, t ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 9.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        "连续 ${t.every} 天 +${t.bonus} 分",
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = 14.sp,
-                                    )
-                                    Text(
-                                        if (t.mode == "repeat") "每满就奖" else "本轮只奖一次",
-                                        fontSize = 11.5.sp,
-                                        color = Sub,
-                                    )
-                                }
-                            }
-                            if (i != tiers.lastIndex) Divider(color = Line)
+                        Text("还没有档位，点下方「添加档位」", fontSize = 12.sp, color = Sub)
+                    }
+                    tiers.forEachIndexed { i, t ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = if (t.every == 0) "" else t.every.toString(),
+                                onValueChange = { v -> updateTier(i, t.copy(every = v.filter { c -> c.isDigit() }.toIntOrNull() ?: 0)) },
+                                label = { Text("连续天数") },
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = if (t.bonus == 0) "" else t.bonus.toString(),
+                                onValueChange = { v -> updateTier(i, t.copy(bonus = v.filter { c -> c.isDigit() }.toIntOrNull() ?: 0)) },
+                                label = { Text("奖励分") },
+                                singleLine = true,
+                                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f),
+                            )
                         }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                        ) {
+                            TextButton(onClick = {
+                                updateTier(i, t.copy(mode = if (t.mode == "repeat") "once" else "repeat"))
+                            }) {
+                                Text(
+                                    if (t.mode == "repeat") "🔁 每满就奖（点击切换）" else "1️⃣ 本轮只奖一次（点击切换）",
+                                    fontSize = 12.sp, color = Primary,
+                                )
+                            }
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { tiers = tiers.toMutableList().also { it.removeAt(i) } }) {
+                                Text("删除", color = Red, fontSize = 12.sp)
+                            }
+                        }
+                        if (i != tiers.lastIndex) Divider(color = Line)
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(
+                            onClick = { if (tiers.size < 5) tiers = tiers + StreakTier(every = 3, bonus = 5, mode = "repeat") },
+                            enabled = tiers.size < 5,
+                        ) { Text("＋ 添加档位", color = Primary) }
+                        Spacer(Modifier.weight(1f))
+                        Button(
+                            onClick = {
+                                val pt = points.toIntOrNull() ?: 0
+                                val clean = tiers.filter { it.every >= 1 && it.bonus != 0 }
+                                vm.saveRule(rule0?.id, rule0?.name ?: "按时睡觉", pt, clean)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                            modifier = Modifier.height(40.dp),
+                        ) { Text("保存规则") }
                     }
                 }
             }
