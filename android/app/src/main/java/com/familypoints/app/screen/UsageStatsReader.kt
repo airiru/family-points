@@ -51,9 +51,7 @@ data class DayUsage(
  * 跨天查询会丢数据或重复（docs 12.2.2 明确要求）。
  * 这里用 `queryEvents` 配对 ACTIVITY_RESUMED / ACTIVITY_PAUSED 自己累加，口径可控。
  *
- * 同时排除：
- * - 本应用自己（否则上报动作本身会被计入）
- * - 桌面 / 系统 UI / 设置等系统界面
+ * 排除名单（2026-11-07 用户定稿）：**只有桌面**——本应用、系统 UI、设置等一律计入。
  */
 @Singleton
 class UsageStatsReader @Inject constructor(
@@ -273,11 +271,8 @@ class UsageStatsReader @Inject constructor(
         }
     }
 
-    /** 排除桌面、系统 UI、设置等——它们不代表「玩手机」。 */
+    /** 只排除桌面（2026-11-07 用户定稿）：其余一律计入。 */
     private fun excludedPackages(): Set<String> = buildSet {
-        add(context.packageName)
-        add("com.android.systemui")
-        add("com.android.settings")
         // 常见桌面
         add("com.android.launcher")
         add("com.android.launcher2")

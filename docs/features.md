@@ -1017,7 +1017,7 @@ SELECT member_id, SUM(points) AS period_score
 | # | 功能 | 状态 |
 |---|---|---|
 | 12.2.1 | 权限引导（`PACKAGE_USAGE_STATS`） | ✅ `hasPermission()` 用 AppOps 判定，未授权时页面跳 `Settings.ACTION_USAGE_ACCESS_SETTINGS` |
-| 12.2.2 | 采集当日总时长（`queryEvents` 配对 RESUMED/PAUSED） | ✅ `UsageStatsReader.read`，**不用 `INTERVAL_DAILY`**。排除名单：本应用 / 桌面 / 系统 UI / 设置（12.2 顶部）——**桌面时间不计入（2026-11-07 用户确认）**，桌面久坐不代表「玩手机」 |
+| 12.2.2 | 采集当日总时长（`queryEvents` 配对 RESUMED/PAUSED） | ✅ `UsageStatsReader.read`，**不用 `INTERVAL_DAILY`**。排除名单 **只有桌面**（2026-11-07 用户二次定稿：本应用 / 系统 UI / 设置**均计入**——否则家长看到的数字会明显小于系统屏幕使用时间） |
 | 12.2.3 | 排除系统应用与息屏时段 | ✅ 排除本应用 / 系统 UI / 设置 / 常见桌面；息屏由 `ACTIVITY_PAUSED` / `ACTIVITY_STOPPED` 结算，**无独立 `SCREEN_OFF` 监听** |
 | 12.2.4 | 定时上报（WorkManager） | ✅ **2026-11-07 定稿**：`ReportScheduler` 每天 **10:00 / 18:00** 各一次（两个 unique periodic work，升级时自动取消旧版 21:00 单任务；联网约束） |
 | 12.2.5 | 打开 App 补算最近 7 天 | ✅ **2026-11-07**：`ScreenReportWorker` 每次运行上报 **D-7..D-1 有事件的天**（逐日结算，服务端幂等跳过未变值）+ 今天快照。**事件数为 0 的天跳过**——可能是系统没保留那么久的事件，拿 0 覆盖会毁掉真实结算 |
