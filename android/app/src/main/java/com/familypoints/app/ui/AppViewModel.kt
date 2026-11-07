@@ -166,6 +166,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             val token = tokenStore.accessTokenOnce()
             if (token.isNullOrBlank()) {
+                clearScreenDetail()
                 _session.value = Session.LoggedOut
                 return@launch
             }
@@ -253,7 +254,15 @@ class AppViewModel @Inject constructor(
             _session.value = Session.LoggedOut
             _members.value = emptyList()
             _ranking.value = emptyList()
+            clearScreenDetail()
         }
+    }
+
+    /** 屏幕页数据缓存随会话清掉：换账号后不能看到上一个人的缓存（12.2.7a：进页只在无缓存时读取）。 */
+    private fun clearScreenDetail() {
+        _screenDetail.value = null
+        _memberDetail.value = null
+        _familyScreen.value = null
     }
 
     // ---------------- 概览 ----------------

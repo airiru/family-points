@@ -453,10 +453,12 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
         load()
     }
 
-    // 进页只读取，不上报——上报时机：打开 App 一次 + 每天 10:00/18:00 定时 + 手动（2026-11-07 定稿）。
+    // 进页**不自动读取**（2026-11-07 用户定稿：切页/返回都不要刷新）——
+    // 只在本会话第一次进入且还没有缓存时读一次；之后靠下拉刷新更新。
+    // 上报时机：打开 App 一次 + 每天 10:00/18:00 定时 + 下拉刷新。
     LaunchedEffect(nightStart, nightEnd) {
         hasPermission = reader.hasPermission()
-        if (hasPermission) load()
+        if (hasPermission && detail == null) load()
     }
 
     // 从系统设置授权后返回：Activity 不会重建，ON_RESUME 重新检测权限状态；
