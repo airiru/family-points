@@ -83,7 +83,7 @@ fun MemberScreenDetailScreen(vm: AppViewModel, nav: NavHostController, memberId:
                     CardBox {
                         Text("今天还没有上报数据", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         Text(
-                            "对方打开 App 或今晚 21:00 定时上报后，这里会出现明细。",
+                            "对方打开 App 或每天 10:00 / 18:00 定时上报后，这里会出现明细。",
                             fontSize = 12.sp, color = Sub,
                             modifier = Modifier.padding(top = 6.dp),
                         )

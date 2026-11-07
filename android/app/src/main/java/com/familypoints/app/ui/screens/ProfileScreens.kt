@@ -406,9 +406,16 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
     val nightEnd = myRule?.nightEndHour ?: 7
     val nightMax = myRule?.nightMaxMin ?: 0
 
-    // 刷新 = 先本机采一次并上传「今天」的快照，**再**读服务端明细。
-    // 顺序不能反：快照还没落库就去读，看到的是上一次的数据。
-    suspend fun refresh() {
+    // 只读服务端数据（进页 / 手动上报后都用它渲染），**不上传**。
+    suspend fun load() {
+        loading = true
+        vm.loadScreenDetail(0) // 0 = 自己
+        vm.loadFamilyScreen()
+        loading = false
+    }
+
+    // 手动上报 = 先本机采一帧「今天」快照上传，再读服务端明细。只有点按钮才走这里。
+    suspend fun manualReport() {
         loading = true
         if (reader.hasPermission()) {
             val buckets = withContext(Dispatchers.IO) {
@@ -425,25 +432,24 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
                 )
             }
         }
-        vm.loadScreenDetail(0) // 0 = 自己
-        vm.loadFamilyScreen()
         loading = false
+        load()
     }
 
+    // 进页只读取，不上报——上报时机：打开 App 一次 + 每天 10:00/18:00 定时 + 手动（2026-11-07 定稿）。
     LaunchedEffect(nightStart, nightEnd) {
         hasPermission = reader.hasPermission()
-        if (hasPermission) refresh()
+        if (hasPermission) load()
     }
 
-    // 从系统设置授权后返回：Activity 不会重建，必须监听 ON_RESUME 重新检测，
-    // 否则页面一直停在「需要权限」，用户以为没生效（2026-11-05 反馈）。
+    // 从系统设置授权后返回：Activity 不会重建，ON_RESUME 重新检测权限状态；
+    // **不再自动刷新/上传**（2026-11-07 用户反馈：每隔一会自动刷新很烦）——
+    // 授权后点「手动上报」即可看到数据。
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                val ok = reader.hasPermission()
-                hasPermission = ok
-                if (ok) scope.launch { refresh() }
+                hasPermission = reader.hasPermission()
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
@@ -671,7 +677,7 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
                         Text("上报规则", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "每天 21:00 自动上报「昨天」的完整数据；打开 App 时会额外上传今天的实时快照。\n" +
+                            "每天 10:00 / 18:00 定时上报「最近 7 天」的数据；打开 App 时补算一次；也可点下方按钮手动上报。\n" +
                                 "重复上报会覆盖同一天的结果，不会重复计分。\n" +
                                 "夜间时段（${nightStart}:00–${nightEnd}:00）的数据记在前一天账上。\n" +
                                 "是否达标、扣多少分**全部由服务端按规则计算**，本页只展示结果。",
@@ -684,12 +690,12 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
 
                 item {
                     Button(
-                        onClick = { scope.launch { refresh(); vm.showMessage("已刷新") } },
+                        onClick = { scope.launch { manualReport(); vm.showMessage("已上报") } },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(46.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = PrimarySoft, contentColor = Primary),
-                    ) { Text(if (loading) "刷新中…" else "刷新数据") }
+                    ) { Text(if (loading) "上报中…" else "手动上报") }
                 }
             }
             item { Spacer(Modifier.height(12.dp)) }
