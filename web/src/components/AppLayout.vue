@@ -8,32 +8,41 @@ import { toastErr } from '../toast'
 const route = useRoute()
 const router = useRouter()
 
+// 2026-11-07 重新规划：按「看什么 / 管什么 / 查什么」分五组——
+// 家庭管理（人与配置）、业务运营（内容与交互）、数据查询（只读 + 审计反馈）、系统（运营者自身）。
 const groups = [
   { name: '总览', items: [{ path: '/', title: '总览', icon: '◧' }] },
   {
-    name: '家庭',
+    name: '家庭管理',
     items: [
+      { path: '/settings', title: '家庭信息', icon: '⚙' },
       { path: '/members', title: '成员管理', icon: '👥' },
       { path: '/rules', title: '睡觉规则', icon: '🌙' },
-      { path: '/items', title: '兑换商城', icon: '🛍' },
-      { path: '/tasks', title: '任务管理', icon: '🎯' },
-      { path: '/transfers', title: '赠送管理', icon: '🎁' },
-      { path: '/screen', title: '屏幕时间', icon: '📱' },
-      { path: '/settings', title: '家庭组设置', icon: '⚙' },
     ],
   },
   {
-    name: '数据',
+    name: '业务运营',
     items: [
-      { path: '/records', title: '记录', icon: '📄' },
+      { path: '/items', title: '兑换商城', icon: '🛍' },
+      { path: '/tasks', title: '任务管理', icon: '🎯' },
+      { path: '/transfers', title: '赠送管理', icon: '🎁' },
+    ],
+  },
+  {
+    name: '数据查询',
+    items: [
+      { path: '/records', title: '积分流水', icon: '📄' },
       { path: '/stats', title: '统计', icon: '📊' },
+      { path: '/screen', title: '屏幕时间', icon: '📱' },
       { path: '/audit', title: '审计日志', icon: '🔍' },
+      { path: '/feedback', title: '用户反馈', icon: '💬' },
     ],
   },
   {
     name: '系统',
     items: [
       { path: '/accounts', title: '管理员账号', icon: '👤' },
+      { path: '/site-config', title: '站点设置', icon: '🌐' },
     ],
   },
 ]
@@ -110,6 +119,7 @@ async function logout() {
           </select>
         </div>
 
+        <button class="btn ghost sm" @click="router.push('/change-password')">修改密码</button>
         <button class="btn ghost sm" @click="logout">退出登录</button>
       </div>
 
