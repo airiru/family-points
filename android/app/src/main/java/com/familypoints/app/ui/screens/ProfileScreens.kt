@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.familypoints.app.data.local.ReportStatusStore
 import com.familypoints.app.screen.DayUsage
 import com.familypoints.app.screen.UsageStatsReader
 import com.familypoints.app.ui.AppViewModel
@@ -72,6 +73,13 @@ import com.familypoints.app.util.DeviceInfo
 import com.familypoints.app.ui.theme.PrimarySoft
 import com.familypoints.app.ui.theme.Red
 import com.familypoints.app.ui.theme.Sub
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** 上报时间戳 → 「MM-dd HH:mm」。 */
+private fun fmtClock(ts: Long): String =
+    SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(ts))
 
 @Composable
 fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
@@ -442,6 +450,52 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
         if (detail?.devices?.none { it.deviceKey == sel } != false) pickedDevice = null
     }
 
+    // 上报状态的真实情况：Worker 每次成败都会写入 ReportStatusStore。
+    // 这里不能无条件显示「正常」——ROM 杀掉定时任务 / 接口连不上时，用户必须能看出来。
+    val reportStatus by remember { ReportStatusStore(context) }.status
+        .collectAsStateWithLifecycle(initialValue = null)
+    val reportPill: Triple<String, Color, Color>
+    val reportDesc: String
+    val nowMs = remember(detail) { System.currentTimeMillis() }
+    when {
+        reportStatus == null -> {
+            reportPill = Triple("…", Sub, Line)
+            reportDesc = "读取中"
+        }
+        reportStatus!!.lastSuccessAt == null -> {
+            reportPill = Triple("尚未上报", Color(0xFFD97706), Color(0xFFFFF6E8))
+            reportDesc = "已授权但还没有成功上报过" +
+                (reportStatus!!.lastError?.let { "；最近一次失败：${it.take(80)}" } ?: "")
+        }
+        nowMs - reportStatus!!.lastSuccessAt!! > 36L * 60 * 60 * 1000 -> {
+            reportPill = Triple("上报异常", Color(0xFFD97706), Color(0xFFFFF6E8))
+            reportDesc = "上次成功：${fmtClock(reportStatus!!.lastSuccessAt!!)}" +
+                (reportStatus!!.lastError?.takeIf { reportStatus!!.lastFailAt ?: 0 > reportStatus!!.lastSuccessAt!! }
+                    ?.let { "；最近失败：${it.take(80)}" } ?: "")
+        }
+        else -> {
+            reportPill = Triple("正常", Green, GreenSoft)
+            reportDesc = "上次成功：${fmtClock(reportStatus!!.lastSuccessAt!!)}（每天 21:00 自动上报昨天）"
+        }
+    }
+
+    // 国产 ROM（HyperOS / EMUI / ColorOS 等）默认禁止自启动：
+    // 进程一旦被杀或重启手机，WorkManager 的定时任务不会再跑——只能由用户手动放行。
+    val needsKeepAliveHint = remember {
+        listOf("xiaomi", "redmi", "huawei", "honor", "oppo", "vivo", "oneplus", "realme", "meizu")
+            .any { android.os.Build.MANUFACTURER.lowercase().contains(it) }
+    }
+    val keepAliveHint = when {
+        android.os.Build.MANUFACTURER.lowercase().contains("xiaomi") ||
+            android.os.Build.MANUFACTURER.lowercase().contains("redmi") ->
+            "小米手机请到「设置 → 应用设置 → 应用管理 → ${context.packageName}」打开「自启动」，" +
+                "并把省电策略设为「无限制」；否则 App 被杀后定时上报不会再运行，" +
+                "重新打开一次 App 可以立即补算。"
+        else ->
+            "请到系统设置里允许本应用「自启动」/「后台运行」，并把电池策略设为不限制；" +
+                "否则 App 被杀后定时上报不会再运行，重新打开一次 App 可以立即补算。"
+    }
+
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "屏幕时间", onBack = if (asTab) null else ({ nav.popBackStack() }))
 
@@ -509,22 +563,56 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
                     CardBox {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("上报状态", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                Text("使用情况访问权限", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                 Text(
-                                    "已授权，按计划自动上报（设备：${DeviceInfo.model()}）",
-                                    fontSize = 12.sp,
-                                    color = Sub,
+                                    if (hasPermission) "已授权，可自动统计" else "未授权，无法统计",
+                                    fontSize = 12.sp, color = Sub,
                                 )
                             }
-                            Pill("正常", Green, GreenSoft)
+                            Pill(
+                                if (hasPermission) "已授权" else "未授权",
+                                if (hasPermission) Green else Color(0xFFD97706),
+                                if (hasPermission) GreenSoft else Color(0xFFFFF6E8),
+                            )
                         }
                         Divider(color = Line, modifier = Modifier.padding(vertical = 12.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("使用情况访问权限", fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                                Text("已授权，可自动统计", fontSize = 12.sp, color = Sub)
+                                Text("上报状态", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                Text(reportDesc, fontSize = 12.sp, color = Sub, lineHeight = 18.sp)
                             }
-                            Pill("已授权", Green, GreenSoft)
+                            Pill(reportPill.first, reportPill.second, reportPill.third)
+                        }
+                    }
+                }
+
+                // 国产 ROM 保活引导（12.2.8）：进程被杀成 stopped 后 WorkManager 不再运行，
+                // 这是「已授权却收不到数据」在小米/HyperOS 等系统上的真实原因。
+                if (needsKeepAliveHint) {
+                    item {
+                        CardBox {
+                            Text("手机管家可能拦截了定时上报", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                            Text(
+                                keepAliveHint,
+                                fontSize = 12.5.sp, color = Sub, lineHeight = 19.sp,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                            Button(
+                                onClick = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                                .setData(android.net.Uri.fromParts("package", context.packageName, null))
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp)
+                                    .padding(top = 14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                            ) { Text("打开应用信息") }
                         }
                     }
                 }

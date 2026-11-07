@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import com.familypoints.app.data.api.ApiClient
 import com.familypoints.app.data.api.ScreenReportReq
 import com.familypoints.app.util.DeviceInfo
+import com.familypoints.app.data.local.ReportStatusStore
 import com.familypoints.app.data.local.TokenStore
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -28,6 +29,7 @@ class ScreenReportWorker @AssistedInject constructor(
     private val reader: UsageStatsReader,
     private val apiClient: ApiClient,
     private val tokenStore: TokenStore,
+    private val statusStore: ReportStatusStore,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
@@ -72,8 +74,10 @@ class ScreenReportWorker @AssistedInject constructor(
             0
         }
 
-        // 1) 上报「昨天」并结算
-        val ok = runCatching {
+        // 1) 上报「昨天」并结算。成败都落到 ReportStatusStore——
+        //    「上报状态」卡片据此显示真实情况，而不是无条件「正常」。
+        val startedAt = System.currentTimeMillis()
+        val outcome = runCatching {
             apiClient.service.screenReport(
                 ScreenReportReq(
                     deviceKey = DeviceInfo.key(applicationContext),
@@ -84,8 +88,17 @@ class ScreenReportWorker @AssistedInject constructor(
                     hourly = hourly.toList(),
                 )
             ).ok
-        }.getOrElse { false }
-        if (!ok) return Result.retry()
+        }
+        outcome.fold(
+            onSuccess = { ok ->
+                if (ok) statusStore.recordSuccess(startedAt)
+                else statusStore.recordFailure(startedAt, "服务端拒绝上报")
+            },
+            onFailure = { e ->
+                statusStore.recordFailure(startedAt, e.message ?: e.javaClass.simpleName)
+            },
+        )
+        if (outcome.getOrNull() != true) return Result.retry()
 
         // 2) 顺带把「今天」的快照也传一次：家人现在就能看到今天的数据。
         //    快照不结算、不发分，失败也不影响上面那次上报的结果。

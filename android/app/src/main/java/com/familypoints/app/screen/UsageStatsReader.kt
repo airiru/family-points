@@ -62,7 +62,13 @@ class UsageStatsReader @Inject constructor(
     private val usm: UsageStatsManager
         get() = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
 
-    /** 是否已授予「使用情况访问」权限。这个权限只能由用户在系统设置里手动开启。 */
+    /**
+     * 是否已授予「使用情况访问」权限。这个权限只能由用户在系统设置里手动开启。
+     *
+     * 不能只信 AppOps：部分 ROM 在系统层未真正放行时 AppOps 仍返回 allow
+     * （此时 queryEvents 会抛安全异常），页面会误显示「已授权」却没有数据。
+     * 所以这里再做一次功能性探测：真正能查到事件流才算数。
+     */
     fun hasPermission(): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -75,7 +81,13 @@ class UsageStatsReader @Inject constructor(
                 AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName
             )
         }
-        return mode == AppOpsManager.MODE_ALLOWED
+        if (mode != AppOpsManager.MODE_ALLOWED) return false
+        // 功能性探测：近 1 分钟没有事件是正常的（手机可能息屏），
+        // 只关心「查询本身被系统拒绝」——那说明权限其实没生效。
+        return runCatching {
+            usm.queryEvents(System.currentTimeMillis() - 60_000L, System.currentTimeMillis())
+            true
+        }.getOrDefault(false)
     }
 
     /**
