@@ -199,28 +199,6 @@ func (h *Family) AppCreateFamily(c *gin.Context) {
 	httpx.OK(c, gin.H{"family_id": f.ID, "name": f.Name, "code": f.InviteCode})
 }
 
-// AppJoin POST /api/app/family/join —— 凭邀请码加入（需前台 token，且尚未入组）。
-func (h *Family) AppJoin(c *gin.Context) {
-	m, ok := middleware.CurrentMember(c)
-	if !ok {
-		httpx.Unauthorized(c, "未登录")
-		return
-	}
-	var in struct {
-		InviteCode string `json:"invite_code"`
-	}
-	if err := c.ShouldBindJSON(&in); err != nil {
-		httpx.BadRequest(c, "请求体格式不正确")
-		return
-	}
-	f, err := h.svc.Join(c.Request.Context(), m, in.InviteCode)
-	if err != nil {
-		fail(c, err)
-		return
-	}
-	httpx.OK(c, gin.H{"family_id": f.ID, "family_name": f.Name, "role": "member"})
-}
-
 // ---------- 退出 / 踢出（不可逆，必须二次确认）----------
 
 // AppLeave POST /api/app/family/leave —— 自行退出。

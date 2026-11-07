@@ -17,12 +17,11 @@ grant() { ( cd "$(dirname "$0")/.." && "$TOOL" -member "$1" -points "$2" ) > /de
 
 echo "== 1. 造数据 =="
 L=$(reg "l8$RUN" "组长" true); L_AT=$(echo "$L" | jget "['data']['token']['access_token']")
-CODE=$(curl -s $B/api/app/family/invite-code -H "Authorization: Bearer $L_AT" | jget "['data']['invite_code']")
+FID=$(echo "$L" | jget "['data']['member']['family_id']")
 M=$(reg "m8$RUN" "小孩" false); M_AT=$(echo "$M" | jget "['data']['token']['access_token']"); M_ID=$(echo "$M" | jget "['data']['member']['id']")
-curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"
-FID=$(curl -s $B/api/app/family -H "Authorization: Bearer $L_AT" | jget "['data']['id']")
-grant "l8$RUN" 100
 A_AT=$(admin_login "$B")
+curl -s -o /dev/null -X POST $B/api/admin/family/$FID/invite -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"username\":\"m8$RUN\"}"
+grant "l8$RUN" 100
 echo "  组=$FID"
 
 echo "== 2. 触发若干写操作（应各留一条审计）=="

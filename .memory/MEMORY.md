@@ -403,6 +403,10 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
 - 榜单 N+1 已修（`repo.Report.Streaks` 一次查全组，2.0–4.7s → 1.0–1.6s；
   剩余 ~1.2s 是远端 MySQL 两次 RTT，要再压只能加缓存或把库搬到应用同机）。
 - README 已于 11-06 重写完成；**「README 已整体失效」是过期陈述，已作废**。
+- **11-07：`POST /api/app/family/join`（凭码直接入组、绕过审批）已整体删除**；
+  验收脚本搭台统一改走 admin 直拉（15.2.3）。隐藏家庭码语义定稿：
+  **隐藏 = 搜不到 + 凭码申请也拒绝（等价于不存在）**，p3 断言与 features 15.3.34 已锁。
+  全量回归 13 脚本 431 项全过（本机新库）。
 
 ### 6.2 真·功能缺口（11-06 查代码确认没有）
 
@@ -435,6 +439,13 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
 **下一步主线是部署（挂起中）**，功能开发已收口。
 
 ### 6.5 环境与工具坑（长期有效）
+
+- **本机（F 盘机器）mingw64 curl 8.21 把非 ASCII 内联参数按 GBK 发送**：`curl -d '中文'` 入库全是
+  U+FFFD，回归大面积假红。跑验收脚本必须
+  `export PATH=/tmp/ubin:$PATH`（包装器 exec System32 curl.exe，UTF-8 正确）+
+  `PYTHONUTF8=1 PYTHONIOENCODING=utf-8`。详见 2026-11-07 日志。
+- **本机 MySQL = phpstudy 8.0.12**，root 密码 `FpRoot2026`（在 `server/.env`）；
+  `--skip-grant-tables` 会强制 skip_networking，改密走 `--named-pipe=1` + `mysql --pipe`。
 
 - **回归脚本的管理员密码**：p2 / p8b 会改管理员密码，写死一个值必然集体假红。
   统一走 `scripts/lib_admin.sh` 的 `admin_login()`（先试 `ADMIN_PASSWORD`，再兜底

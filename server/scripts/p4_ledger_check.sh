@@ -16,14 +16,16 @@ reg() { curl -s -X POST $B/api/register -H 'Content-Type: application/json' \
   -d "{\"username\":\"$1\",\"password\":\"Kid#2026pass\",\"nickname\":\"$2\",\"create_family\":$3,\"family_name\":\"组$RUN\"}"; }
 score() { curl -s $B/api/app/me -H "Authorization: Bearer $1" | jget "['data']['score']"; }
 grant() { ( cd "$(dirname "$0")/.." && "$TOOL" -member "$1" -points "$2" ) > /dev/null 2>&1; }
+ainv() { curl -s -o /dev/null -X POST $B/api/admin/family/$FID/invite -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"username\":\"$1\"}"; }
 
 echo "== 1. 造数据：组长 L + 成员 M1 / M2 =="
 L=$(reg "l4$RUN" "组长" true); L_AT=$(echo "$L" | jget "['data']['token']['access_token']")
-CODE=$(curl -s $B/api/app/family/invite-code -H "Authorization: Bearer $L_AT" | jget "['data']['invite_code']")
+FID=$(echo "$L" | jget "['data']['member']['family_id']")
 M1=$(reg "m41$RUN" "成员一" false); M1_AT=$(echo "$M1" | jget "['data']['token']['access_token']"); M1_ID=$(echo "$M1" | jget "['data']['member']['id']")
 M2=$(reg "m42$RUN" "成员二" false); M2_AT=$(echo "$M2" | jget "['data']['token']['access_token']"); M2_ID=$(echo "$M2" | jget "['data']['member']['id']")
-for t in "$M1_AT" "$M2_AT"; do curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $t" -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"; done
-echo "  L/M1/M2 已就位，组邀请码=$CODE"
+A_AT=$(admin_login "$B")
+ainv "m41$RUN"; ainv "m42$RUN"
+echo "  L/M1/M2 已就位，family_id=$FID"
 
 echo "== 2. 准备余额（devtool 脚手架，不写流水）=="
 grant "m41$RUN" 50

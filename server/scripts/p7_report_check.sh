@@ -21,9 +21,10 @@ D2=$(date -d "1 day ago" +%Y-%m-%d)
 
 echo "== 1. 造数据：L(50 分，无流水) + M1(靠屏幕上报得分) =="
 L=$(reg "l7$RUN" "组长" true); L_AT=$(echo "$L" | jget "['data']['token']['access_token']")
-CODE=$(curl -s $B/api/app/family/invite-code -H "Authorization: Bearer $L_AT" | jget "['data']['invite_code']")
+FID=$(echo "$L" | jget "['data']['member']['family_id']")
 M1=$(reg "m7$RUN" "小孩" false); M1_AT=$(echo "$M1" | jget "['data']['token']['access_token']"); M1_ID=$(echo "$M1" | jget "['data']['member']['id']")
-curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $M1_AT" -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"
+A_AT=$(admin_login "$B")
+curl -s -o /dev/null -X POST $B/api/admin/family/$FID/invite -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"username\":\"m7$RUN\"}"
 FID=$(curl -s $B/api/app/family -H "Authorization: Bearer $L_AT" | jget "['data']['id']")
 grant "l7$RUN" 50
 A_AT=$(admin_login "$B")

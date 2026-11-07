@@ -111,8 +111,6 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		app.GET("/me", authHandler.MeMember)
 		app.POST("/password", authHandler.ChangeMemberPassword)
 
-		// 加入家庭组：此时还没入组，不能挂在 inFamily 下
-		app.POST("/family/join", familyHandler.AppJoin)
 		// 未入组者的两条路：凭家庭码搜索加入 / 自己建一个家
 		app.GET("/family/search", familyHandler.AppSearchFamily)
 		app.POST("/family/create", familyHandler.AppCreateFamily)

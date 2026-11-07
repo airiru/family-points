@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # P6 任务与投票验收（冻结 → 接取 → 提交 → 全员投票过半 → 转移）
 set -u
+. "$(dirname "$0")/lib_admin.sh"
 B=http://127.0.0.1:8080
 RUN=$(date +%s)
 TOOL=/tmp/devtool.exe
@@ -19,10 +20,11 @@ grant() { ( cd "$(dirname "$0")/.." && "$TOOL" -member "$1" -points "$2" ) > /de
 
 echo "== 1. 造数据：组长 L + 成员 M1 / M2 =="
 L=$(reg "l6$RUN" "组长" true); L_AT=$(echo "$L" | jget "['data']['token']['access_token']")
-CODE=$(curl -s $B/api/app/family/invite-code -H "Authorization: Bearer $L_AT" | jget "['data']['invite_code']")
+FID=$(echo "$L" | jget "['data']['member']['family_id']")
 M1=$(reg "m61$RUN" "成员一" false); M1_AT=$(echo "$M1" | jget "['data']['token']['access_token']")
 M2=$(reg "m62$RUN" "成员二" false); M2_AT=$(echo "$M2" | jget "['data']['token']['access_token']")
-for t in "$M1_AT" "$M2_AT"; do curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $t" -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"; done
+A_AT=$(admin_login "$B")
+for u in "m61$RUN" "m62$RUN"; do curl -s -o /dev/null -X POST $B/api/admin/family/$FID/invite -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"username\":\"$u\"}"; done
 grant "l6$RUN" 100
 echo "  L 余额 $(score "$L_AT")，M1=$(score "$M1_AT")，M2=$(score "$M2_AT")"
 

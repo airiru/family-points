@@ -48,10 +48,8 @@ Y=$(reg "iy$RUN" "小杨" false);     Y_AT=$(at "$Y")
 Z=$(reg "iz$RUN" "小周" false);     Z_AT=$(at "$Z")
 U=$(reg "iu$RUN" "小吴" false);     U_AT=$(at "$U")
 M=$(reg "im$RUN" "已入组" false);   M_AT=$(at "$M");  M_ID=$(mid "$M")
-CODE=$(curl -s $B/api/app/family/invite-code -H "Authorization: Bearer $L_AT" | jget "['data']['invite_code']")
-curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $M_AT" \
-  -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"
 A_AT=$(admin_login "$B")
+curl -s -o /dev/null -X POST $B/api/admin/family/$FID/invite -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"username\":\"im$RUN\"}"
 chk "两组建成且互不相同" "True" "$(python -c "print('$FID'!='$FID2' and '$FID'!='None')")"
 chk "M 已入组" "$FID" "$(curl -s $B/api/app/me -H "Authorization: Bearer $M_AT" | jget "['data']['family_id']")"
 

@@ -166,38 +166,6 @@ func (s *Family) CreateFamily(ctx context.Context, me *model.Member, name string
 	return s.families.ByID(ctx, fid)
 }
 
-// Join 凭邀请码加入家庭组。
-//
-// 四条校验缺一不可：未入组、码存在、码未过期、未被该组禁入。
-func (s *Family) Join(ctx context.Context, me *model.Member, code string) (*model.Family, error) {
-	code = strings.ToUpper(strings.TrimSpace(code))
-	if me.InFamily() {
-		return nil, ErrAlreadyInFamily
-	}
-	if code == "" {
-		return nil, fmt.Errorf("%w：请填写邀请码", ErrInvalidInput)
-	}
-
-	f, err := s.families.ByInviteCode(ctx, code)
-	if err != nil {
-		if errors.Is(err, repo.ErrNotFound) {
-			return nil, ErrInviteCodeInvalid
-		}
-		return nil, err
-	}
-	banned, err := s.families.IsBanned(ctx, f.ID, me.ID)
-	if err != nil {
-		return nil, err
-	}
-	if banned {
-		return nil, ErrBanned
-	}
-	if err := s.families.Join(ctx, f.ID, me.ID); err != nil {
-		return nil, err
-	}
-	return f, nil
-}
-
 // Leave 自行退出家庭组。
 //
 // 规则：
@@ -436,6 +404,7 @@ func (s *Family) RequestJoin(ctx context.Context, me *model.Member, code string)
 		}
 		return nil, err
 	}
+	// 隐藏 = 搜不到 + 凭码申请也拒绝（2026-11-07 用户定稿）：隐藏的码对外等价于不存在。
 	if f.CodeHidden {
 		return nil, ErrInviteCodeInvalid
 	}

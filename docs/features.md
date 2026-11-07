@@ -1373,7 +1373,6 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.1.3a | `/api/app/logout` | POST | 前台登出（吊销该成员全部 refresh；需 access，不要求已入组） |
 | 15.1.4 | `/api/admin/refresh` | POST | 后台 token 刷新 |
 | 15.1.5 | `/api/app/refresh` | POST | 前台 token 刷新 |
-| 15.1.6 | `/api/app/family/join` | POST | 凭邀请码加入家庭组（需前台 token，`family_id` 为空） |
 
 ### 15.2 后台接口（`typ='admin'`）
 
@@ -1420,6 +1419,8 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 > | 15.2.11 `/api/admin/device/*` | 设备令牌机制 2026-11-05 **整体删除**，上报改走 15.4 的成员登录态 |
 > | 15.3.22 `/api/app/member/avatar` | 已并入 15.3.42 `/api/app/me/profile`（名称 + 预设头像标识一次提交） |
 > | 15.3.32 `/api/app/member/invite` | 早期写成「组长直接拉入组」，该语义**明确不做**；P3.1 以「待确认邀请」新语义重新登记为 **15.3.43**（5.2.3）。旧编号作废，后台直拉仍是 15.2.3 |
+> | 15.1.6 `/api/app/family/join` | 家庭码体系（2026-11-07）下**凭码直接入组绕过审批，已整体删除**；入组只走两条路：待确认邀请（15.3.43/47）与凭码申请审批（15.3.55/58） |
+> | 15.3.34 `/api/app/family/invite-code` | 邀请码改为**不可变家庭码**：查看重新登记为 15.3.52（`GET /family/code`），重置能力**取消**（家庭码永不重置、无有效期） |
 >
 > 原则：**未实现的功能留在功能章节写清状态，不在接口清单里写死路径**。
 
@@ -1464,13 +1465,18 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.3.46 | `/api/app/invitations` | GET | **我收到的邀请**（待确认 + 历史处理记录）。**挂在 `app` 组、`family_id` 为空也能调**（5.2.8），不经过 `RequireFamily()` |
 | 15.3.47 | `/api/app/invitation/accept` | POST | **接受邀请**（`invitation_id`）：同事务置 `accepted` + 走 `joinTx` 入组 + 取消本人其它 pending；返回邀请对象 |
 | 15.3.48 | `/api/app/invitation/reject` | POST | **拒绝邀请**（`invitation_id`）：置 `rejected` + `decided_at`；返回邀请对象 |
+| 15.3.53 | `/api/app/family/search` | GET | **按家庭码搜索家庭**（需未入组；`?code=`）。隐藏的码返回 `found=false`，与不存在不可区分 |
+| 15.3.54 | `/api/app/family/create` | POST | **未入组者建组**（`name`），创建者成为组长（只产生前台组长身份） |
+| 15.3.55 | `/api/app/family/request` | POST | **凭家庭码申请加入**（`code`）：隐藏的码一并拒绝；同组已有 pending 返回 **409**；被禁入返回 **403** |
+| 15.3.56 | `/api/app/family/requests/mine` | GET | **我发出的入组申请**（需未入组也能调，挂 `app` 组） |
 
 **仅组长（`role='leader'`）**
 
 | # | 接口 | 方法 | 说明 |
 |---|---|---|---|
 | 15.3.33 | `/api/app/member/remove` | POST | 踢出成员（积分清零 + 写入 `family_bans`；**需 `confirm=true`**） |
-| 15.3.34 | `/api/app/family/invite-code` | GET/POST | 查看 / 重置邀请码 |
+| 15.3.52 | `/api/app/family/code` | GET | **查看本组家庭码** + 隐藏状态（**全员可读**，不限于组长） |
+| 15.3.34 | `/api/app/family/code/hidden` | POST | 组长设置家庭码是否可被搜到（`hidden`）。**隐藏 = 搜不到 + 凭码申请也拒绝**（15.3.53 / 15.3.55 都等价于码不存在） |
 | 15.3.35 | `/api/app/rule` · `/api/app/rule/save` | GET/POST | 睡觉规则与连续奖励档位（保存限**组长**） |
 | 15.3.36 | `/api/app/item/save` · `/api/app/item/delete` | POST | 商品增改 / 删除（**组长**） |
 | 15.3.37 | `/api/app/member/hidden` | POST | 隐藏 / 显示成员 |
@@ -1482,6 +1488,8 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.3.43 | `/api/app/member/invite` | POST | **按用户名发起待确认邀请**（5.2.3，`username`）；不直接入组；同组同一人已有 pending 返回 **409** |
 | 15.3.44 | `/api/app/member/invitations` | GET | 本组已发出的邀请（含被邀请人昵称 / 状态 / 有效期）；过期 pending 不显示且不落库 |
 | 15.3.45 | `/api/app/member/invite/cancel` | POST | 取消本组一条 pending 邀请（`invitation_id`）；非本组或非 pending 一律 **404** |
+| 15.3.57 | `/api/app/family/requests` | GET | 本组待审批的入组申请（`direction='request'` 的 pending） |
+| 15.3.58 | `/api/app/family/request/decide` | POST | **审批入组申请**（`invitation_id` + `accept`）：通过时同事务走 `joinTx` 入组，与邀请接受共用同一段 SQL |
 
 ### 15.4 屏幕上报接口（成员登录态，2026-11-05 起无需令牌）
 

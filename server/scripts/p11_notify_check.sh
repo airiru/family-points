@@ -22,11 +22,12 @@ print(sum(1 for x in items if x['type']=='$2'))" 2>/dev/null
 
 echo "== 0. 建组：组长 L + 成员 A + 成员 B =="
 L=$(reg "nl$RUN" "组长" true); L_AT=$(echo "$L" | jget "['data']['token']['access_token']")
-CODE=$(curl -s $B/api/app/family/invite-code -H "Authorization: Bearer $L_AT" | jget "['data']['invite_code']")
+FID=$(echo "$L" | jget "['data']['member']['family_id']")
 A=$(reg "na$RUN" "甲" false); A_AT=$(echo "$A" | jget "['data']['token']['access_token']"); A_ID=$(echo "$A" | jget "['data']['member']['id']")
 Bm=$(reg "nb$RUN" "乙" false); B_AT=$(echo "$Bm" | jget "['data']['token']['access_token']"); B_ID=$(echo "$Bm" | jget "['data']['member']['id']")
-for t in "$A_AT" "$B_AT"; do
-  curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $t" -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"
+ADMIN_AT=$(admin_login "$B")
+for u in "na$RUN" "nb$RUN"; do
+  curl -s -o /dev/null -X POST $B/api/admin/family/$FID/invite -H "Authorization: Bearer $ADMIN_AT" -H 'Content-Type: application/json' -d "{\"username\":\"$u\"}"
 done
 chk "三人同组" "3" "$(curl -s $B/api/app/family/members -H "Authorization: Bearer $L_AT" | python -c "import sys,json;print(len(json.load(sys.stdin)['data']['members']))")"
 

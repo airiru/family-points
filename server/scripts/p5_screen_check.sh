@@ -21,9 +21,10 @@ report() {
 
 echo "== 1. 建组时自动写入默认配置 =="
 L=$(reg "l5$RUN" "组长" true); L_AT=$(echo "$L" | jget "['data']['token']['access_token']"); L_ID=$(echo "$L" | jget "['data']['member']['id']")
-CODE=$(curl -s $B/api/app/family/invite-code -H "Authorization: Bearer $L_AT" | jget "['data']['invite_code']")
+FID=$(echo "$L" | jget "['data']['member']['family_id']")
 M=$(reg "m5$RUN" "小孩" false); M_AT=$(echo "$M" | jget "['data']['token']['access_token']"); M_ID=$(echo "$M" | jget "['data']['member']['id']")
-curl -s -o /dev/null -X POST $B/api/app/family/join -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"invite_code\":\"$CODE\"}"
+A_AT=$(admin_login "$B")
+curl -s -o /dev/null -X POST $B/api/admin/family/$FID/invite -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"username\":\"m5$RUN\"}"
 FID=$(curl -s $B/api/app/family -H "Authorization: Bearer $L_AT" | jget "['data']['id']")
 
 RULE=$(curl -s $B/api/app/rule -H "Authorization: Bearer $L_AT")
