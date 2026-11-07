@@ -155,6 +155,8 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
             // 家庭 / 通知 / 设备管理 同组（2026-11-07 用户要求）
             item {
                 CardBox {
+                    Text("常用功能", fontSize = 12.sp, color = Sub, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
