@@ -160,6 +160,18 @@ class AppViewModel @Inject constructor(
     init {
         restoreSession()
         startUnreadPolling()
+        // 会话失效（停用/注销/令牌吊销）：清本地状态回登录页（2026-11-07 用户反馈）
+        viewModelScope.launch {
+            apiClient.sessionInvalid.collect {
+                tokenStore.clear()
+                clearScreenDetail()
+                _members.value = emptyList()
+                _ranking.value = emptyList()
+                _notifications.value = emptyList()
+                _session.value = Session.LoggedOut
+                _message.value = "登录已失效，请重新登录"
+            }
+        }
     }
 
     // ---------------- 会话 ----------------

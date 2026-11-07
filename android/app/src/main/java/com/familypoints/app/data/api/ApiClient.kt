@@ -2,6 +2,8 @@ package com.familypoints.app.data.api
 
 import com.familypoints.app.BuildConfig
 import com.familypoints.app.data.local.TokenStore
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
@@ -41,6 +43,11 @@ class ApiClient @Inject constructor(
 ) {
     private val json = AppJson
 
+    // 会话失效事件（2026-11-07）：refresh 也失败 = 账号被停用/注销/令牌被吊销，
+    // App 必须回登录页而不是停在原地弹 401。VM 订阅它做本地登出。
+    private val _sessionInvalid = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val sessionInvalid: SharedFlow<Unit> = _sessionInvalid
+
     private val authInterceptor = Interceptor { chain ->
         val original = chain.request()
         val path = original.url.encodedPath
@@ -72,8 +79,19 @@ class ApiClient @Inject constructor(
                         .header("X-Retry-Auth", "1")
                         .build()
                 }
-                val refresh = runBlocking { tokenStore.refreshTokenOnce() } ?: return null
-                val newPair = runBlocking { refreshBlocking(refresh) } ?: return null
+                val refresh = runBlocking { tokenStore.refreshTokenOnce() }
+                if (refresh.isNullOrBlank()) {
+                    runBlocking { tokenStore.clear() }
+                    _sessionInvalid.tryEmit(Unit)
+                    return null
+                }
+                val newPair = runBlocking { refreshBlocking(refresh) }
+                if (newPair == null) {
+                    // refresh 也被拒（停用 / 注销 / 吊销）：本地会话已死，通知 VM 回登录页
+                    runBlocking { tokenStore.clear() }
+                    _sessionInvalid.tryEmit(Unit)
+                    return null
+                }
                 runBlocking { tokenStore.updateTokens(newPair.accessToken, newPair.refreshToken) }
                 return response.request.newBuilder()
                     .header("Authorization", "Bearer ${newPair.accessToken}")
