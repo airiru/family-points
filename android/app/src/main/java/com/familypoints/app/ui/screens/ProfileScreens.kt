@@ -95,7 +95,6 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
     }
     val familyName by vm.familyName.collectAsStateWithLifecycle()
     val unread by vm.unread.collectAsStateWithLifecycle()
-    var confirmLogout by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
 
@@ -230,30 +229,11 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                 }
             }
 
-            item {
-                CardBox {
-                    MenuItem("🚪", "退出登录", "") { confirmLogout = true }
-                }
-            }
             item { Spacer(Modifier.height(12.dp)) }
         }
         } // PullToRefreshBox
     }
 
-    if (confirmLogout) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirmLogout = false },
-            title = { Text("退出登录？") },
-            text = { Text("退出后需要重新输入用户名密码。", fontSize = 14.sp, color = Sub) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmLogout = false
-                    vm.logout()
-                }) { Text("退出", color = Red, fontWeight = FontWeight.SemiBold) }
-            },
-            dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("取消", color = Sub) } },
-        )
-    }
 }
 
 @Composable

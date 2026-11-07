@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -43,6 +46,7 @@ import com.familypoints.app.ui.ScreenHeader
 import com.familypoints.app.ui.Session
 import com.familypoints.app.ui.theme.Line
 import com.familypoints.app.ui.theme.Primary
+import com.familypoints.app.ui.theme.Red
 import com.familypoints.app.ui.theme.Sub
 
 /** 预设头像：家庭场景不做文件上传，用 emoji 标识足够且零成本。 */
@@ -65,6 +69,8 @@ fun ProfileEditScreen(vm: AppViewModel, nav: NavHostController) {
     var oldPwd by remember { mutableStateOf("") }
     var newPwd by remember { mutableStateOf("") }
     var againPwd by remember { mutableStateOf("") }
+    var showCancel by remember { mutableStateOf(false) }
+    var cancelPwd by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "个人设置", onBack = { nav.popBackStack() })
@@ -207,6 +213,70 @@ fun ProfileEditScreen(vm: AppViewModel, nav: NavHostController) {
                 )
             }
             Spacer(Modifier.height(16.dp))
+
+            // ---------- 会话：退出登录 / 注销账号（2026-11-07 从「我的」页移入） ----------
+            CardBox {
+                    Text("会话", fontSize = 12.sp, color = Sub, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Button(
+                        onClick = {
+                            vm.logout()
+                            nav.popBackStack()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                    ) { Text("退出登录") }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { showCancel = true },
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                    ) { Text("注销账号", color = Red, fontSize = 13.sp) }
+                    Text(
+                        "注销后账号即从系统中删除，历史积分流水保留；在家庭组内时需先退出。",
+                        fontSize = 11.sp, color = Sub,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+            }
+            Spacer(Modifier.height(16.dp))
         }
+    }
+
+    if (showCancel) {
+        AlertDialog(
+            onDismissRequest = { showCancel = false },
+            title = { Text("注销账号？") },
+            text = {
+                Column {
+                    Text(
+                        "注销后无法恢复：账号删除、登录态全部失效、设备绑定释放；历史积分流水保留。在家庭组内时需先退出家庭组。",
+                        fontSize = 13.sp, color = Sub,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = cancelPwd,
+                        onValueChange = { cancelPwd = it },
+                        label = { Text("输入密码确认") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.cancelAccount(cancelPwd) {
+                        cancelPwd = ""
+                        showCancel = false
+                        nav.popBackStack()
+                    }
+                }) { Text("注销", color = Red, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCancel = false; cancelPwd = "" }) { Text("取消", color = Sub) }
+            },
+        )
     }
 }

@@ -642,3 +642,9 @@ data class UnbindResult(val unbound: Boolean = false, val device_key: String = "
 
 @Serializable
 data class CancelResult(val cancelled: Boolean = false)
+
+@Serializable
+data class CancelAccountReq(val password: String)
+
+@Serializable
+data class CancelAccountResult(val cancelled: Boolean = false)

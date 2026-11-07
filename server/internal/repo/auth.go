@@ -56,6 +56,49 @@ func (r *Auth) MemberByID(ctx context.Context, id uint64) (*model.Member, error)
 	return &m, nil
 }
 
+// CancelAccount 注销账号（2026-11-07）：**仅限未入组成员**，单事务清理关联数据。
+//
+//   - 删除：members 行、refresh_tokens、member_devices（设备绑定随之释放，可绑定其他账号）、
+//     本人的通知、本人的解绑申请记录
+//   - 作废：pending 的入组邀请/申请（invitee 是本人）
+//   - **保留**：records 等历史流水（member_name 快照仍在，member_id 悬空属预期）
+//
+// DELETE 带 `family_id IS NULL` 条件：与注销前校验之间若成员刚好入组，这里会删 0 行并报错兜底。
+func (r *Auth) CancelAccount(ctx context.Context, memberID uint64) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	steps := []string{
+		`DELETE FROM refresh_tokens WHERE subject_type = 'member' AND subject_id = ?`,
+		`DELETE FROM member_devices WHERE member_id = ?`,
+		`DELETE FROM device_unbind_requests WHERE member_id = ?`,
+		`DELETE FROM notifications WHERE member_id = ?`,
+		`UPDATE family_invitations SET status = 'cancelled', decided_at = NOW(3)
+		  WHERE invitee_id = ? AND status = 'pending'`,
+		`DELETE FROM members WHERE id = ? AND family_id IS NULL`,
+	}
+	for _, q := range steps {
+		if _, err := tx.ExecContext(ctx, q, memberID); err != nil {
+			return err
+		}
+	}
+	// members 行必须真的删掉（family_id IS NULL 条件兜住并发入组）
+	var n int64
+	if err := tx.GetContext(ctx, &n, `SELECT COUNT(*) FROM members WHERE id = ?`, memberID); err != nil {
+		return err
+	}
+	if n != 0 {
+		return ErrMemberInFamilyCancel
+	}
+	return tx.Commit()
+}
+
+// ErrMemberInFamilyCancel 注销时发现成员仍在家庭组（并发窗口）。
+var ErrMemberInFamilyCancel = errors.New("请先退出家庭组再注销账号")
+
 // CreateMember 创建成员；familyName 非空时同事务创建家庭组并把该成员设为组长。
 //
 // 为什么同事务：只建成账号没建成组、或建成组却没设组长，都会留下不可用的中间态。

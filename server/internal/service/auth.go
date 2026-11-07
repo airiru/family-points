@@ -340,3 +340,26 @@ func checkPassword(p string) error {
 	}
 	return nil
 }
+
+// ErrNotFamilyFreeForCancel 注销前必须先退出家庭组。
+var ErrNotFamilyFreeForCancel = errors.New("请先退出家庭组再注销账号")
+
+// CancelMember 注销账号（2026-11-07）：需密码二次确认，仅限未入组成员。
+// 成功后该账号即从系统中删除（历史流水保留），客户端应清空本地会话。
+func (s *Auth) CancelMember(ctx context.Context, me *model.Member, password string) error {
+	if password == "" {
+		return fmt.Errorf("%w：请输入密码确认注销", ErrInvalidInput)
+	}
+	if me.InFamily() {
+		return ErrNotFamilyFreeForCancel
+	}
+	// 用带 pass_hash 的完整行校验密码（middleware 里的 me 不一定带）
+	full, err := s.repo.MemberByID(ctx, me.ID)
+	if err != nil {
+		return err
+	}
+	if bcrypt.CompareHashAndPassword([]byte(full.PassHash), []byte(password)) != nil {
+		return ErrInvalidCredentials
+	}
+	return s.repo.CancelAccount(ctx, me.ID)
+}

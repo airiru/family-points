@@ -555,6 +555,7 @@ CREATE TABLE refresh_tokens (
 | 5.1.4 | 用户名规则 | ✅ 3–20 位，仅字母 / 数字 / 下划线 |
 | 5.1.5 | 密码规则 | ✅ 至少 8 位、最多 72 字节（bcrypt 上限），**不要求复杂度** |
 | 5.1.6 | **username 与 nickname 分离（P3.1）** | ✅ `username` 登录凭证、全局唯一、**注册后永不可改**；`nickname` 显示名、可改、1–32 字。`members` / `admins` 两张账号表都有，新建时不填昵称则回填为 `username`。所有改资料接口显式拒绝请求体里带 `username` |
+| 5.1.7 | **注销账号** | ✅ **2026-11-07**：个人设置页内，需密码确认；仅限未入组成员（先退出）；账号删除、设备绑定释放、历史流水保留（见 15.3.59） |
 
 > **口径（2026-11-06 用户明确）**：原来 `members.name` 就是「昵称」、本来就可改，
 > 只是字段命名混着「名称 / 昵称」两套叫法；`username` 本来也**没有任何 UPDATE 路径**。
@@ -1495,6 +1496,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.3.54 | `/api/app/family/create` | POST | **未入组者建组**（`name`），创建者成为组长（只产生前台组长身份） |
 | 15.3.55 | `/api/app/family/request` | POST | **凭家庭码申请加入**（`code`）：隐藏的码一并拒绝；同组已有 pending 返回 **409**；被禁入返回 **403** |
 | 15.3.56 | `/api/app/family/requests/mine` | GET | **我发出的入组申请**（需未入组也能调，挂 `app` 组） |
+| 15.3.59 | `/api/app/me/cancel` | POST | **注销账号**（2026-11-07）：需 `password` 二次确认；**仅限未入组成员**（在组内 400「请先退出家庭组再注销账号」）。事务内删除 members / refresh_tokens / member_devices（设备绑定释放）/ 本人通知与解绑申请，作废 pending 邀请；**历史流水保留**（member_name 快照在，member_id 悬空属预期）。审计 `account.cancel` |
 
 **仅组长（`role='leader'`）**
 

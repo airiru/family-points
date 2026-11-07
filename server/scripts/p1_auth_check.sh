@@ -76,6 +76,15 @@ chk "重复用户名 → 409" "409" "$(curl -s -o /dev/null -w '%{http_code}' -X
 chk "弱密码 → 400" "400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/api/register -H 'Content-Type: application/json' -d '{"username":"weakpwd1","password":"123","nickname":"x"}')"
 chk "非法用户名 → 400" "400" "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/api/register -H 'Content-Type: application/json' -d '{"username":"a b","password":"Kid#2026pass","nickname":"x"}')"
 
+echo "== 注销账号（2026-11-07）=="
+CX=$(curl -s -X POST $B/api/register -H 'Content-Type: application/json'   -d '{"username":"cx'$RUN'","password":"Kid#2026pass","nickname":"注销测试","create_family":false}')
+CX_AT=$(echo "$CX" | jget "['data']['token']['access_token']")
+code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+chk "注销错密码 → 401" "401" "$(code -X POST $B/api/app/me/cancel -H "Authorization: Bearer $CX_AT" -H 'Content-Type: application/json' -d '{"password":"wrong"}')"
+chk "注销正确 → 200" "200" "$(code -X POST $B/api/app/me/cancel -H "Authorization: Bearer $CX_AT" -H 'Content-Type: application/json' -d '{"password":"Kid#2026pass"}')"
+chk "注销后原 token 失效 → 401" "401" "$(code $B/api/app/me -H "Authorization: Bearer $CX_AT")"
+chk "注销后无法再登录 → 401" "401" "$(code -X POST $B/api/app/login -H 'Content-Type: application/json' -d "{\"username\":\"cx$RUN\",\"password\":\"Kid#2026pass\"}")"
+
 echo
 echo "通过 $pass 项，失败 $fail 项"
 [ "$fail" -eq 0 ]

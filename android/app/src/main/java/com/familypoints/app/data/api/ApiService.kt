@@ -274,6 +274,10 @@ interface ApiService {
 
     @POST("api/app/device/unbind/cancel")
     suspend fun cancelUnbind(@Body body: RequestIdReq): Envelope<CancelResult>
+
+    /** 注销账号（需密码确认；仅限未入组成员）。 */
+    @POST("api/app/me/cancel")
+    suspend fun cancelAccount(@Body body: CancelAccountReq): Envelope<CancelAccountResult>
 }
 
 @kotlinx.serialization.Serializable

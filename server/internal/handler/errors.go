@@ -49,6 +49,9 @@ func fail(c *gin.Context, err error) {
 		errors.Is(err, service.ErrNotLeader),
 		errors.Is(err, service.ErrBanned):
 		httpx.Forbidden(c, err.Error())
+	case errors.Is(err, service.ErrNotFamilyFreeForCancel),
+		errors.Is(err, repo.ErrMemberInFamilyCancel):
+		httpx.BadRequest(c, err.Error())
 	case errors.Is(err, service.ErrAlreadyInFamily),
 		errors.Is(err, service.ErrLeaderMustTransfer),
 		errors.Is(err, repo.ErrInvitationPending),

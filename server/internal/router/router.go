@@ -56,6 +56,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		// 前台登出：只要 access 有效就能调，不要求已入组
 		appAuth := r.Group("/api/app", mw.RequireMember())
 		appAuth.POST("/logout", authHandler.LogoutMember)
+		appAuth.POST("/me/cancel", authHandler.CancelMember) // 注销账号（2026-11-07）
 	}
 
 	// 后台：只认 admin token

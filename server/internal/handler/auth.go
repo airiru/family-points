@@ -268,3 +268,27 @@ func (h *Auth) MeMember(c *gin.Context) {
 		"avatar":       m.Avatar,
 	})
 }
+
+// CancelMember POST /api/app/me/cancel —— 注销账号（2026-11-07）。
+// 需密码二次确认；仅限未入组成员（在组内返回 400 提示先退出）。
+func (h *Auth) CancelMember(c *gin.Context) {
+	member, ok := middleware.CurrentMember(c)
+	if !ok {
+		httpx.Unauthorized(c, "未登录")
+		return
+	}
+	var in struct {
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	if err := h.svc.CancelMember(c.Request.Context(), member, in.Password); err != nil {
+		fail(c, err)
+		return
+	}
+	// 审计：主体马上会被删除，记一条留痕（family_id 为 NULL 属预期）
+	recordAudit(c, "account.cancel", "member", &member.ID, nil, gin.H{"username": member.Username})
+	httpx.OK(c, gin.H{"cancelled": true})
+}

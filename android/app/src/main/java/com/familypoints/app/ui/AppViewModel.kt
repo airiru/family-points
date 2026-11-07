@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familypoints.app.data.api.ApiClient
+import com.familypoints.app.data.api.CancelAccountReq
 import com.familypoints.app.data.api.CancelResult
 import com.familypoints.app.data.api.DecideUnbindReq
 import com.familypoints.app.data.api.DeviceKeyReq
@@ -243,6 +244,22 @@ class AppViewModel @Inject constructor(
             _session.value = Session.Ready(me)
             loadOverview()
             scheduler.runNow()
+        }
+    }
+
+    /** 注销账号：成功即本地登出（服务端已删账号与全部会话）。 */
+    fun cancelAccount(password: String, onDone: () -> Unit = {}) = launchBusy {
+        val resp = api.cancelAccount(CancelAccountReq(password))
+        if (resp.ok) {
+            tokenStore.clear()
+            clearScreenDetail()
+            _members.value = emptyList()
+            _ranking.value = emptyList()
+            _session.value = Session.LoggedOut
+            _message.value = "账号已注销"
+            onDone()
+        } else {
+            _message.value = resp.error ?: "注销失败"
         }
     }
 
