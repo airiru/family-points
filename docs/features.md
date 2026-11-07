@@ -1434,7 +1434,7 @@ Web 后台「屏幕时间」页除结算行外，另有一张「设备原始上�
 | 15.2.41 | `/api/admin/feedbacks` | GET | **用户反馈列表**（`handled=0|1|2`，2=全部；`limit` ≤200，新的在前） |
 | 15.2.42 | `/api/admin/feedback/:id/handle` | POST | **标记反馈已处理**（重复标记 404） |
 | 15.2.44 | `/api/admin/members` | GET | **全局用户账号列表**（用户账号管理）：`keyword` 匹配用户名/昵称，`limit` ≤200；含家庭组名 / 角色 / 积分 / 停用状态 |
-| 15.2.45 | `/api/admin/member/:id/disable` | POST | **停用 / 启用成员账号**（`disabled`）。停用立即吊销全部 refresh；登录与所有接口（中间件查库）都拒绝，提示「账号已被停用」 |
+| 15.2.45 | `/api/admin/member/:id/disable` | POST | **停用 / 启用成员账号**（`disabled`）。停用立即吊销全部 refresh；登录与所有接口（中间件查库）都拒绝，提示「账号已被停用」；**App 端 refresh 失败即本地登出回登录页**（2026-11-07 补） |
 | 15.2.46 | `/api/admin/member/:id/reset-password` | POST | **重置成员密码**（`password` ≥8 位），重置后吊销全部 refresh。**不代建账号**（19.24 定：账号只能本人注册） |
 | 15.2.43 | `/api/admin/site-config` | GET/POST | **站点配置**（后台「系统→站点设置」页）：当前仅 `icp`（ICP 备案号，≤64 字）；POST 写入并审计 `site.config` |
 | 15.3.61 | `/api/app/site-config` | GET | 站点配置（登录即可读，无需入组）；`/api/app/state` 的返回体也带 `icp`（15.3.2） |
