@@ -506,7 +506,7 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
         }
         else -> {
             reportPill = Triple("正常", Green, GreenSoft)
-            reportDesc = "上次成功：${fmtClock(reportStatus!!.lastSuccessAt!!)}（每天 21:00 自动上报昨天）"
+            reportDesc = "上次成功：${fmtClock(reportStatus!!.lastSuccessAt!!)}"
         }
     }
 
