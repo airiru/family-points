@@ -144,6 +144,10 @@ func main() {
 }
 
 // ensureDatabase 建库（不存在时）。必须连到不指定库的 DSN 才能执行 CREATE DATABASE。
+//
+// 2026-11-07：先查库是否已存在（生产服务器常是「有库无建库权限」的共享 MySQL），
+// 存在则直接跳过——CREATE DATABASE IF NOT EXISTS 在 MySQL 5.7 上也会校验排序规则
+// 并报 Unknown collation（0900 系是 8.0 专属）。新建一律用 utf8mb4_general_ci（5.7/8.0 通用）。
 func ensureDatabase(cfg config.DB) error {
 	conn, err := sql.Open("mysql", cfg.DSN(""))
 	if err != nil {
@@ -151,8 +155,18 @@ func ensureDatabase(cfg config.DB) error {
 	}
 	defer conn.Close()
 
+	var cnt int
+	if err := conn.QueryRow(
+		"SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?", cfg.Name,
+	).Scan(&cnt); err != nil {
+		return err
+	}
+	if cnt > 0 {
+		return nil
+	}
+
 	stmt := fmt.Sprintf(
-		"CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci",
+		"CREATE DATABASE `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci",
 		cfg.Name,
 	)
 	if _, err := conn.Exec(stmt); err != nil {
