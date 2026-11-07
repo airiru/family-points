@@ -120,7 +120,7 @@ internal fun UsageTotalCard(detail: MemberDetail, selected: String?) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("$night 分钟", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text("夜间使用", fontSize = 11.5.sp, color = Sub)
+                    Text("睡觉时间", fontSize = 11.5.sp, color = Sub)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     NightVerdictPill(detail.nightOk, detail.settled)
@@ -257,7 +257,7 @@ internal fun HourlyBars(hours: List<Int>, nightStart: Int, nightEnd: Int) {
             }
         }
         Text(
-            "灰色柱子 = 夜间时段（$nightStart:00–$nightEnd:00）",
+            "灰色柱子 = 睡觉时段（$nightStart:00–$nightEnd:00）",
             fontSize = 11.sp, color = Sub,
             modifier = Modifier.padding(top = 4.dp),
         )
@@ -339,7 +339,7 @@ internal fun DeviceBreakdown(devices: List<MemberDeviceDetail>) {
                 Column(Modifier.weight(1f)) {
                     Text(d.deviceModel.ifBlank { "设备" }, fontSize = 13.sp)
                     Text(
-                        if (d.nightMin != null && d.nightMin > 0) "夜间 ${d.nightMin} 分钟" else "夜间 0 分钟",
+                        if (d.nightMin != null && d.nightMin > 0) "睡觉时间 ${d.nightMin} 分钟" else "睡觉时间 0 分钟",
                         fontSize = 11.sp, color = Sub,
                     )
                 }

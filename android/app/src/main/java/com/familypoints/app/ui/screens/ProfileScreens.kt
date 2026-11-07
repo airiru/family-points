@@ -703,7 +703,7 @@ fun ScreenTimeScreen(vm: AppViewModel, nav: NavHostController, asTab: Boolean = 
                         Text(
                             "每天 10:00 / 18:00 定时上报「最近 7 天」的数据；打开 App 时补算一次；也可点下方按钮手动上报。\n" +
                                 "重复上报会覆盖同一天的结果，不会重复计分。\n" +
-                                "夜间时段（${nightStart}:00–${nightEnd}:00）的数据记在前一天账上。\n" +
+                                "睡觉时段（${nightStart}:00–${nightEnd}:00）的数据记在前一天账上。\n" +
                                 "是否达标、扣多少分**全部由服务端按规则计算**，本页只展示结果。",
                             fontSize = 12.sp,
                             color = Sub,
