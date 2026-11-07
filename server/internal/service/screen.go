@@ -99,8 +99,22 @@ func (s *Screen) SaveScreenRule(ctx context.Context, me *model.Member, in SaveSc
 	if err := requireLeader(me); err != nil {
 		return nil, err
 	}
+	// member_id = 0：**应用到全组**（2026-11-07 定稿，睡觉规则页默认选项）——
+	// 给全组每个成员各存一份相同配置（screen_rules 是每成员一条）。
 	if in.MemberID == 0 {
-		return nil, fmt.Errorf("%w：缺少 member_id", ErrInvalidInput)
+		members, err := s.family.Members(ctx, *me.FamilyID, true)
+		if err != nil {
+			return nil, err
+		}
+		var last *model.ScreenRule
+		for _, m := range members {
+			in.MemberID = m.ID
+			last, err = s.SaveScreenRule(ctx, me, in)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return last, nil
 	}
 	if _, err := s.family.MemberInFamily(ctx, *me.FamilyID, in.MemberID); err != nil {
 		return nil, err

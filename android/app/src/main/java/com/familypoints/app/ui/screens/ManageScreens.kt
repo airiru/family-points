@@ -395,7 +395,8 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
     val screenRules by vm.screenRules.collectAsStateWithLifecycle()
     val rules by vm.rules.collectAsStateWithLifecycle()
 
-    var selectedId by remember { mutableStateOf<Long?>(null) }
+    // 2026-11-07：适用成员默认「全部成员」（selectedId = 0 = 应用到全组）
+    var selectedId by remember { mutableStateOf(0L) }
     var expanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.loadRules() }
@@ -419,12 +420,20 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
                     Box {
                         OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                members.firstOrNull { it.id == (selectedId ?: current?.memberId) }?.nickname
-                                    ?: "选择成员",
+                                if (selectedId == 0L) "全部成员（应用到全组）"
+                                else members.firstOrNull { it.id == selectedId }?.nickname
+                                    ?: "全部成员（应用到全组）",
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("全部成员（应用到全组）") },
+                                onClick = {
+                                    selectedId = 0L
+                                    expanded = false
+                                },
+                            )
                             members.forEach { m ->
                                 DropdownMenuItem(
                                     text = { Text(m.nickname) },
@@ -449,9 +458,8 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
                 RuleEditor(
                     rule = current,
                     onSave = { bedtime, wake, maxMin, unitMin, penaltyPoints ->
-                        val targetId = selectedId ?: current?.memberId ?: members.firstOrNull()?.id
-                        if (targetId != null) {
-                            vm.saveScreenRule(
+                        val targetId = selectedId
+                        vm.saveScreenRule(
                                 ScreenRuleSaveReq(
                                     memberId = targetId,
                                     thresholdMin = current?.thresholdMin ?: 120,
@@ -462,10 +470,9 @@ fun SleepRuleScreen(vm: AppViewModel, nav: NavHostController) {
                                     nightMaxMin = maxMin,
                                     nightPenaltyUnitMin = unitMin,
                                     nightPenaltyPoints = penaltyPoints,
-                                    enabled = true,
-                                )
+                                enabled = true,
                             )
-                        }
+                        )
                     },
                 )
             }
