@@ -142,7 +142,7 @@ fun FamilyScreen(vm: AppViewModel, nav: NavHostController?, onBack: (() -> Unit)
                             ) { Text("复制", fontSize = 12.5.sp, color = Sub) }
                         }
                         Text(
-                            if (codeHidden) "已隐藏：别人搜不到，但仍可凭码申请加入。"
+                            if (codeHidden) "已隐藏：别人搜不到，也无法凭码申请加入。"
                             else "别人可用它在「搜索家庭」里找到本组并申请加入，需要组长审批。",
                             fontSize = 11.5.sp, color = Sub,
                             modifier = Modifier.padding(top = 8.dp),

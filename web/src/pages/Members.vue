@@ -84,7 +84,7 @@ async function invite() {
     <div class="pad" style="display:flex;gap:10px;align-items:center">
       <input class="input" style="max-width:280px" v-model="inviteName" placeholder="输入用户名，例如 xiaoyue" @keyup.enter="invite" />
       <button class="btn" @click="invite">邀请加入</button>
-      <span class="hint" style="margin-left:8px" v-if="fam">邀请码 <code>{{ fam.invite_code }}</code> · 7 天有效</span>
+      <span class="hint" style="margin-left:8px" v-if="fam">家庭码 <code>{{ fam.invite_code }}</code>（永不过期）</span>
     </div>
   </div>
 
@@ -118,7 +118,7 @@ async function invite() {
           </td>
         </tr>
         <tr v-if="!loading && !list.length">
-          <td colspan="8"><div class="empty"><b>这个组还没有成员</b>用上面的用户名邀请，或让成员用邀请码加入</div></td>
+          <td colspan="8"><div class="empty"><b>这个组还没有成员</b>用上面的用户名邀请，或让成员凭家庭码申请加入</div></td>
         </tr>
       </tbody>
     </table>

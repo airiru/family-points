@@ -42,7 +42,7 @@ function enter(f) {
     </div>
     <table>
       <thead>
-        <tr><th>#</th><th>名称</th><th>成员</th><th>邀请码</th><th>创建时间</th><th></th></tr>
+        <tr><th>#</th><th>名称</th><th>成员</th><th>家庭码</th><th>创建时间</th><th></th></tr>
       </thead>
       <tbody>
         <tr v-for="f in store.families" :key="f.id">

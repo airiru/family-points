@@ -8,12 +8,12 @@ CREATE TABLE IF NOT EXISTS families (
   -- 家庭码（2026-11-06）：8 位、**唯一且永不可更改**、不过期。
   -- 建组时自动生成；原来「7 天有效期 + 可重置」的邀请码语义已废除。
   invite_code     CHAR(8)      NOT NULL UNIQUE,
-  -- 隐藏后按码搜索搜不到（但仍可凭码直接加入）：等价于「不对外公开」。
+  -- 隐藏 = 搜不到 + 凭码申请也拒绝（2026-11-07 定稿）：对外等价于码不存在。
   code_hidden     TINYINT(1)   NOT NULL DEFAULT 0,
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 被踢出 / 自行退出后的禁入名单（同组不可再次加入）
+-- 被踢出 / 自行退出后的禁入名单（凭码申请被拒 403；组长邀请不受限，接受邀请时清除）
 CREATE TABLE IF NOT EXISTS family_bans (
   id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   family_id  BIGINT UNSIGNED NOT NULL,
@@ -352,7 +352,7 @@ CREATE TABLE IF NOT EXISTS family_invitations (
   -- 两个方向共用同一套状态机与「同组同一人只能一条 pending」的唯一键
   direction       ENUM('invite','request') NOT NULL DEFAULT 'invite',
   status          ENUM('pending','accepted','rejected','cancelled','expired') NOT NULL DEFAULT 'pending',
-  expires_at      DATETIME(3)  NOT NULL,      -- 7 天，与邀请码一致
+  expires_at      DATETIME(3)  NOT NULL,      -- 7 天（邀请/申请本身的有效期；家庭码永不过期）
   decided_at      DATETIME(3)  NULL,
   created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   -- 生成列：只有 pending 行参与唯一约束，其余状态为 NULL 不冲突。

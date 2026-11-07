@@ -56,7 +56,7 @@ const leader = computed(() => members.value.find(m => m.role === 'leader'))
           <span class="muted">家庭组 ID</span><b>#{{ info?.id ?? store.familyId }}</b>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:13px">
-          <span class="muted">邀请码</span>
+          <span class="muted">家庭码</span>
           <span><code>{{ info?.invite_code || fam?.invite_code || '—' }}</code></span>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:13px">

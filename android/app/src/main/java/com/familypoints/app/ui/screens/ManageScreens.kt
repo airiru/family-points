@@ -161,7 +161,7 @@ fun ManageMembersScreen(vm: AppViewModel, nav: NavHostController) {
                             Column(Modifier.weight(1f)) {
                                 Text("在搜索结果中隐藏", fontWeight = FontWeight.Medium, fontSize = 13.5.sp)
                                 Text(
-                                    "隐藏后别人搜不到，但仍可凭码直接申请",
+                                    "隐藏后别人搜不到，也无法凭码申请加入",
                                     fontSize = 11.5.sp, color = Sub,
                                 )
                             }
