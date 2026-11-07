@@ -152,10 +152,16 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                 }
             }
 
-            // 所在家庭：右侧显示组名，点进去看成员 / 家庭码 / 退出
+            // 家庭 / 通知 / 设备管理 同组（2026-11-07 用户要求）
             item {
-                CardBox(modifier = Modifier.clickable { nav.navigate(Routes.FAMILY) }) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                CardBox {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { nav.navigate(Routes.FAMILY) }
+                            .padding(vertical = 6.dp),
+                    ) {
                         Box(
                             Modifier
                                 .size(34.dp)
@@ -179,6 +185,14 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                         Spacer(Modifier.width(6.dp))
                         Text("›", fontSize = 18.sp, color = Sub)
                     }
+                    Divider(color = Line)
+                    MenuItem(
+                        "🔔", "通知",
+                        if (unread > 0) "有 $unread 条未读" else "投票提醒与结果",
+                        badge = unread,
+                    ) { nav.navigate(Routes.NOTIFY) }
+                    Divider(color = Line)
+                    MenuItem("📱", "设备管理", "查看 / 解绑本账号的设备") { nav.navigate(Routes.DEVICES) }
                 }
             }
 
@@ -197,22 +211,6 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                     MenuItem("📋", "积分流水", "每一条加分与扣分") { nav.navigate(Routes.RECORDS) }
                     Divider(color = Line)
                     MenuItem("🎁", "赠送积分", "把积分转给其他成员") { nav.navigate(Routes.GIFT) }
-                }
-            }
-
-            item {
-                CardBox {
-                    MenuItem(
-                        "🔔", "通知",
-                        if (unread > 0) "有 $unread 条未读" else "投票提醒与结果",
-                        badge = unread,
-                    ) { nav.navigate(Routes.NOTIFY) }
-                }
-            }
-
-            item {
-                CardBox {
-                    MenuItem("📱", "设备管理", "查看 / 解绑本账号的设备") { nav.navigate(Routes.DEVICES) }
                 }
             }
 
