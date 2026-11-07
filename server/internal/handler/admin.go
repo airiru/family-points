@@ -380,6 +380,29 @@ func (h *Admin) ScreenDeviceReports(c *gin.Context) {
 	httpx.OK(c, gin.H{"reports": reports, "devices": devices})
 }
 
+// Dissolve POST /api/admin/family/:family_id/dissolve —— 解散家庭组（高危，5.5.2）。
+// 请求体必须带 confirm_name = 当前组名（逐字一致），否则 400。
+func (h *Admin) Dissolve(c *gin.Context) {
+	fid, ok := pathFamilyID(c)
+	if !ok {
+		return
+	}
+	var in struct {
+		ConfirmName string `json:"confirm_name"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		httpx.BadRequest(c, "请求体格式不正确")
+		return
+	}
+	name, err := h.svc.Dissolve(c.Request.Context(), fid, in.ConfirmName)
+	if err != nil {
+		fail(c, err)
+		return
+	}
+	recordAudit(c, "family.dissolve", "family", &fid, gin.H{"name": name}, nil)
+	httpx.OK(c, gin.H{"dissolved": true, "name": name})
+}
+
 // Bans GET /api/admin/family/:family_id/bans —— 本组封禁名单（只读）。
 func (h *Admin) Bans(c *gin.Context) {
 	fid, ok := pathFamilyID(c)

@@ -76,6 +76,44 @@ func (r *Family) AllWithCounts(ctx context.Context) ([]FamilyRow, error) {
 	return list, err
 }
 
+// Dissolve 解散家庭组（后台运营动作，5.5.2）：一个事务里做完全部级联。
+//
+//   - members：score/frozen 清零、family_id 置 NULL、组长身份收回（与 leave/kick 同口径）
+//   - 删除：families 行、睡觉规则、屏幕时间规则、商城商品、禁入名单
+//   - 关闭：未完结任务（open/taken → closed，冻结随成员清零一并消失）
+//   - 作废：pending 的入组邀请 / 解绑申请 → cancelled
+//   - **保留**：流水、上报、审计、通知（append-only，运营可查；family_id 指向已消失的组）
+func (r *Family) Dissolve(ctx context.Context, familyID uint64) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	steps := []string{
+		// 成员全部退出（积分清零 + 组长身份收回）
+		`UPDATE members SET score = 0, frozen_score = 0, family_id = NULL, role = 'member' WHERE family_id = ?`,
+		// 未完结任务全部关闭（冻结不再有意义）
+		`UPDATE tasks SET status = 'closed', escrow_points = 0 WHERE family_id = ? AND status IN ('open','taken')`,
+		// 组级配置：删除
+		`DELETE FROM rules WHERE family_id = ?`,
+		`DELETE FROM screen_rules WHERE family_id = ?`,
+		`DELETE FROM items WHERE family_id = ?`,
+		`DELETE FROM family_bans WHERE family_id = ?`,
+		// pending 的邀请 / 解绑申请作废
+		`UPDATE family_invitations SET status = 'cancelled', decided_at = NOW(3) WHERE family_id = ? AND status = 'pending'`,
+		`UPDATE device_unbind_requests SET status = 'cancelled', decided_at = NOW(3) WHERE family_id = ? AND status = 'pending'`,
+		// 组本身删除（历史数据的 family_id 变成悬空引用，属预期）
+		`DELETE FROM families WHERE id = ?`,
+	}
+	for _, q := range steps {
+		if _, err := tx.ExecContext(ctx, q, familyID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // LeaderID 取本组组长 id（设备解绑申请通知用）。
 func (r *Family) LeaderID(ctx context.Context, familyID uint64) (uint64, error) {
 	var id uint64

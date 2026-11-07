@@ -10,8 +10,27 @@ const bans = ref([])
 const attempts = ref([])
 const loading = ref(true)
 const name = ref('')
+const confirmName = ref('')
 
 const fam = computed(() => currentFamily())
+
+async function dissolve() {
+  if (confirmName.value.trim() !== (info.value?.name || '')) {
+    toast('组名不一致，未解散')
+    return
+  }
+  if (!window.confirm(`确认解散「${info.value?.name}」？成员积分将清零且不可恢复。`)) return
+  try {
+    await api(`/admin/family/${store.familyId}/dissolve`, {
+      method: 'POST',
+      body: { confirm_name: confirmName.value.trim() },
+    })
+    toast('已解散')
+    confirmName.value = ''
+    await loadFamilies()
+    store.familyId = 0
+  } catch (e) { toastErr(e) }
+}
 
 async function load() {
   if (!store.familyId) { loading.value = false; return }
@@ -108,8 +127,28 @@ const banReason = { kicked: '被踢出', left: '自行退出' }
       </table>
       <div class="pad" style="border-top:1px solid var(--line)">
         <div class="hint">
-          家庭组<b>不能删除</b>（会连带所有历史账目）。需要停用请把成员全部退出，组会自然空置。<br />
+          组本身不可「删除后保留成员」——需要彻底清掉请用左侧「解散家庭组」（高危，需输入组名确认）。<br />
           「移交管理员」不在本期范围：管理员是运营方账号，与家庭组无归属关系。
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="border-color:var(--red-soft)">
+      <div class="card-h"><h3 style="color:var(--red)">解散家庭组</h3><span class="sp"></span>
+        <span class="hint">高危操作 · 不可恢复（5.5.2）</span>
+      </div>
+      <div class="pad" style="display:flex;flex-direction:column;gap:10px">
+        <div class="hint">
+          解散后：<b>全部成员积分清零</b>并回到未入组态（组长身份收回）；组级配置（睡觉规则、
+          屏幕规则、商城商品、禁入名单）删除；未完结任务关闭；pending 的邀请与解绑申请作废。<br />
+          历史流水、上报、审计<b>保留</b>，可在「数据」页按 family_id 继续查询。
+        </div>
+        <div class="field">
+          <label>输入当前组名以确认：<b>{{ info?.name }}</b></label>
+          <div class="row">
+            <input class="input" v-model="confirmName" placeholder="逐字输入组名" />
+            <button class="btn" style="background:var(--red)" @click="dissolve" :disabled="!info">解散</button>
+          </div>
         </div>
       </div>
     </div>

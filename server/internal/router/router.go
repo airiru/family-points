@@ -84,6 +84,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.POST("/family/:family_id/member/hidden", adminHandler.SetHidden)
 		admin.POST("/family/:family_id/member/leader", adminHandler.TransferLeader)
 		admin.POST("/family/:family_id/rename", adminHandler.RenameFamily)
+		admin.POST("/family/:family_id/dissolve", adminHandler.Dissolve)
 		admin.POST("/family/:family_id/rule/save", adminHandler.SaveRule)
 		admin.POST("/family/:family_id/item/save", adminHandler.SaveItem)
 		admin.GET("/export/records", adminHandler.ExportRecords)

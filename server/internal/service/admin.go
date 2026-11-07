@@ -20,6 +20,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"familypoints/server/internal/model"
+	"familypoints/server/internal/notify"
 	"familypoints/server/internal/repo"
 	"familypoints/server/internal/scoring"
 )
@@ -33,11 +34,12 @@ type Admin struct {
 	ledger      *repo.Ledger
 	report      *repo.Report
 	task        *repo.Task
+	notifier    *notify.Service // 旁路，允许为 nil
 }
 
 // NewAdmin 构造。
-func NewAdmin(f *repo.Family, inv *repo.Invitation, a *repo.Auth, s *repo.Screen, l *repo.Ledger, r *repo.Report, t *repo.Task) *Admin {
-	return &Admin{families: f, invitations: inv, auth: a, screen: s, ledger: l, report: r, task: t}
+func NewAdmin(f *repo.Family, inv *repo.Invitation, a *repo.Auth, s *repo.Screen, l *repo.Ledger, r *repo.Report, t *repo.Task, n *notify.Service) *Admin {
+	return &Admin{families: f, invitations: inv, auth: a, screen: s, ledger: l, report: r, task: t, notifier: n}
 }
 
 // ---------- 只读视图（2026-11-04 补：后台 12 个页面需要能读到现值）----------
@@ -113,6 +115,33 @@ func (a *Admin) Records(ctx context.Context, f repo.RecordFilter) ([]model.Recor
 		f.Limit = 50
 	}
 	return a.report.Records(ctx, f)
+}
+
+// ErrConfirmNameRequired 解散家庭组必须传与组名完全一致的确认串。
+var ErrConfirmNameRequired = errors.New("请输入家庭组名称以确认解散")
+
+// Dissolve 解散家庭组（后台运营动作，5.5.2）：必须输入组名二次确认。
+// 先给全组发解散通知（此时成员还在组里），再执行级联删除。
+func (a *Admin) Dissolve(ctx context.Context, familyID uint64, confirmName string) (string, error) {
+	f, err := a.families.ByID(ctx, familyID)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(confirmName) != f.Name {
+		return "", ErrConfirmNameRequired
+	}
+	members, err := a.families.Members(ctx, familyID, true)
+	if err != nil {
+		return "", err
+	}
+	// 通知要在解散前发：解散后成员已不在组内，组内通知通道失效
+	for _, m := range members {
+		a.notifier.Dissolved(ctx, familyID, m.ID, f.Name)
+	}
+	if err := a.families.Dissolve(ctx, familyID); err != nil {
+		return "", err
+	}
+	return f.Name, nil
 }
 
 // Bans 本组封禁名单（后台只读；解除只有「组长邀请入组时自动清除」一条路径）。

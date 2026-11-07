@@ -93,6 +93,23 @@ echo "== 7. 越权 =="
 chk "成员 token 打后台 → 401" "401" "$(code $B/api/admin/families -H "Authorization: Bearer $OUT_AT")"
 chk "成员 token 导出 → 401" "401" "$(code "$B/api/admin/export/records?family_id=$FID" -H "Authorization: Bearer $OUT_AT")"
 
+echo "== 8. 解散家庭组（5.5.2，2026-11-07）=="
+# 用一个全新的组来解散，避免污染前面断言的组
+DL=$(reg "dl$RUN" "解散组长" true); DL_AT=$(echo "$DL" | jget "['data']['token']['access_token']"); DL_ID=$(echo "$DL" | jget "['data']['member']['id']")
+DFID=$(curl -s $B/api/app/family -H "Authorization: Bearer $DL_AT" | jget "['data']['id']")
+DM=$(reg "dm$RUN" "解散成员" false); DM_AT=$(echo "$DM" | jget "['data']['token']['access_token']")
+curl -s -o /dev/null -X POST $B/api/admin/family/$DFID/invite -H "$AH" -H 'Content-Type: application/json' -d "{"username":"dm$RUN"}"
+curl -s -o /dev/null -X POST $B/api/app/device/unbind/request -H "Authorization: Bearer $DM_AT" -H 'Content-Type: application/json' -d '{"device_key":"dlx"}'  # 未绑定设备 → 404，仅确认校验存在
+BEFORE_SCORE=$(curl -s $B/api/app/me -H "Authorization: Bearer $DM_AT" | jget "['data']['score']")
+chk "确认组名不对 → 400" "400" "$(code -X POST $B/api/admin/family/$DFID/dissolve -H "$AH" -H 'Content-Type: application/json' -d '{"confirm_name":"错的组名"}')"
+chk "确认组名一致 → 200" "200" "$(code -X POST $B/api/admin/family/$DFID/dissolve -H "$AH" -H 'Content-Type: application/json' -d "{\"confirm_name\":\"组$RUN\"}")"
+chk "解散后再解散 → 404" "404" "$(code -X POST $B/api/admin/family/$DFID/dissolve -H "$AH" -H 'Content-Type: application/json' -d "{\"confirm_name\":\"组$RUN\"}")"
+chk "组长失去组长身份" "member" "$(curl -s $B/api/app/me -H "Authorization: Bearer $DL_AT" | jget "['data']['role']")"
+chk "成员 family_id 清空" "None" "$(curl -s $B/api/app/me -H "Authorization: Bearer $DM_AT" | jget "['data']['family_id']")"
+chk "家庭组列表不再含它" "False" "$(curl -s $B/api/admin/families -H "$AH" | python -c "import sys,json;print(any(f['id']==$DFID for f in json.load(sys.stdin)['data']['families']))")"
+INV=$(curl -s -X POST $B/api/admin/family/$FID/invite -H "$AH" -H 'Content-Type: application/json' -d "{\"username\":\"dm$RUN\"}")
+chk "被解散的成员可以加入其他组" "200" "$(echo "$INV" | python -c 'import sys,json;print(200 if json.load(sys.stdin).get("ok") else 0)')"
+
 echo
 echo "通过 $pass 项，失败 $fail 项"
 [ "$fail" -eq 0 ]

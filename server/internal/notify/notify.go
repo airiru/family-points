@@ -159,6 +159,12 @@ func (s *Service) JoinDecided(ctx context.Context, familyID, applicantID uint64,
 	s.one(ctx, familyID, applicantID, TypeJoinDecided, title, msg, "join_request", applicantID)
 }
 
+// Dissolved 家庭组被运营方解散 → 通知每位成员（解散前发，否则通道已失效）。
+func (s *Service) Dissolved(ctx context.Context, familyID, memberID uint64, familyName string) {
+	s.one(ctx, familyID, memberID, TypeKicked,
+		"家庭组「"+familyName+"」已解散", "积分已清零，你可以加入其他家庭组", "family", familyID)
+}
+
 // UnbindRequested 成员申请解绑设备 → 通知组长审批。
 func (s *Service) UnbindRequested(ctx context.Context, familyID, leaderID, requesterID uint64, nickname, deviceModel string) {
 	s.one(ctx, familyID, leaderID, TypeUnbindRequested,
