@@ -194,6 +194,8 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                     ) { nav.navigate(Routes.NOTIFY) }
                     Divider(color = Line)
                     MenuItem("📱", "设备管理", "查看 / 解绑本账号的设备") { nav.navigate(Routes.DEVICES) }
+                    Divider(color = Line)
+                    MenuItem("⚙️", "设置", "协议、版本、退出与注销") { nav.navigate(Routes.SETTINGS) }
                 }
             }
 
@@ -237,7 +239,7 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
 }
 
 @Composable
-private fun MenuItem(icon: String, title: String, subtitle: String, badge: Int = 0, onClick: () -> Unit) {
+internal fun MenuItem(icon: String, title: String, subtitle: String, badge: Int = 0, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
