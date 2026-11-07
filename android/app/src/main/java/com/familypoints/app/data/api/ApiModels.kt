@@ -648,3 +648,9 @@ data class CancelAccountReq(val password: String)
 
 @Serializable
 data class CancelAccountResult(val cancelled: Boolean = false)
+
+@Serializable
+data class FeedbackReq(val content: String)
+
+@Serializable
+data class FeedbackResult(val submitted: Boolean = false)

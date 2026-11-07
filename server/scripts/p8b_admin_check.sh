@@ -110,6 +110,19 @@ chk "家庭组列表不再含它" "False" "$(curl -s $B/api/admin/families -H "$
 INV=$(curl -s -X POST $B/api/admin/family/$FID/invite -H "$AH" -H 'Content-Type: application/json' -d "{\"username\":\"dm$RUN\"}")
 chk "被解散的成员可以加入其他组" "200" "$(echo "$INV" | python -c 'import sys,json;print(200 if json.load(sys.stdin).get("ok") else 0)')"
 
+echo "== 9. 用户反馈（15.2.41/42 + 15.3.60，2026-11-07）=="
+FB_AT=$(echo "$DM" | jget "['data']['token']['access_token']")  # dm 已在 FID 组；反馈无需入组
+curl -s -o /dev/null -X POST $B/api/app/feedback -H "Authorization: Bearer $FB_AT" -H 'Content-Type: application/json' -d '{"content":"   "}'
+chk "空内容 → 400" "400" "$(code -X POST $B/api/app/feedback -H "Authorization: Bearer $FB_AT" -H 'Content-Type: application/json' -d '{"content":"   "}')"
+LONG=$(python -c 'print("字"*501)')
+chk "超 500 字 → 400" "400" "$(code -X POST $B/api/app/feedback -H "Authorization: Bearer $FB_AT" -H 'Content-Type: application/json' -d "{\"content\":\"$LONG\"}")"
+chk "正常提交 → 200" "200" "$(code -X POST $B/api/app/feedback -H "Authorization: Bearer $FB_AT" -H 'Content-Type: application/json' -d "{\"content\":\"冒烟反馈$RUN\"}")"
+FB_ID=$(curl -s "$B/api/admin/feedbacks?handled=0&limit=50" -H "$AH" | python -c "import sys,json;print([f['id'] for f in json.load(sys.stdin)['data']['items'] if f['content']=='冒烟反馈$RUN'][0])")
+chk "后台列表含它（带用户名快照）" "True" "$(curl -s "$B/api/admin/feedbacks?handled=0" -H "$AH" | python -c "import sys,json;print(any(f['id']==$FB_ID and f['username']=='dm$RUN' for f in json.load(sys.stdin)['data']['items']))")"
+chk "标记已处理 → 200" "200" "$(code -X POST $B/api/admin/feedback/$FB_ID/handle -H "$AH")"
+chk "重复标记 → 404" "404" "$(code -X POST $B/api/admin/feedback/$FB_ID/handle -H "$AH")"
+chk "已处理列表含它" "True" "$(curl -s "$B/api/admin/feedbacks?handled=1" -H "$AH" | python -c "import sys,json;print(any(f['id']==$FB_ID for f in json.load(sys.stdin)['data']['items']))")"
+
 echo
 echo "通过 $pass 项，失败 $fail 项"
 [ "$fail" -eq 0 ]

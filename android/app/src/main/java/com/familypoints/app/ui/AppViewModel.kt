@@ -8,6 +8,7 @@ import com.familypoints.app.data.api.CancelAccountReq
 import com.familypoints.app.data.api.CancelResult
 import com.familypoints.app.data.api.DecideUnbindReq
 import com.familypoints.app.data.api.DeviceKeyReq
+import com.familypoints.app.data.api.FeedbackReq
 import com.familypoints.app.data.api.MemberDeviceView
 import com.familypoints.app.data.api.RequestIdReq
 import com.familypoints.app.data.api.UnbindRequestView
@@ -244,6 +245,17 @@ class AppViewModel @Inject constructor(
             _session.value = Session.Ready(me)
             loadOverview()
             scheduler.runNow()
+        }
+    }
+
+    /** 提交用户反馈（设置页）。 */
+    fun submitFeedback(content: String, onDone: () -> Unit = {}) = launchBusy {
+        val resp = api.submitFeedback(FeedbackReq(content))
+        if (resp.ok) {
+            _message.value = "已提交，感谢反馈"
+            onDone()
+        } else {
+            _message.value = resp.error ?: "提交失败"
         }
     }
 

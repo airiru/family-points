@@ -87,12 +87,15 @@ func main() {
 	deviceSvc := service.NewDevice(screenRepo, familyRepo, repo.NewDeviceUnbind(conn), notifier)
 	deviceHandler := handler.NewDevice(deviceSvc)
 
+	feedbackSvc := service.NewFeedback(repo.NewFeedback(conn))
+	feedbackHandler := handler.NewFeedback(feedbackSvc)
+
 	notifRepo := repo.NewNotification(conn)
 	notifHandler := handler.NewNotification(notifRepo)
 
 	r := router.Build(cfg.Env, conn, authHandler, familyHandler, ledgerHandler,
 		screenHandler, taskHandler, reportHandler, auditHandler, notifHandler,
-		adminHandler, couponHandler, deviceHandler, authMW)
+		adminHandler, couponHandler, deviceHandler, feedbackHandler, authMW)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

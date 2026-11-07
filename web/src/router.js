@@ -16,6 +16,7 @@ const routes = [
   { path: '/records', component: () => import('./pages/Records.vue'), meta: { title: '记录', group: '数据' } },
   { path: '/stats', component: () => import('./pages/Stats.vue'), meta: { title: '统计', group: '数据' } },
   { path: '/audit', component: () => import('./pages/Audit.vue'), meta: { title: '审计日志', group: '数据' } },
+  { path: '/feedback', component: () => import('./pages/Feedback.vue'), meta: { title: '用户反馈', group: '数据' } },
   { path: '/accounts', component: () => import('./pages/Accounts.vue'), meta: { title: '管理员账号', group: '系统' } },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]

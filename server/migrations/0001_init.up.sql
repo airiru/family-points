@@ -278,6 +278,17 @@ CREATE TABLE IF NOT EXISTS member_devices (
   KEY idx_family (family_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 用户反馈（2026-11-07）：设置页提交，后台查看与标记处理。
+CREATE TABLE IF NOT EXISTS feedbacks (
+  id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  member_id  BIGINT UNSIGNED NULL,
+  username   VARCHAR(20)  NOT NULL,         -- 快照（成员注销后仍可读）
+  content    VARCHAR(500) NOT NULL,
+  handled    TINYINT(1)   NOT NULL DEFAULT 0,
+  created_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  KEY idx_handled (handled, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 设备解绑申请（2026-11-07）：普通成员解绑需组长审批；组长可直接解绑。
 CREATE TABLE IF NOT EXISTS device_unbind_requests (
   id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

@@ -25,6 +25,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 	reportHandler *handler.Report, auditHandler *handler.Audit,
 	notifHandler *handler.Notification, adminHandler *handler.Admin,
 	couponHandler *handler.Coupon, deviceHandler *handler.Device,
+	feedbackHandler *handler.Feedback,
 	mw *middleware.Auth) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
@@ -57,6 +58,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		appAuth := r.Group("/api/app", mw.RequireMember())
 		appAuth.POST("/logout", authHandler.LogoutMember)
 		appAuth.POST("/me/cancel", authHandler.CancelMember) // 注销账号（2026-11-07）
+		appAuth.POST("/feedback", feedbackHandler.Submit) // 用户反馈（2026-11-07，无需入组）
 	}
 
 	// 后台：只认 admin token
@@ -86,6 +88,8 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 		admin.POST("/family/:family_id/member/leader", adminHandler.TransferLeader)
 		admin.POST("/family/:family_id/rename", adminHandler.RenameFamily)
 		admin.POST("/family/:family_id/dissolve", adminHandler.Dissolve)
+		admin.GET("/feedbacks", feedbackHandler.List)
+		admin.POST("/feedback/:id/handle", feedbackHandler.Handle)
 		admin.POST("/family/:family_id/rule/save", adminHandler.SaveRule)
 		admin.POST("/family/:family_id/item/save", adminHandler.SaveItem)
 		admin.GET("/export/records", adminHandler.ExportRecords)

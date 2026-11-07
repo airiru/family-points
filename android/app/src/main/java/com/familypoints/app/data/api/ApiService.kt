@@ -278,6 +278,10 @@ interface ApiService {
     /** 注销账号（需密码确认；仅限未入组成员）。 */
     @POST("api/app/me/cancel")
     suspend fun cancelAccount(@Body body: CancelAccountReq): Envelope<CancelAccountResult>
+
+    /** 提交用户反馈（1–500 字，无需入组）。 */
+    @POST("api/app/feedback")
+    suspend fun submitFeedback(@Body body: FeedbackReq): Envelope<FeedbackResult>
 }
 
 @kotlinx.serialization.Serializable

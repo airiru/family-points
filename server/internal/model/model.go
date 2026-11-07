@@ -414,3 +414,13 @@ type CouponVote struct {
 	Vote      string    `db:"vote" json:"vote"`
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 }
+
+// Feedback 是一条用户反馈（设置页提交，后台查看）。
+type Feedback struct {
+	ID        uint64    `db:"id" json:"id"`
+	MemberID  *uint64   `db:"member_id" json:"member_id"`
+	Username  string    `db:"username" json:"username"`
+	Content   string    `db:"content" json:"content"`
+	Handled   bool      `db:"handled" json:"handled"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+}

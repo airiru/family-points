@@ -76,6 +76,8 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
     var showCancel by remember { mutableStateOf(false) }
     var cancelPwd by remember { mutableStateOf("") }
     var showUpdate by remember { mutableStateOf(false) }
+    var showFeedback by remember { mutableStateOf(false) }
+    var feedbackText by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(title = "设置", onBack = { nav.popBackStack() })
@@ -124,6 +126,14 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                 }
             }
 
+            item {
+                CardBox {
+                    Text("帮助", fontSize = 12.sp, color = Sub, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    MenuItem("💬", "用户反馈", "问题和建议直达运营者") { showFeedback = true }
+                }
+            }
+
             // ---------- 会话（从个人设置移入，2026-11-07） ----------
             item {
                 CardBox {
@@ -150,6 +160,37 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
             }
             item { Spacer(Modifier.height(12.dp)) }
         }
+    }
+
+    if (showFeedback) {
+        AlertDialog(
+            onDismissRequest = { showFeedback = false },
+            title = { Text("用户反馈") },
+            text = {
+                Column {
+                    Text("问题和建议会直接提交给运营者。", fontSize = 12.sp, color = Sub)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = feedbackText,
+                        onValueChange = { if (it.length <= 500) feedbackText = it },
+                        label = { Text("反馈内容（1–500 字）") },
+                        minLines = 4,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.submitFeedback(feedbackText) {
+                        feedbackText = ""
+                        showFeedback = false
+                    }
+                }) { Text("提交", color = Primary, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFeedback = false; feedbackText = "" }) { Text("取消", color = Sub) }
+            },
+        )
     }
 
     if (showUpdate) {
