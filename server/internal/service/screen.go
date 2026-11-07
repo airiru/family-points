@@ -249,8 +249,8 @@ func (s *Screen) Report(ctx context.Context, me *model.Member, in ReportInput) (
 		}
 	}
 
-	// 1) 记录设备 + 该设备当天的原始上报（幂等：member+device+date）
-	if err := s.screen.UpsertDevice(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel); err != nil {
+	// 1) 设备绑定（一台设备只能绑一个账号，绑别人的 → 409）+ 该设备当天的原始上报（幂等：member+device+date）
+	if err := s.screen.BindDevice(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel); err != nil {
 		return nil, err
 	}
 	// 24 个桶齐全时以桶之和为 total：同一份数据不该算出两个总时长。
@@ -460,7 +460,7 @@ func (s *Screen) Snapshot(ctx context.Context, me *model.Member, in ReportInput)
 	}
 	date = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 
-	if err := s.screen.UpsertDevice(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel); err != nil {
+	if err := s.screen.BindDevice(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel); err != nil {
 		return err
 	}
 	if err := s.screen.UpsertDeviceReport(ctx, *me.FamilyID, me.ID, in.DeviceKey, in.DeviceModel,

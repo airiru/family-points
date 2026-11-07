@@ -16,7 +16,7 @@ score() { curl -s $B/api/app/me -H "Authorization: Bearer $1" | jget "['data']['
 # 2026-11-05 起不再需要设备令牌，改用成员登录态 + 客户端自报设备标识。
 report() {
   curl -s -X POST $B/api/app/screen/report -H "Authorization: Bearer $1" -H 'Content-Type: application/json' \
-    -d "{\"device_key\":\"${5:-devA}\",\"device_model\":\"${6:-Pixel-Test}\",\"report_date\":\"$2\",\"total_min\":$3,\"night_min\":$4}"
+    -d "{\"device_key\":\"${5:-devA$RUN}\",\"device_model\":\"${6:-Pixel-Test}\",\"report_date\":\"$2\",\"total_min\":$3,\"night_min\":$4}"
 }
 
 echo "== 1. 建组时自动写入默认配置 =="
@@ -90,8 +90,8 @@ chk "覆盖后 10-20 的流水只有 2 条（日+夜，旧的已回滚）" "2" "
 
 echo "== 7. 多设备：相加后结算 =="
 # 同一天两台设备：A 报 30，B 报 20 → 汇总 50，按 50 判定（阈值 120 不达标，不加分）
-report "$M_AT" 2026-10-25 30 0 devA 手机 >/dev/null
-R2=$(report "$M_AT" 2026-10-25 20 0 devB 平板)
+report "$M_AT" 2026-10-25 30 0 devA$RUN 手机 >/dev/null
+R2=$(report "$M_AT" 2026-10-25 20 0 devB$RUN 平板)
 chk "多设备相加 = 50" "50" "$(echo "$R2" | jget "['data']['total_min']")"
 chk "同日只产生 1 条结算行" "1" "$(curl -s "$B/api/app/screen/reports?member_id=$M_ID" -H "Authorization: Bearer $L_AT" | python -c "import sys,json;d=json.load(sys.stdin);r=[x for x in d['data']['reports'] if x['report_date'].startswith('2026-10-25')];print(len(r))")"
 
@@ -117,12 +117,12 @@ echo "== 10. 余额可为负：自动扣分无下限，主动支出仍校验（8
 # 阈值 0 / 超标扣 1000 / 不加分；不传夜间三项 → 关闭夜间判定，每次上报只产生 -1000
 chk "保存高扣分规则 → 200" "200" "$(code -X POST $B/api/app/screen-rule/save -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"member_id\":$M_ID,\"threshold_min\":0,\"bonus_points\":0,\"penalty_points\":1000}")"
 BAL0=$(score "$M_AT")
-R10=$(report "$M_AT" 2026-11-01 200 1 devA 手机)
+R10=$(report "$M_AT" 2026-11-01 200 1 devA$RUN 手机)
 chk "超标上报只扣日总量 -1000" "-1000" "$(echo "$R10" | jget "['data']['day_points']")"
 BAL1=$(score "$M_AT")
 chk "第一次扣分 = 原 -1000" "$((BAL0-1000))" "$BAL1"
 chk "余额已扣成负数" "True" "$([ "$BAL1" -lt 0 ] && echo True || echo False)"
-R11=$(report "$M_AT" 2026-11-02 200 1 devA 手机)
+R11=$(report "$M_AT" 2026-11-02 200 1 devA$RUN 手机)
 chk "负余额后第二次仍扣 -1000" "-1000" "$(echo "$R11" | jget "['data']['day_points']")"
 BAL2=$(score "$M_AT")
 chk "负余额后继续扣：新余额 = 旧 -1000" "$((BAL1-1000))" "$BAL2"
@@ -135,10 +135,10 @@ echo "== 11. 逐小时明细 + 成员详情（2026-11-06）=="
 # 快照：只落明细，不结算、不发分
 BAL_SNAP=$(score "$M_AT")
 HOURS='[0,0,0,0,0,0,0,0,0,10,20,0,0,0,0,0,0,0,0,30,40,0,0,0]'
-chk "今日快照 → 200" "200" "$(code -X POST $B/api/app/screen/snapshot -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"devA\",\"device_model\":\"手机\",\"report_date\":\"2026-11-03\",\"total_min\":100,\"night_min\":0,\"hourly\":$HOURS}")"
+chk "今日快照 → 200" "200" "$(code -X POST $B/api/app/screen/snapshot -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"devA$RUN\",\"device_model\":\"手机\",\"report_date\":\"2026-11-03\",\"total_min\":100,\"night_min\":0,\"hourly\":$HOURS}")"
 chk "快照不改余额（不结算）" "$BAL_SNAP" "$(score "$M_AT")"
-chk "快照桶数不是 24 → 400" "400" "$(code -X POST $B/api/app/screen/snapshot -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d '{\"device_key\":\"devA\",\"report_date\":\"2026-11-03\",\"hourly\":[1,2]}')"
-chk "上报带非 24 桶 → 400" "400" "$(code -X POST $B/api/app/screen/report -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d '{\"device_key\":\"devA\",\"report_date\":\"2026-11-03\",\"total_min\":5,\"hourly\":[1,2]}')"
+chk "快照桶数不是 24 → 400" "400" "$(code -X POST $B/api/app/screen/snapshot -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d '{\"device_key\":\"devA$RUN\",\"report_date\":\"2026-11-03\",\"hourly\":[1,2]}')"
+chk "上报带非 24 桶 → 400" "400" "$(code -X POST $B/api/app/screen/report -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d '{\"device_key\":\"devA$RUN\",\"report_date\":\"2026-11-03\",\"total_min\":5,\"hourly\":[1,2]}')"
 
 DET=$(curl -s "$B/api/app/screen/member/$M_ID?date=2026-11-03" -H "Authorization: Bearer $M_AT")
 chk "成员详情 200" "True" "$(echo "$DET" | python -c "import sys,json;print(json.load(sys.stdin)['ok'])")"
@@ -155,6 +155,33 @@ chk "组长可看成员详情" "True" "$(echo "$OTHER" | python -c "import sys,j
 chk "组长看到的是他人（is_self=false）" "False" "$(echo "$OTHER" | python -c "import sys,json;print(json.load(sys.stdin)['data']['is_self'])")"
 chk "不存在的成员 → 404" "404" "$(code "$B/api/app/screen/member/999999" -H "Authorization: Bearer $L_AT")"
 chk "非法 member_id → 400" "400" "$(code "$B/api/app/screen/member/abc" -H "Authorization: Bearer $L_AT")"
+
+echo "== 10. 设备绑定与解绑（2026-11-07，docs 15.5）=="
+M2=$(reg "m5b$RUN" "成员二" false); M2_AT=$(echo "$M2" | jget "['data']['token']['access_token']"); M2_ID=$(echo "$M2" | jget "['data']['member']['id']")
+curl -s -o /dev/null -X POST $B/api/admin/family/$FID/invite -H "Authorization: Bearer $A_AT" -H 'Content-Type: application/json' -d "{\"username\":\"m5b$RUN\"}"
+# devA$RUN 当前绑定在 M 名下（前面 M 用它上报过）
+chk "已绑定他人设备的 key 上报 → 409" "409" "$(code -X POST $B/api/app/screen/report -H "Authorization: Bearer $M2_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"devA$RUN\",\"total_min\":10}")"
+KEY2="devM2$RUN"
+report "$M2_AT" 2026-11-02 10 0 "$KEY2" 测试机 >/dev/null
+chk "新设备上报自动绑定（成员列表含它）" "True" "$(curl -s $B/api/app/screen/devices -H "Authorization: Bearer $M2_AT" | python -c "import sys,json;print(any(d['device_key']=='$KEY2' for d in json.load(sys.stdin)['data']['devices']))")"
+chk "成员直接调组长解绑接口 → 403" "403" "$(code -X POST $B/api/app/device/unbind -H "Authorization: Bearer $M2_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"$KEY2\"}")"
+UR=$(curl -s -X POST $B/api/app/device/unbind/request -H "Authorization: Bearer $M2_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"$KEY2\"}")
+chk "成员发起解绑申请 → ok" "True" "$(echo "$UR" | jget "['ok']")"
+UR_ID=$(echo "$UR" | jget "['data']['id']")
+chk "重复申请 → 409（一人一条 pending）" "409" "$(code -X POST $B/api/app/device/unbind/request -H "Authorization: Bearer $M2_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"$KEY2\"}")"
+chk "解绑别人的设备申请 → 404" "404" "$(code -X POST $B/api/app/device/unbind/request -H "Authorization: Bearer $M_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"$KEY2\"}")"
+chk "组长看到待审批 1 条" "1" "$(curl -s $B/api/app/device/unbind/requests -H "Authorization: Bearer $L_AT" | python -c "import sys,json;print(len(json.load(sys.stdin)['data']['items']))")"
+chk "组长同意 → 200" "200" "$(code -X POST $B/api/app/device/unbind/decide -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"request_id\":$UR_ID,\"approve\":true}")"
+chk "解绑后设备列表不含它" "False" "$(curl -s $B/api/app/screen/devices -H "Authorization: Bearer $M2_AT" | python -c "import sys,json;print(any(d['device_key']=='$KEY2' for d in json.load(sys.stdin)['data']['devices']))")"
+chk "重复审批 → 404" "404" "$(code -X POST $B/api/app/device/unbind/decide -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"request_id\":$UR_ID,\"approve\":true}")"
+# 解绑后 M2 换绑到 devA$RUN（原 M 的设备）？不行——devA 还绑在 M 名下。改为：M2 重新上报 KEY2 → 自动绑回 M2
+report "$M2_AT" 2026-11-02 15 0 "$KEY2" 测试机 >/dev/null
+chk "解绑后同设备再上报 → 重新绑定回 M2" "True" "$(curl -s $B/api/app/screen/devices -H "Authorization: Bearer $M2_AT" | python -c "import sys,json;print(any(d['device_key']=='$KEY2' for d in json.load(sys.stdin)['data']['devices']))")"
+# 组长直接解绑（成员无需申请）
+chk "组长直接解绑 M2 设备 → 200" "200" "$(code -X POST $B/api/app/device/unbind -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"$KEY2\"}")"
+chk "再解绑同一设备 → 404" "404" "$(code -X POST $B/api/app/device/unbind -H "Authorization: Bearer $L_AT" -H 'Content-Type: application/json' -d "{\"device_key\":\"$KEY2\"}")"
+chk "撤回不存在的申请 → 404" "404" "$(code -X POST $B/api/app/device/unbind/cancel -H "Authorization: Bearer $M2_AT" -H 'Content-Type: application/json' -d '{"request_id":999999}')"
+chk "我的申请列表 200" "200" "$(code $B/api/app/device/unbind/mine -H "Authorization: Bearer $M2_AT")"
 
 echo
 echo "通过 $pass 项，失败 $fail 项"

@@ -271,8 +271,27 @@ CREATE TABLE IF NOT EXISTS member_devices (
   device_model  VARCHAR(64)  NOT NULL,        -- 展示用：如 NOH-AN80
   first_seen_at DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   last_seen_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-  UNIQUE KEY uk_member_device (member_id, device_key),
+  -- 设备绑定（2026-11-07）：一台设备全局只能绑定一个账号；
+  -- 解绑后可绑其他账号（上报时自动绑定当前登录账号）。
+  UNIQUE KEY uk_device (device_key),
+  KEY idx_member (member_id),
   KEY idx_family (family_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 设备解绑申请（2026-11-07）：普通成员解绑需组长审批；组长可直接解绑。
+CREATE TABLE IF NOT EXISTS device_unbind_requests (
+  id           BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  family_id    BIGINT UNSIGNED NOT NULL,
+  member_id    BIGINT UNSIGNED NOT NULL,   -- 发起申请的成员（设备归属者）
+  device_key   VARCHAR(64)  NOT NULL,
+  device_model VARCHAR(64)  NOT NULL DEFAULT '',
+  status       ENUM('pending','approved','rejected','cancelled') NOT NULL DEFAULT 'pending',
+  created_at   DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  decided_at   DATETIME(3) NULL,
+  -- 一人同时最多一条解绑申请（与 family_invitations 的 pending 生成列同构）
+  pending_member BIGINT UNSIGNED GENERATED ALWAYS AS (IF(status = 'pending', member_id, NULL)) STORED,
+  UNIQUE KEY uk_pending_member (pending_member),
+  KEY idx_family_status (family_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 

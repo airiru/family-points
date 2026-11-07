@@ -35,6 +35,7 @@ import com.familypoints.app.ui.AppViewModel
 import com.familypoints.app.ui.Session
 import com.familypoints.app.ui.screens.BoardScreen
 import com.familypoints.app.ui.screens.CouponsScreen
+import com.familypoints.app.ui.screens.DeviceManageScreen
 import com.familypoints.app.ui.screens.FamilyScreen
 import com.familypoints.app.ui.screens.GiftScreen
 import com.familypoints.app.ui.screens.GoodsScreen
@@ -80,6 +81,7 @@ object Routes {
     const val SLEEP_RULE = "sleepRule"
     const val GOODS = "goods"
     const val COUPONS = "coupons"
+    const val DEVICES = "devices"
 
     fun memberDetail(id: Long) = "member/$id"
     fun taskDetail(id: Long) = "taskDetail/$id"
@@ -185,6 +187,7 @@ private fun MainNav(vm: AppViewModel) {
             composable(Routes.SLEEP_RULE) { SleepRuleScreen(vm, nav) }
             composable(Routes.GOODS) { GoodsScreen(vm, nav) }
             composable(Routes.COUPONS) { CouponsScreen(vm, nav) }
+            composable(Routes.DEVICES) { DeviceManageScreen(vm, nav) }
         }
     }
 }

@@ -76,6 +76,14 @@ func (r *Family) AllWithCounts(ctx context.Context) ([]FamilyRow, error) {
 	return list, err
 }
 
+// LeaderID 取本组组长 id（设备解绑申请通知用）。
+func (r *Family) LeaderID(ctx context.Context, familyID uint64) (uint64, error) {
+	var id uint64
+	err := r.db.GetContext(ctx, &id,
+		`SELECT id FROM members WHERE family_id = ? AND role = 'leader' LIMIT 1`, familyID)
+	return id, err
+}
+
 // BanRow 封禁名单行（后台只读视图）。
 type BanRow struct {
 	MemberID  uint64    `db:"member_id" json:"member_id"`

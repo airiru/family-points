@@ -22,10 +22,14 @@ data class UsageResult(
  *
  * @property date yyyy-MM-dd
  * @property hourlyMinutes 长度 24，索引 = 小时（0–23），单位分钟
+ * @property eventCount 当天事件条数（含被排除的应用）——
+ *   0 = 这天系统里没有任何事件。补算时用它区分「设备没用过 / 数据未保留」，
+ *   避免拿 0 覆盖服务端已有的真实结算。
  */
 data class DayUsage(
     val date: String,
     val hourlyMinutes: IntArray,
+    val eventCount: Int = 0,
 ) {
     val totalMinutes: Int get() = hourlyMinutes.sum()
 
@@ -175,6 +179,7 @@ class UsageStatsReader @Inject constructor(
         if (windowTo <= windowFrom) return emptyList()
 
         val ms = Array(n) { LongArray(24) }
+        val evCount = IntArray(n)
         val excluded = excludedPackages()
 
         fun dayIndexOf(ts: Long): Int {
@@ -215,6 +220,8 @@ class UsageStatsReader @Inject constructor(
         while (events.hasNextEvent()) {
             events.getNextEvent(ev)
             val ts = ev.timeStamp
+            // 事件计数按天归属（含被排除的应用）：补算时判断「这天有没有数据」
+            dayIndexOf(ts).takeIf { it in 0 until n }?.let { evCount[it]++ }
             when (ev.eventType) {
                 UsageEvents.Event.ACTIVITY_RESUMED -> {
                     if (foregroundPkg != null && foregroundSince > 0 &&
@@ -248,6 +255,7 @@ class UsageStatsReader @Inject constructor(
             DayUsage(
                 date = dateString(n - 1 - i),
                 hourlyMinutes = IntArray(24) { h -> (ms[i][h] / 60_000L).toInt().coerceAtLeast(0) },
+                eventCount = evCount[i],
             )
         }
     }

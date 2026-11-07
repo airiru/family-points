@@ -51,7 +51,9 @@ func fail(c *gin.Context, err error) {
 		httpx.Forbidden(c, err.Error())
 	case errors.Is(err, service.ErrAlreadyInFamily),
 		errors.Is(err, service.ErrLeaderMustTransfer),
-		errors.Is(err, repo.ErrInvitationPending):
+		errors.Is(err, repo.ErrInvitationPending),
+		errors.Is(err, repo.ErrDeviceBound),
+		errors.Is(err, service.ErrUnbindPending):
 		httpx.Conflict(c, err.Error())
 	case errors.Is(err, service.ErrInviteCodeInvalid),
 		errors.Is(err, service.ErrConfirmRequired),

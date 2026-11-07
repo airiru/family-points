@@ -26,7 +26,7 @@ GROUPS = [
     ("app", "/api/app"),
     ("appAuth", "/api/app"),
     ("inFamily", "/api/app"),
-    ("device", "/api/device"),
+    ("device", "/api/app"),  # 设备绑定（2026-11-07）：inFamily.Group("/device")
 ]
 
 
@@ -35,7 +35,8 @@ def doc_paths():
     out = []
     # 只解析表格首列：编号允许字母后缀（如 15.1.3a），否则「logout」这类补登记会被误报成缺文档。
     # 锚定行首后，正文/说明里出现的「15.2.4 xxx」不会被误当成接口登记。
-    for num, cell in re.findall(r"^\| (15\.[1-4]\.\d+[a-z]?) \|(.+?)\|", text, re.M):
+    # 15.5 起为设备绑定接口（2026-11-07）；编号允许字母后缀（如 15.1.3a）
+    for num, cell in re.findall(r"^\| (15\.[1-5]\.\d+[a-z]?) \|(.+?)\|", text, re.M):
         for p in re.findall(r"`(/api[^`]*)`", cell):
             if (num, p) not in out:
                 out.append((num, p))

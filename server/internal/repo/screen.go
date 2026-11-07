@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 
 	"familypoints/server/internal/model"
@@ -147,6 +148,9 @@ func (r *Screen) SaveScreenRule(ctx context.Context, in model.ScreenRule) error 
 // ---------- 设备（无令牌，仅用于区分与展示） ----------
 
 // UpsertDevice 记录/更新一台设备（按 member_id + device_key 幂等）。
+//
+// ⚠️ 2026-11-07 起被 BindDevice 取代：一台设备全局只能绑定一个账号。
+// 保留此方法仅供内部无绑定语义的路径使用；上报路径一律走 BindDevice。
 func (r *Screen) UpsertDevice(ctx context.Context, familyID, memberID uint64, deviceKey, model string) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO member_devices (family_id, member_id, device_key, device_model)
@@ -154,6 +158,64 @@ func (r *Screen) UpsertDevice(ctx context.Context, familyID, memberID uint64, de
 		 ON DUPLICATE KEY UPDATE device_model = VALUES(device_model), last_seen_at = NOW(3)`,
 		familyID, memberID, deviceKey, model)
 	return err
+}
+
+// ErrDeviceBound 设备已绑定其他账号。
+var ErrDeviceBound = errors.New("该设备已绑定其他账号，需先解绑才能换绑")
+
+// BindDevice 上报路径的设备绑定：一台设备全局只绑一个账号。
+//   - 未绑定 → 绑定到上报者（自动绑定）；
+//   - 已绑定上报者 → 更新型号与 last_seen；
+//   - 已绑定他人 → ErrDeviceBound（409，换绑必须先走解绑流程）。
+func (r *Screen) BindDevice(ctx context.Context, familyID, memberID uint64, deviceKey, model string) error {
+	// 先尝试「已是我的设备」：命中则只刷新型号与最近上线时间
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE member_devices SET device_model = ?, last_seen_at = NOW(3)
+		  WHERE device_key = ? AND member_id = ?`, model, deviceKey, memberID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		return nil
+	}
+	// 不是我的：尝试插入（= 自动绑定未绑定的设备）
+	_, err = r.db.ExecContext(ctx,
+		`INSERT INTO member_devices (family_id, member_id, device_key, device_model)
+		 VALUES (?, ?, ?, ?)`, familyID, memberID, deviceKey, model)
+	if err == nil {
+		return nil
+	}
+	var me *mysql.MySQLError
+	if errors.As(err, &me) && me.Number == 1062 {
+		// 并发下已被人绑定：查归属，返回统一的业务错误
+		var owner uint64
+		if e := r.db.GetContext(ctx, &owner,
+			`SELECT member_id FROM member_devices WHERE device_key = ?`, deviceKey); e == nil && owner == memberID {
+			return nil // 极端竞态：其实已经是我的了
+		}
+		return ErrDeviceBound
+	}
+	return err
+}
+
+// DeviceInfoInFamily 取本组某设备的归属成员与型号（组长解绑前校验用）。
+func (r *Screen) DeviceInfoInFamily(ctx context.Context, familyID uint64, deviceKey string, memberID *uint64, model *string) error {
+	var row struct {
+		MemberID    uint64 `db:"member_id"`
+		DeviceModel string `db:"device_model"`
+	}
+	err := r.db.GetContext(ctx, &row,
+		`SELECT member_id, device_model FROM member_devices WHERE family_id = ? AND device_key = ?`,
+		familyID, deviceKey)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	*memberID = row.MemberID
+	*model = row.DeviceModel
+	return nil
 }
 
 // DevicesOfMember 列出某成员上报过的设备。

@@ -34,8 +34,10 @@ const (
 	TypeRedeemSuccess  = "redeem_success"  // 兑换成功，商品券已生成
 	TypeInviteReceived = "invite_received" // 收到入组邀请（P3.1）
 	TypeInviteDecided  = "invite_decided"  // 邀请已被接受 / 拒绝（通知发起的组长）
-	TypeJoinRequested  = "join_requested"  // 有人凭家庭码申请加入，等组长审批
-	TypeJoinDecided    = "join_decided"    // 我的入组申请已被同意 / 拒绝
+	TypeJoinRequested   = "join_requested"   // 有人凭家庭码申请加入，等组长审批
+	TypeJoinDecided     = "join_decided"     // 我的入组申请已被同意 / 拒绝
+	TypeUnbindRequested = "unbind_requested" // 成员申请解绑设备，等组长审批（2026-11-07）
+	TypeUnbindDecided   = "unbind_decided"   // 我的解绑申请已被同意 / 拒绝
 )
 
 // one 发给单个成员。
@@ -155,6 +157,21 @@ func (s *Service) JoinDecided(ctx context.Context, familyID, applicantID uint64,
 		msg, title = "已通过，欢迎加入", "入组申请已通过"
 	}
 	s.one(ctx, familyID, applicantID, TypeJoinDecided, title, msg, "join_request", applicantID)
+}
+
+// UnbindRequested 成员申请解绑设备 → 通知组长审批。
+func (s *Service) UnbindRequested(ctx context.Context, familyID, leaderID, requesterID uint64, nickname, deviceModel string) {
+	s.one(ctx, familyID, leaderID, TypeUnbindRequested,
+		"设备解绑待审批", nickname+" 申请解绑「"+deviceModel+"」，等你审批", "device_unbind", requesterID)
+}
+
+// UnbindDecided 解绑申请出结果 → 通知申请人。
+func (s *Service) UnbindDecided(ctx context.Context, familyID, memberID uint64, deviceModel string, approved bool) {
+	msg := "已同意解绑"
+	if !approved {
+		msg = "解绑申请被拒绝"
+	}
+	s.one(ctx, familyID, memberID, TypeUnbindDecided, "「"+deviceModel+"」"+msg, "", "device_unbind", memberID)
 }
 
 func (s *Service) InviteDecided(ctx context.Context, familyID, inviterID, invitationID uint64, accepted bool, inviteeNickname string) {

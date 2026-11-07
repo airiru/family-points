@@ -593,3 +593,52 @@ data class CouponVoteReq(
     @SerialName("coupon_id") val couponId: Long,
     val vote: String,
 )
+
+
+// ---------- 设备绑定与解绑（2026-11-07，docs 15.5） ----------
+
+@Serializable
+data class DeviceKeyReq(val device_key: String)
+
+@Serializable
+data class DecideUnbindReq(val request_id: Long, val approve: Boolean)
+
+@Serializable
+data class RequestIdReq(val request_id: Long)
+
+/** 我绑定的设备（/api/app/screen/devices）。 */
+@Serializable
+data class MemberDeviceView(
+    val id: Long = 0,
+    val member_id: Long = 0,
+    val device_key: String = "",
+    val device_model: String = "",
+    val first_seen_at: String = "",
+    val last_seen_at: String = "",
+)
+
+@Serializable
+data class MemberDeviceList(val devices: List<MemberDeviceView> = emptyList())
+
+/** 一条解绑申请（自己的 / 组长待审批的）。 */
+@Serializable
+data class UnbindRequestView(
+    val id: Long = 0,
+    val member_id: Long = 0,
+    val device_key: String = "",
+    val device_model: String = "",
+    val status: String = "pending",
+    val created_at: String = "",
+    val decided_at: String? = null,
+    val member_nickname: String = "",
+    val member_username: String = "",
+)
+
+@Serializable
+data class UnbindRequestList(val items: List<UnbindRequestView> = emptyList())
+
+@Serializable
+data class UnbindResult(val unbound: Boolean = false, val device_key: String = "")
+
+@Serializable
+data class CancelResult(val cancelled: Boolean = false)

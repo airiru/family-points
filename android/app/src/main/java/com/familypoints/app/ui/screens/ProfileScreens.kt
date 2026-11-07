@@ -194,6 +194,12 @@ fun ProfileScreen(vm: AppViewModel, nav: NavHostController) {
                 }
             }
 
+            item {
+                CardBox {
+                    MenuItem("📱", "设备管理", "查看 / 解绑本账号的设备") { nav.navigate(Routes.DEVICES) }
+                }
+            }
+
             if (me?.isLeader == true) {
                 item {
                     CardBox {

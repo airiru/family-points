@@ -200,6 +200,21 @@ type MemberDevice struct {
 	LastSeenAt  time.Time `db:"last_seen_at" json:"last_seen_at"`
 }
 
+// DeviceUnbindRequest 是一条设备解绑申请（成员发起，组长审批）。
+type DeviceUnbindRequest struct {
+	ID          uint64     `db:"id" json:"id"`
+	FamilyID    uint64     `db:"family_id" json:"-"`
+	MemberID    uint64     `db:"member_id" json:"member_id"`
+	DeviceKey   string     `db:"device_key" json:"device_key"`
+	DeviceModel string     `db:"device_model" json:"device_model"`
+	Status      string     `db:"status" json:"status"`
+	CreatedAt   time.Time  `db:"created_at" json:"created_at"`
+	DecidedAt   *time.Time `db:"decided_at" json:"decided_at"`
+	// 申请人昵称 / 用户名（列表展示用，JOIN members 得到）
+	MemberNickname string `db:"member_nickname" json:"member_nickname"`
+	MemberUsername string `db:"member_username" json:"member_username"`
+}
+
 // DeviceDayReport 是「某成员某天某设备」的原始上报（家庭详情用）。
 type DeviceDayReport struct {
 	MemberID    uint64 `db:"member_id" json:"member_id"`

@@ -24,7 +24,7 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 	ledgerHandler *handler.Ledger, screenHandler *handler.Screen, taskHandler *handler.Task,
 	reportHandler *handler.Report, auditHandler *handler.Audit,
 	notifHandler *handler.Notification, adminHandler *handler.Admin,
-	couponHandler *handler.Coupon,
+	couponHandler *handler.Coupon, deviceHandler *handler.Device,
 	mw *middleware.Auth) *gin.Engine {
 	if env != "dev" {
 		gin.SetMode(gin.ReleaseMode)
@@ -129,6 +129,14 @@ func Build(env string, db *sqlx.DB, authHandler *handler.Auth, familyHandler *ha
 	// 组内接口：family_id 一律取自 token 主体，不接受任何请求参数
 	inFamily := app.Group("", middleware.RequireFamily())
 	{
+	// 设备绑定 / 解绑审批（2026-11-07，docs 15.5）：都在组内，family_id 取自 token
+	inFamily.POST("/device/unbind/request", deviceHandler.RequestUnbind) // 成员发起申请
+	inFamily.POST("/device/unbind", deviceHandler.UnbindDirect)         // 组长直接解绑
+	inFamily.GET("/device/unbind/mine", deviceHandler.MyUnbindRequests)
+	inFamily.GET("/device/unbind/requests", deviceHandler.PendingUnbindRequests) // 组长待审批
+	inFamily.POST("/device/unbind/decide", deviceHandler.DecideUnbind)           // 组长审批
+	inFamily.POST("/device/unbind/cancel", deviceHandler.CancelUnbind)           // 成员撤回
+
 		inFamily.GET("/family", familyHandler.AppInfo)
 		inFamily.GET("/family/members", familyHandler.AppMembers)
 		inFamily.POST("/family/rename", familyHandler.AppRenameFamily)

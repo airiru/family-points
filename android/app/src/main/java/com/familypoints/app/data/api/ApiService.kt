@@ -247,6 +247,33 @@ interface ApiService {
     // ---------- 个人资料 ----------
     @POST("api/app/me/profile")
     suspend fun updateProfile(@Body body: ProfileReq): Envelope<MeView>
+
+    // ---------- 设备绑定与解绑（2026-11-07，docs 15.5） ----------
+
+    /** 我绑定的设备（一台设备全局只绑一个账号）。 */
+    @GET("api/app/screen/devices")
+    suspend fun myDevices(): Envelope<MemberDeviceList>
+
+    /** 普通成员：对自己的设备发起解绑申请（需组长审批）。 */
+    @POST("api/app/device/unbind/request")
+    suspend fun requestUnbind(@Body body: DeviceKeyReq): Envelope<UnbindRequestView>
+
+    /** 组长：直接解绑本组任何设备。 */
+    @POST("api/app/device/unbind")
+    suspend fun unbindDevice(@Body body: DeviceKeyReq): Envelope<UnbindResult>
+
+    @GET("api/app/device/unbind/mine")
+    suspend fun myUnbindRequests(): Envelope<UnbindRequestList>
+
+    @GET("api/app/device/unbind/requests")
+    suspend fun pendingUnbindRequests(): Envelope<UnbindRequestList>
+
+    /** 组长审批解绑申请：同意即立即解绑。 */
+    @POST("api/app/device/unbind/decide")
+    suspend fun decideUnbind(@Body body: DecideUnbindReq): Envelope<UnbindRequestView>
+
+    @POST("api/app/device/unbind/cancel")
+    suspend fun cancelUnbind(@Body body: RequestIdReq): Envelope<CancelResult>
 }
 
 @kotlinx.serialization.Serializable

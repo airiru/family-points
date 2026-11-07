@@ -4,6 +4,12 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.familypoints.app.data.api.ApiClient
+import com.familypoints.app.data.api.CancelResult
+import com.familypoints.app.data.api.DecideUnbindReq
+import com.familypoints.app.data.api.DeviceKeyReq
+import com.familypoints.app.data.api.MemberDeviceView
+import com.familypoints.app.data.api.RequestIdReq
+import com.familypoints.app.data.api.UnbindRequestView
 import com.familypoints.app.data.api.CouponIdReq
 import com.familypoints.app.data.api.CouponView
 import com.familypoints.app.data.api.CouponVoteReq
@@ -771,5 +777,56 @@ class AppViewModel @Inject constructor(
                 if (showBusy) _busy.value = false
             }
         }
+    }
+
+
+    // ---------- 设备绑定与解绑（2026-11-07，docs 15.5） ----------
+
+    private val _myDevices = MutableStateFlow<List<MemberDeviceView>>(emptyList())
+    val myDevices: StateFlow<List<MemberDeviceView>> = _myDevices.asStateFlow()
+
+    private val _myUnbindRequests = MutableStateFlow<List<UnbindRequestView>>(emptyList())
+    val myUnbindRequests: StateFlow<List<UnbindRequestView>> = _myUnbindRequests.asStateFlow()
+
+    private val _pendingUnbindRequests = MutableStateFlow<List<UnbindRequestView>>(emptyList())
+    val pendingUnbindRequests: StateFlow<List<UnbindRequestView>> = _pendingUnbindRequests.asStateFlow()
+
+    /** 设备管理页数据：我的设备 + 我的申请（组长再加待审批）。 */
+    fun loadDeviceManage() = launchBusy(showBusy = false) {
+        _myDevices.value = api.myDevices().data?.devices.orEmpty()
+        _myUnbindRequests.value = api.myUnbindRequests().data?.items.orEmpty()
+        val leader = (session.value as? Session.Ready)?.me?.role == "leader"
+        if (leader) {
+            _pendingUnbindRequests.value = api.pendingUnbindRequests().data?.items.orEmpty()
+        }
+    }
+
+    /** 组长直接解绑。 */
+    fun unbindDevice(deviceKey: String) = launchBusy {
+        val resp = api.unbindDevice(DeviceKeyReq(deviceKey))
+        _message.value = resp.data?.takeIf { it.unbound }?.let { "已解绑" } ?: (resp.error ?: "解绑失败")
+        loadDeviceManage()
+    }
+
+    /** 普通成员：发起解绑申请，等组长审批。 */
+    fun requestUnbindDevice(deviceKey: String) = launchBusy {
+        val resp = api.requestUnbind(DeviceKeyReq(deviceKey))
+        if (resp.ok) _message.value = "解绑申请已提交，等待组长审批"
+        else _message.value = resp.error ?: "提交失败"
+        loadDeviceManage()
+    }
+
+    /** 组长审批解绑申请：同意即立即解绑。 */
+    fun decideUnbind(requestId: Long, approve: Boolean) = launchBusy {
+        api.decideUnbind(DecideUnbindReq(requestId, approve))
+        _message.value = if (approve) "已同意解绑" else "已拒绝"
+        loadDeviceManage()
+    }
+
+    /** 撤回自己的解绑申请。 */
+    fun cancelUnbind(requestId: Long) = launchBusy {
+        api.cancelUnbind(RequestIdReq(requestId))
+        _message.value = "已撤回申请"
+        loadDeviceManage()
     }
 }
