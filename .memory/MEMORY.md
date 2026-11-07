@@ -448,7 +448,7 @@ schema 变更走 golang-migrate（已用其库，迁移文件在 `server/migrati
   U+FFFD，回归大面积假红。跑验收脚本必须
   `export PATH=/tmp/ubin:$PATH`（包装器 exec System32 curl.exe，UTF-8 正确）+
   `PYTHONUTF8=1 PYTHONIOENCODING=utf-8`。详见 2026-11-07 日志。
-- **本机 MySQL = phpstudy 8.0.12**，root 密码 `FpRoot2026`（在 `server/.env`）；
+- **本机 MySQL = phpstudy 8.0.12**，root 密码见 `server/.env` 的 `DB_PASSWORD`（**不写入记忆**，仓库公开）；
   `--skip-grant-tables` 会强制 skip_networking，改密走 `--named-pipe=1` + `mysql --pipe`。
 
 - **回归脚本的管理员密码**：p2 / p8b 会改管理员密码，写死一个值必然集体假红。
